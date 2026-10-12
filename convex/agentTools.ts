@@ -27,7 +27,7 @@ import { loadOrgRules, syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { clampOffset, sortRules } from "./messageRules";
 import { serviceKey } from "./services";
 import { spokenDuration, spokenPrice } from "./lib/speech";
-import { noteCall, noteMessageById } from "./lib/thread";
+import { noteCall, noteMessageById, recomputeThread } from "./lib/thread";
 
 const scope = {
   orgId: v.id("orgs"),
@@ -2005,18 +2005,25 @@ export const undo = internalMutation({
       const callIds = ((after as unknown as { callIds?: string[] }).callIds ?? []);
       const messageIds = ((after as unknown as { messageIds?: string[] }).messageIds ?? []);
       let removed = 0;
+      // The inbox summary (customers.thread) still names the rows this
+      // deletes until it is rebuilt: the bandwidth rule's recomputeThread,
+      // which a delete owes like a failed send does (2026-10-13).
+      const touched = new Set<Id<"customers">>();
       for (const id of callIds) {
         const row = await ctx.db.get(id as Id<"calls">).catch(() => null);
         if (!row || row.orgId !== orgId) continue;
         await ctx.db.delete(row._id);
+        if (row.customerId) touched.add(row.customerId);
         removed += 1;
       }
       for (const id of messageIds) {
         const row = await ctx.db.get(id as Id<"messages">).catch(() => null);
         if (!row || row.orgId !== orgId) continue;
         await ctx.db.delete(row._id);
+        if (row.customerId) touched.add(row.customerId);
         removed += 1;
       }
+      for (const customerId of touched) await recomputeThread(ctx, customerId);
       summary = `Removed ${removed} logged entr${removed === 1 ? "y" : "ies"} from the timeline.`;
     } else if (action.tool === "set_message_rule") {
       const rule = await ctx.db.get(action.targetId as Id<"messageRules">).catch(() => null);

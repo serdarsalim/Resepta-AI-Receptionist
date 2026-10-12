@@ -790,8 +790,21 @@ const TOOLS: ToolDef[] = [
       const prior = (await ctx.runQuery(internal.agentTools.getAction, {
         orgId: who.orgId as never,
         actionId,
-      })) as { tool: string; before: string; args: string; undone: boolean } | null;
+      })) as {
+        tool: string;
+        userId: string;
+        before: string;
+        args: string;
+        undone: boolean;
+      } | null;
       if (prior && prior.tool === "publish_agent_prompt") {
+        // Before the republish, not only in markUndone after it: that check
+        // ran once the old prompt was already live again, so any member could
+        // roll back a colleague's prompt with an id from recent_actions and
+        // the refusal came too late to stop it (2026-10-13).
+        if (prior.userId !== who.userId) {
+          throw new Error("That action was somebody else's. You can only undo your own.");
+        }
         if (prior.undone) throw new Error("That action was already undone.");
         const before = JSON.parse(prior.before) as { prompt: string };
         const journalled = JSON.parse(prior.args) as { retellAgentId?: string };

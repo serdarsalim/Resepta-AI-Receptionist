@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { connectionField } from "./lib/connections";
 import { platformValue } from "./lib/platformConfig";
 import { requireOwner } from "./lib/orgAuth";
@@ -97,6 +98,22 @@ export const begin = internalMutation({
     const inboundNumber = args.inboundNumber?.trim() || undefined;
     if (!name) throw new Error("agent-name-required");
     if (!voiceId) throw new Error("agent-voice-required");
+    // The line a new agent answers must be one THIS workspace may use: on its
+    // allowlist, and not held by another workspace inbound or outbound
+    // (retell.lineUsable, the check every later reassignment already runs).
+    // The provisioning action's bindInboundNumber only refuses a line that
+    // has an inbound agent at the provider right now, so a line provisioned
+    // to another salon, or one it dials out from, could be taken by naming it
+    // here, from the app or from the MCP's create_phone_agent (2026-10-13).
+    if (inboundNumber) {
+      const usable = await ctx.runQuery(internal.retell.lineUsable, {
+        orgId,
+        number: inboundNumber,
+      });
+      if (!usable.ok) {
+        throw new Error(usable.reason ?? "number-not-assigned-to-this-workspace");
+      }
+    }
 
     // The fleet default a NEW agent is born with — resolved here because the
     // provisioning action has no ctx.db. Null (unset or stale row) means the
