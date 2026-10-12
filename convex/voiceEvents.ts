@@ -12,6 +12,7 @@ import { requireOrg } from "./lib/orgAuth";
 import { coerceVoiceValues } from "./lib/voicePayload";
 import { withoutNonAnswers } from "./lib/nonAnswer";
 import { VOICE_SUMMARY_FIELD } from "./lib/voiceAgentTemplate";
+import { callErased, erasedCallMarker } from "./lib/customerDeletion";
 
 const PROCESS_BACKOFF = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 3 * 60 * 60_000];
 const ANALYSIS_BACKOFF = [2 * 60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000];
@@ -48,6 +49,13 @@ export const enqueue = internalMutation({
       .withIndex("by_agent", (q) => q.eq("retellAgentId", args.retellAgentId))
       .unique();
     if (!agent || agent.orgId !== args.orgId) throw new Error("unknown-agent");
+
+    // A call erased with its customer stays erased. A late analysis, a retry
+    // of the first webhook or the analysis recovery lands here and stops,
+    // before it can write the call back with a new customer built from the
+    // transcript (lib/customerDeletion).
+    const erased = await erasedCallMarker(ctx, args.orgId, args.retellCallId);
+    if (erased) return erased._id;
 
     const eventKey = `${args.retellCallId}:${args.eventType}`;
     const existing = await ctx.db
@@ -97,6 +105,9 @@ export const claim = internalMutation({
   handler: async (ctx, { eventId }): Promise<StoredEvent | null> => {
     const row = await ctx.db.get(eventId);
     if (!row || row.status === "processed" || row.status === "failed") return null;
+    // The erased-call marker is written processed and is never work; named
+    // here so the row below is a provider event by type as well as by status.
+    if (row.eventType === "customer_deleted") return null;
     // A duplicate scheduler job stands down while another worker owns the row.
     // A claim older than two minutes is considered abandoned and may be taken.
     if (
@@ -381,6 +392,9 @@ export const recoveryContext = internalQuery({
       .withIndex("by_agent", (q) => q.eq("retellAgentId", args.retellAgentId))
       .unique();
     if (!agent || agent.orgId !== args.orgId) return null;
+    // Nothing to recover for a call erased with its customer, and no reason
+    // to ask the provider for it again.
+    if (await callErased(ctx, args.orgId, args.retellCallId)) return null;
     const rows = await ctx.db
       .query("voiceEvents")
       .withIndex("by_org_call", (q) =>

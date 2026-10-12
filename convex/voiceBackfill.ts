@@ -28,7 +28,7 @@ import { monthKey } from "./lib/usage";
 import { dialCodeForTimezone, normalisePhone } from "./lib/phone";
 import { coerceVoiceValues } from "./lib/voicePayload";
 import { recordCustomerCreated } from "./lib/newCustomer";
-import { recordActivity } from "./lib/activity";
+import { beginCustomerDeletion } from "./customerDeletion";
 import { orgOwnNumbers } from "./retell";
 
 const PAGE = 1000;
@@ -388,12 +388,10 @@ export const removeOwnNumberContacts = internalMutation({
         kept.push(number);
         continue;
       }
-      await ctx.db.delete(customer._id);
-      await recordActivity(ctx, {
-        orgId: args.orgId,
-        kind: "customer_deleted",
-        detail: number,
-      });
+      // Through the one deletion path, which also clears the activity rows
+      // and read marks a bare row delete left pointing at nobody. The number
+      // is the business's own line, not a customer's, so naming it is fine.
+      await beginCustomerDeletion(ctx, customer, { system: true, detail: number });
       removed.push(number);
     }
     return { removed, kept };

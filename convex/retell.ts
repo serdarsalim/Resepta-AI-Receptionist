@@ -48,6 +48,7 @@ import { orgKeywords } from "./lib/boostedKeywords";
 import { CHANGES_PER_DAY, changesToday, withChange } from "./lib/agentChange";
 import { recordActivity } from "./lib/activity";
 import { MAX_UPCOMING_PER_PHONE } from "./lib/bookingLimits";
+import { callErased } from "./lib/customerDeletion";
 import { freeStarts, goodsLeadMs } from "./booking";
 import { durationOf } from "./agentAppointments";
 
@@ -3479,6 +3480,10 @@ export const recordCall = internalMutation({
       .withIndex("by_agent", (q) => q.eq("retellAgentId", args.retellAgentId))
       .unique();
     if (!agent) return null;
+    // A call erased with its customer is not written back, whichever event
+    // brings it: the processor can be mid-flight when the sweep removes the
+    // row, and inserting here would mint a new customer from the transcript.
+    if (await callErased(ctx, agent.orgId, args.retellCallId)) return null;
     const existing = await ctx.db
       .query("calls")
       .withIndex("by_retell_call", (q) => q.eq("retellCallId", args.retellCallId))

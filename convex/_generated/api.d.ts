@@ -25,6 +25,7 @@ import type * as closures from "../closures.js";
 import type * as connections from "../connections.js";
 import type * as contactFields from "../contactFields.js";
 import type * as crons from "../crons.js";
+import type * as customerDeletion from "../customerDeletion.js";
 import type * as customers from "../customers.js";
 import type * as delivery from "../delivery.js";
 import type * as demo from "../demo.js";
@@ -155,6 +156,7 @@ declare const fullApi: ApiFromModules<{
   connections: typeof connections;
   contactFields: typeof contactFields;
   crons: typeof crons;
+  customerDeletion: typeof customerDeletion;
   customers: typeof customers;
   delivery: typeof delivery;
   demo: typeof demo;

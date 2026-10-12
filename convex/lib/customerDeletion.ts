@@ -51,16 +51,23 @@ export function erasedCallKey(retellCallId: string): string {
   return `${retellCallId}:${ERASED_CALL_EVENT}`;
 }
 
-export async function callErased(
+export async function erasedCallMarker(
   ctx: QueryCtx | MutationCtx,
   orgId: Id<"orgs">,
   retellCallId: string,
-): Promise<boolean> {
-  const marker = await ctx.db
+): Promise<Doc<"voiceEvents"> | null> {
+  return await ctx.db
     .query("voiceEvents")
     .withIndex("by_org_event_key", (q) =>
       q.eq("orgId", orgId).eq("eventKey", erasedCallKey(retellCallId)),
     )
     .first();
-  return marker !== null;
+}
+
+export async function callErased(
+  ctx: QueryCtx | MutationCtx,
+  orgId: Id<"orgs">,
+  retellCallId: string,
+): Promise<boolean> {
+  return (await erasedCallMarker(ctx, orgId, retellCallId)) !== null;
 }

@@ -1430,6 +1430,72 @@ who worked there stop resolving into it — `lib/orgAuth` falls back to their
 remaining membership, and a stale `actingAsOrgId` pointing at the deleted org
 already falls through there.
 
+## Deleting a customer (2026-10-13)
+
+The rules are in AGENTS.md → "Deleting a customer deletes them"; this is how
+it runs. Code: `convex/customerDeletion.ts`, vocabulary in
+`convex/lib/customerDeletion.ts`.
+
+**Doors.** `customers.remove` (any member, like every other customer edit; no
+screen calls it yet), the office MCP's `preview_delete_customer` →
+`delete_customer` pair, the undo of `create_customers`, and the operator's
+`voiceBackfill.removeOwnNumberContacts`. Each calls
+`beginCustomerDeletion(ctx, customer, how)`. A customer already being deleted
+is a no-op.
+
+**Step one, inside the caller's transaction.** The row is `replace`d with
+`{ orgId, firstName: "", phone: "deleted:<id>", deletingAt, deletingPhone }`,
+so every column the row had or gains later is gone in this commit. Every
+`queued` message is deleted (`by_customer_status`), which is how a send is
+cancelled here. Up to 100 appointments are deleted, which takes them off the
+calendar and ends their reminders (the cron only reads appointments). One
+`customer_deleted` activity row is written (actor only, no detail), and the
+sweep is scheduled. Nothing is sent: no cancellation notice, no retracted
+invite.
+
+**Step two, `customerDeletion.sweep`.** Every pass walks `FOOTPRINT` from the
+top, so a row written into an already-swept table while the sweep ran is still
+caught. A pass clears up to 200 rows and stops early when
+`ctx.meta.getTransactionMetrics()` says reads or writes are close to a limit
+(rows range from a pin to a message carrying a megabyte of email HTML), then
+reschedules itself. The pass that finds every table empty deletes the row in
+the same transaction.
+
+| Table | Found by | What happens |
+|---|---|---|
+| `customers` | the row | blanked in step one, deleted last |
+| `messages` | `by_customer_status` (queued, step one), `by_customer` newest first | deleted; an inbound file in `_storage` goes with it unless a library asset or another message holds it |
+| `appointments` | `by_customer` | deleted, manage token included; first 100 in step one |
+| `calls` | `by_customer` | deleted; its `voiceEvents` replaced by one `customer_deleted` marker |
+| `voiceEvents` | `by_org_call` per call; `by_org_status` (queued, processing, retrying, failed) matched on `deletingPhone` | deleted, a marker left per call; the status scan resumes by `_creationTime` across passes |
+| `chatAgentTurns` | `by_customer_at` | deleted |
+| `notes` | `by_customer` | deleted; their `add_note` journal rows redacted first |
+| `bulkRunItems` | `by_org_customer` | deleted; the run's totals stay |
+| `inboxPins`, `inboxReads` | `by_org_customer` | deleted |
+| `activityLog` | `by_customer` | `customerId` and `appointmentId` unset; `detail` dropped except on `appointment_status` and `customer_updated` |
+| `agentActions` | `by_target` (`customers`) | `args`, `before`, `after` become `{"redacted":"customer-deleted"}`, `reversible: false`; id-only tools (`create_customers`, `create_appointments`, `log_activity`, `delete_customer`) are kept whole |
+
+Not touched: `mediaAssets` (the business's library), `bulkRuns`, `campaigns`,
+`usageMonthly` and the `waTemplates` counters (aggregates; bills read
+`usageMonthly`, so a deletion never changes what a business was charged),
+`demoProspects`. Recordings are never in our storage; a call keeps the
+provider's URL.
+
+**A stalled sweep.** A pass that throws stops the chain (a scheduled mutation
+that fails is not retried). The customer stays hidden and blank and the rest
+waits. Restart it on the deployment with
+`npx convex run customerDeletion:sweep '{"orgId":"…","customerId":"…"}'`;
+the customers to restart are the rows with `deletingAt` set.
+
+**Known gaps.** Messages and calls logged before unknown senders got a record
+(before 2026-07-25) can carry no `customerId`, and nothing ties them to a
+person. A call still ringing at the moment of deletion ends afterwards and
+starts a new customer from that number, as any new call would. Owner calendar
+invites for deleted bookings are not retracted, and a booking cal.com holds
+(parked lane) is not cancelled there. `voiceBackfill.run` and
+`sendBackfill.run` rebuild usage counters from rows, so re-running them after
+deletions would undercount.
+
 ## The app lives at app.resepta.xyz (2026-08-24)
 
 Marketing left. `resepta.xyz` and `www` are a SEPARATE repo on a separate

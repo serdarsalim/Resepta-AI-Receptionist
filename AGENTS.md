@@ -212,6 +212,44 @@ query already gave it. No customer, message, appointment or setting crosses a
 boundary, which is the confinement this rule protects. Anything beyond
 memberships still belongs in `platform.ts`.
 
+## Deleting a customer deletes them (2026-10-13)
+
+KVKK lets a person ask a business to erase them. `customers.remove`, the office
+MCP's `delete_customer` and the undo of `create_customers` all go through
+`beginCustomerDeletion` in [`convex/customerDeletion.ts`](convex/customerDeletion.ts);
+nothing else deletes a customer row. How it runs is in `docs/subsystems.md` →
+"Deleting a customer".
+
+- **`FOOTPRINT` is the one list of every table that holds a customer**, by
+  `customerId` or by their number, and it serves both the MCP preview's counts
+  and the sweep. **When you add a table that references a customer, add it
+  there in the same change.** Forgetting leaves their data behind under a
+  customer that no longer exists.
+- **Gone first, swept after.** The first transaction REPLACES the row with a
+  blank carrying `deletingAt`, so nothing personal survives it; turns the phone
+  into a tombstone, so `by_org_phone` stops finding them and a new message or
+  call from that number starts a NEW customer; drops the thread summary
+  (inbox); cancels every queued send; and deletes their appointments (calendar,
+  reminders). A scheduled sweep pages through the rest, asserts `orgId` on every
+  row, and deletes the row last, in the pass that finds every table empty.
+- **A deleting customer is gone to every reader.** A path that loads a customer
+  by id to show them, message them or attach something to them checks
+  `isDeleting` (`lib/customerDeletion.ts`). `messages.logOutQueued` refuses as
+  the backstop every send crosses, and `writeThread` never writes a summary
+  back onto them.
+- **The audit trail is emptied, not erased.** `activityLog` rows lose the
+  customer and appointment link and their free-text detail (a status change and
+  field names stay). `agentActions` rows lose the values a tool wrote; tools
+  that journal only ids keep theirs, which is what keeps an import's undo
+  working for everyone else in it. The deletion writes one `customer_deleted`
+  row saying who did it and never whom.
+- **An erased call stays erased.** Its provider events become one
+  `customer_deleted` marker in `voiceEvents`; `voiceEvents.enqueue`,
+  `retell.recordCall` and the analysis recovery check it, because a late
+  webhook would otherwise write the call back with a new customer.
+- **Provider copies are not touched**, as in Nudge: the phone provider keeps
+  its recording and transcript, the messaging and email providers keep theirs.
+
 ## Two kinds of template, never conflate them
 
 - **Meta template messages** are business-initiated, registered with Meta and

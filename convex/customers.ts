@@ -2,11 +2,11 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { assertE164, requireOrg } from "./lib/orgAuth";
-import { recordActivity } from "./lib/activity";
 import { recordCustomerCreated } from "./lib/newCustomer";
 import { summariseThread, threadValidator } from "./lib/thread";
 import { retryConfirmationsAwaitingEmail } from "./appointments";
 import { isDeleting } from "./lib/customerDeletion";
+import { beginCustomerDeletion } from "./customerDeletion";
 
 // The row as stored. Built from a plain field map so the list validator can
 // extend it by one key without a second copy of nineteen columns drifting from
@@ -347,31 +347,21 @@ export const setMuted = mutation({
   },
 });
 
+// Deletes the customer and everything held on them (customerDeletion.ts):
+// gone from every screen in this commit, every queued send cancelled, the
+// rest swept in the background. Nothing is sent to them about it. Staff may
+// do it, like every other edit to a customer; the activity feed records who
+// did, and never whom.
 export const remove = mutation({
   args: { customerId: v.id("customers") },
   returns: v.null(),
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
     const customer = await ctx.db.get(args.customerId);
-    if (!customer || customer.orgId !== orgId || isDeleting(customer)) {
-      throw new Error("not-found");
-    }
-    const appointments = await ctx.db
-      .query("appointments")
-      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
-      .collect();
-    for (const appointment of appointments) {
-      await ctx.db.delete(appointment._id);
-    }
-    await ctx.db.delete(args.customerId);
-    // The one deletion that takes appointments with it, so it is the one most
-    // worth being able to attribute afterwards. The name is carried in the
-    // detail because the row it pointed at is gone.
-    await recordActivity(ctx, {
-      orgId,
-      kind: "customer_deleted",
-      detail: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
-    });
+    if (!customer || customer.orgId !== orgId) throw new Error("not-found");
+    // A second press while the first is being swept changes nothing.
+    if (isDeleting(customer)) return null;
+    await beginCustomerDeletion(ctx, customer);
     return null;
   },
 });

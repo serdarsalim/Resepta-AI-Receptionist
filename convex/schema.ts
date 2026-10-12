@@ -116,7 +116,12 @@ export default defineSchema({
     pinnedAt: v.number(),
   })
     .index("by_org_user", ["orgId", "userId"])
-    .index("by_org_user_customer", ["orgId", "userId", "customerId"]),
+    .index("by_org_user_customer", ["orgId", "userId", "customerId"])
+    // Everyone's pins on one customer, for deleting that customer
+    // (customerDeletion.ts). Pins are per person, and an operator acting
+    // inside the business holds them without a membership row, so walking
+    // the team would miss some.
+    .index("by_org_customer", ["orgId", "customerId"]),
 
   // FROZEN BASELINE. These were the whole unread model: seenAt was "I have the
   // tab open" and leftAt was "I walked away", and a row counted as new when its
@@ -164,7 +169,11 @@ export default defineSchema({
     userId: v.id("users"),
     customerId: v.id("customers"),
     readAt: v.number(),
-  }).index("by_org_user_customer", ["orgId", "userId", "customerId"]),
+  })
+    .index("by_org_user_customer", ["orgId", "userId", "customerId"])
+    // Everyone's read marks on one customer, for deleting that customer. The
+    // inboxPins reason: the people holding them are not only the team.
+    .index("by_org_customer", ["orgId", "customerId"]),
 
   // Team invites. No token is mailed and none is checked (Nudge's model):
   // Google has already proven the signer-in controls the address, so matching
@@ -1112,6 +1121,12 @@ export default defineSchema({
       v.literal("call_ended"),
       v.literal("call_analyzed"),
       v.literal("analysis_recovery"),
+      // Not a provider event: the marker the customer sweep leaves for a call
+      // it erased, keyed `${callId}:customer_deleted`, status processed,
+      // payload null. A late analysis, a webhook retry or the analysis
+      // recovery would otherwise write the call back with a new customer
+      // built from its transcript (lib/customerDeletion callErased).
+      v.literal("customer_deleted"),
     ),
     eventKey: v.string(),
     payload: v.any(),
@@ -2035,6 +2050,10 @@ export default defineSchema({
   })
     .index("by_org", ["orgId"])
     .index("by_customer", ["customerId"])
+    // A customer's sends still waiting to go, read in the transaction that
+    // starts deleting them so every one is cancelled before anything else
+    // happens. by_customer would read their whole history to find them.
+    .index("by_customer_status", ["customerId", "status"])
     .index("by_appointment", ["appointmentId"])
     .index("by_email_id", ["emailId"])
     // Due scheduled sends. Status first so the scan skips everything already
@@ -2259,7 +2278,9 @@ export default defineSchema({
     // customer already have an item in this run".
     .index("by_run_customer", ["runId", "customerId"])
     // The webhook's way home.
-    .index("by_retell_call", ["retellCallId"]),
+    .index("by_retell_call", ["retellCallId"])
+    // One customer's items across every run, for deleting that customer.
+    .index("by_org_customer", ["orgId", "customerId"]),
 
   // Images the salon sends OUT — a price list, a before-and-after, the card
   // machine being broken today. Inbound images already land in Convex storage
