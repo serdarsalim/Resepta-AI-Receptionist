@@ -228,6 +228,7 @@ const CATEGORIES: Category[] = [
           "If a customer asks not to be called by the voice agent, turn on No AI calls at the bottom of their record. Bulk call runs skip them, and their reminders and messages keep going.",
           "The voice agent turns No AI calls on by itself when a caller asks for it on a call. Only someone on your team can turn it off.",
           "To call a customer who asked for no AI calls, use Place call on their record and choose Call anyway. Do that only when they agreed to the call.",
+          "Campaign, bulk and win-back emails end with an unsubscribe link. When a customer uses it, their record shows Unsubscribed next to Marketing email, and those emails stop for them. Confirmations, reminders and WhatsApp messages keep going.",
         ],
         note: "Deleting cannot be undone, and nothing is sent to the customer about it. Their record leaves every list at once, and anything still waiting to be sent to them is cancelled.",
         keywords: [
@@ -241,6 +242,8 @@ const CATEGORIES: Category[] = [
           "do not call",
           "no ai calls",
           "call anyway",
+          "unsubscribe",
+          "marketing email",
         ],
       },
     ],

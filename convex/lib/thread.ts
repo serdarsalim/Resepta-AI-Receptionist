@@ -64,7 +64,12 @@ export function channelOfMessage(kind: string): Channel | "form" {
 // the same kind of fact and gets the same treatment the day it is as visible
 // on the card as consent is.
 export function neverLeftSilently(message: { status: string; error?: string }): boolean {
-  return message.status === "failed" && message.error === "no-consent";
+  // The marketing-email opt-out is the same kind of fact as consent and gets
+  // the same treatment: the record shows it, the thread does not repeat it.
+  return (
+    message.status === "failed" &&
+    (message.error === "no-consent" || message.error === "unsubscribed")
+  );
 }
 
 // One thing that happened in a conversation, reduced to what the summary

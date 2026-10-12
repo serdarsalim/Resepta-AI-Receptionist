@@ -282,6 +282,31 @@ calls still wants their reminders, and consent switches every channel off.
   the record's switch (`customers.setNoAiCalls`, any member).
 - It changes nothing in the demo org, which never dials.
 
+## Marketing email carries an unsubscribe, and the opt-out stops only that (2026-10-13)
+
+Marketing mail is `lib/email.isMarketingEmailKind`: `email_campaign`,
+`email_bulk`, `email_winback`. It carries a visible "unsubscribe" link and the
+`List-Unsubscribe` + `List-Unsubscribe-Post` (one-click) headers. Everything
+else a business emails (confirmations, reminders, follow-ups, cancellation
+notices, composer replies) carries neither and never stops for an opt-out. A
+new marketing kind goes into that set.
+
+- **The link is the message's token and nothing else.** `/e/u/<trackingToken>`
+  on the deployment's site; `messages.unsubscribeTarget` resolves it to the
+  row's org and the row's customer, checks they match, and accepts only a
+  marketing row's token. Every business sends from one shared domain, so never
+  key an unsubscribe on the email address, and never let the page name any
+  business but the one the token resolved to. The GET only asks; the POST (the
+  page's button, or the mail client's one-click) unsubscribes.
+- **`customers.marketingEmailOptOutAt` is respected at every marketing send:**
+  bulk email fan-out (`skipReason` → `unsubscribed`), campaign email fan-out,
+  the win-back's email half (`emailVerdict`), and at claim in
+  `delivery.claimForRetry`, which every queued marketing mail crosses and which
+  is the backstop. A new marketing send path checks it before the provider.
+- **Email only.** WhatsApp marketing is untouched (Meta keeps its own opt-out),
+  and it is not consent. Only the customer's own link sets it; the record shows
+  it and offers no switch, because re-subscribing is the customer's act.
+
 ## Two kinds of template, never conflate them
 
 - **Meta template messages** are business-initiated, registered with Meta and
@@ -310,7 +335,9 @@ number is connected. Winback and campaign email carries an open pixel
 (`/e/o/<token>` in `convex/http.ts`, `messages.recordEmailOpen`, 15s prefetch
 guard); opens surface as a RATE on the winback template row and the campaign
 row — never as a per-customer "opened" badge, because relay prefetch makes the
-individual fact a guess.
+individual fact a guess. The same token is what the unsubscribe link at the
+foot of marketing mail resolves ("Marketing email carries an unsubscribe",
+above).
 
 ## i18n — two layers, don't conflate them
 

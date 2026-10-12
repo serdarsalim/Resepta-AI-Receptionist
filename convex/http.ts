@@ -38,6 +38,7 @@ import type { AgentBooking } from "./retell";
 import { answerOrEmpty } from "./lib/nonAnswer";
 import { queueOrgAlert } from "./lib/alerts";
 import { formatAppointmentTime } from "./lib/format";
+import { languageFromAcceptHeader, unsubscribePage } from "./lib/unsubscribePage";
 import {
   NEAREST_FREE_NOTE,
   REPEAT_WINDOW_MS,
@@ -1306,6 +1307,81 @@ http.route({
         "cache-control": "no-store, no-cache, must-revalidate, private",
       },
     });
+  }),
+});
+
+// ── Marketing-mail unsubscribe ───────────────────────────────────────────────
+//
+// The link at the foot of a campaign, bulk or win-back mail, and the URL in
+// its List-Unsubscribe header (lib/email). Two steps, Nudge's shape: the GET,
+// which link scanners and mail previews follow, only renders a page asking;
+// the POST (the page's button, or the mail client's own one-click button per
+// RFC 8058) unsubscribes. The token resolves to one business and one customer
+// in messages.unsubscribeTarget, which checks they match; the page names that
+// business and no other (lib/unsubscribePage). No auth: the token is the
+// capability, as with the pixel above.
+function unsubscribeToken(request: Request): string {
+  const token = new URL(request.url).pathname.slice("/e/u/".length).trim();
+  // Minted tokens are UUIDs. Anything else is not worth an index read.
+  return /^[A-Za-z0-9-]{8,64}$/.test(token) ? token : "";
+}
+
+function unsubscribeResponse(html: string): Response {
+  return new Response(html, {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "x-robots-tag": "noindex",
+    },
+  });
+}
+
+http.route({
+  pathPrefix: "/e/u/",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const token = unsubscribeToken(request);
+    const target = token
+      ? await ctx.runQuery(internal.messages.unsubscribeContext, { token })
+      : null;
+    if (!target) {
+      return unsubscribeResponse(
+        unsubscribePage({
+          state: "unknown",
+          language: languageFromAcceptHeader(request.headers.get("accept-language")),
+        }),
+      );
+    }
+    return unsubscribeResponse(
+      unsubscribePage({
+        state: target.unsubscribed ? "done" : "confirm",
+        language: target.language,
+        business: target.business,
+        action: `/e/u/${token}`,
+      }),
+    );
+  }),
+});
+
+http.route({
+  pathPrefix: "/e/u/",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const token = unsubscribeToken(request);
+    const target = token
+      ? await ctx.runMutation(internal.messages.unsubscribeByToken, { token })
+      : null;
+    if (!target) {
+      return unsubscribeResponse(
+        unsubscribePage({
+          state: "unknown",
+          language: languageFromAcceptHeader(request.headers.get("accept-language")),
+        }),
+      );
+    }
+    return unsubscribeResponse(
+      unsubscribePage({ state: "done", language: target.language, business: target.business }),
+    );
   }),
 });
 

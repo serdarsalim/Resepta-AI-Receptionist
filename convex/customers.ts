@@ -37,6 +37,8 @@ const customerFields = {
   mutedAt: v.optional(v.number()),
   // Asked not to be called by the AI (schema customers.noAiCallsAt).
   noAiCallsAt: v.optional(v.number()),
+  // Unsubscribed from marketing email (schema customers.marketingEmailOptOutAt).
+  marketingEmailOptOutAt: v.optional(v.number()),
   // Chat-agent takeover stamp (docs/chat-agent.md §5) — when a human took
   // this conversation over. Display only now; agentModeOverride decides.
   agentPausedAt: v.optional(v.number()),

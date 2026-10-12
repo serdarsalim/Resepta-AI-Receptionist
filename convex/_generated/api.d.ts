@@ -91,6 +91,7 @@ import type * as lib_speech from "../lib/speech.js";
 import type * as lib_templateTexts from "../lib/templateTexts.js";
 import type * as lib_thread from "../lib/thread.js";
 import type * as lib_txBudget from "../lib/txBudget.js";
+import type * as lib_unsubscribePage from "../lib/unsubscribePage.js";
 import type * as lib_usage from "../lib/usage.js";
 import type * as lib_voiceAgentTemplate from "../lib/voiceAgentTemplate.js";
 import type * as lib_voiceCatalogue from "../lib/voiceCatalogue.js";
@@ -224,6 +225,7 @@ declare const fullApi: ApiFromModules<{
   "lib/templateTexts": typeof lib_templateTexts;
   "lib/thread": typeof lib_thread;
   "lib/txBudget": typeof lib_txBudget;
+  "lib/unsubscribePage": typeof lib_unsubscribePage;
   "lib/usage": typeof lib_usage;
   "lib/voiceAgentTemplate": typeof lib_voiceAgentTemplate;
   "lib/voiceCatalogue": typeof lib_voiceCatalogue;

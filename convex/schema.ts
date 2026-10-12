@@ -1289,6 +1289,18 @@ export default defineSchema({
     // (retell.markNoAiCallsFromCall); the agent can only ever SET it, a
     // person clears it. Set = asked; the timestamp is when.
     noAiCallsAt: v.optional(v.number()),
+    // When the customer unsubscribed from this business's MARKETING email,
+    // through the link at the foot of a campaign, bulk or win-back mail or
+    // their mail client's own Unsubscribe button (http.ts /e/u/<token>, which
+    // resolves the message row to exactly one business and customer).
+    //
+    // Email only, and marketing only (lib/email isMarketingEmailKind):
+    // campaign, bulk and win-back mail stop, at fan-out and again at claim;
+    // confirmations, reminders and replies keep going, and WhatsApp is not
+    // touched (Meta keeps its own marketing opt-out). Not consent: consent
+    // stops every channel. The record shows it; nothing in the app sets or
+    // clears it but the customer's own link. Set = unsubscribed; when.
+    marketingEmailOptOutAt: v.optional(v.number()),
     // The conversation summary the inbox list, its badge and the Contacts dot
     // read INSTEAD of scanning messages. Kept by the write paths; lib/thread.ts
     // has the rule, and the two indexes below are its readers. Absent until

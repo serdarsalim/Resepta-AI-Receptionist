@@ -396,7 +396,11 @@ export const fanOut = internalMutation({
       // token is minted here at fan-out; delivery injects the pixel, and the
       // campaign's open count is read live off these rows — bulk mail is the
       // one place an open rate means something.
-      if (customer.email && sender) {
+      // Not to a customer who unsubscribed from marketing email: a campaign is
+      // marketing, and their WhatsApp half above is a separate channel with
+      // Meta's own opt-out. delivery.claimForRetry refuses the same at send
+      // time, for whoever unsubscribes while the campaign is going out.
+      if (customer.email && sender && customer.marketingEmailOptOutAt === undefined) {
         // Same token vocabulary as the campaign line, same per-customer
         // render. A subject that resolves to nothing for this customer falls
         // back to the org name rather than sending a blank line.

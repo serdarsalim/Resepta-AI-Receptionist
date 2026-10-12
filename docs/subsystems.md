@@ -1531,7 +1531,7 @@ invites for deleted bookings are not retracted, and a booking cal.com holds
 `sendBackfill.run` rebuild usage counters from rows, so re-running them after
 deletions would undercount.
 
-## How a customer limits contact: No AI calls (2026-10-13)
+## How a customer limits contact: No AI calls, marketing email (2026-10-13)
 
 The rules are in AGENTS.md; this is how it runs.
 
@@ -1550,6 +1550,16 @@ Every publish path treats the field as ours, like the summary
 the registry publish rebuilds both, and `importVariables` never offers either
 to the owner as a field. An agent gets it at creation, on Update (v15), or the
 next time its variables are published; until then only the switch sets it.
+
+**Marketing email** (`customers.marketingEmailOptOutAt`, set = unsubscribed).
+
+| Piece | How |
+|---|---|
+| Which mail | `lib/email.isMarketingEmailKind`: `email_campaign`, `email_bulk`, `email_winback`. |
+| The link | `unsubscribeUrl(trackingToken)` → `${CONVEX_SITE_URL}/e/u/<token>`. Bulk and campaign rows mint the token at fan-out; the win-back mints one even when untracked. `withUnsubscribeFooter` appends a small grey "Abonelikten çık" / "Unsubscribe" / "Abmelden" in the customer's language (`customers.language ?? orgs.language`) after the body and before the open pixel; `sendEmail({ unsubscribeUrl })` adds `List-Unsubscribe: <url>` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (Resend `headers`). First sends (`wa.sendAppointmentMessage` for the win-back) and the queue (`delivery.attempt`, which sends every bulk and campaign mail and every retry) both do it. |
+| The routes | `GET /e/u/<token>` renders a confirm page (`lib/unsubscribePage`) and changes nothing; `POST` (the button, or a mail client's one-click) runs `messages.unsubscribeByToken`. Both resolve through `unsubscribeTarget`: the row by `by_tracking_token`, outbound, marketing kind, with a customer in the row's own org and not being deleted. Anything else gets a page naming no business, in the visitor's `Accept-Language` (tr/en/de, else tr). The first unsubscribe stamps the field once and writes one system `customer_updated` activity row (`detail: "marketingEmailOptOut"`). |
+| Respected | Bulk email: `skipReason` → `unsubscribed` (composer mirror `canReach`, run detail "Unsubscribed"). Campaign email: fan-out writes no email row. Win-back: `emailVerdict({ unsubscribed })`, silent on "both", a refusal row on email-only. Queue: `claimForRetry` refuses a queued marketing mail with `unsubscribed`; a bulk item refused that way becomes `skipped`, not failed (`noteBulkItemResult`). `unsubscribed` is a local refusal (permanent), a steady-state failure (no alert) and, like `no-consent`, never shown in the thread (`neverLeftSilently`). |
+| Shown | The record footer's Marketing email pair: blank, or "Unsubscribed" with the date on hover. Read-only. |
 
 ## The app lives at app.resepta.xyz (2026-08-24)
 

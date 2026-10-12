@@ -38,7 +38,10 @@ function canReach(customer: Doc<"customers">, channel: BulkChannel): boolean {
   // Asked not to be called by the AI. A call run skips them; their messages
   // are another channel.
   if (channel === "call" && customer.noAiCallsAt !== undefined) return false;
-  if (channel === "email") return Boolean(customer.email);
+  // Unsubscribed from marketing email; a bulk email is marketing.
+  if (channel === "email") {
+    return Boolean(customer.email) && customer.marketingEmailOptOutAt === undefined;
+  }
   return /^\+[1-9]\d{6,14}$/.test(customer.phone);
 }
 
@@ -605,7 +608,9 @@ function ItemOutcome({ item }: { item: RunItem }) {
                 ? "bulk.skipBadPhone"
                 : item.reason === "no-ai-calls"
                   ? "bulk.skipNoAiCalls"
-                  : "bulk.skipOther",
+                  : item.reason === "unsubscribed"
+                    ? "bulk.skipUnsubscribed"
+                    : "bulk.skipOther",
         )}
       </span>
     );

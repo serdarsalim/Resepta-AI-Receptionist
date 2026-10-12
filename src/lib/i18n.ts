@@ -828,6 +828,12 @@ const dictionary = {
   "bulk.skipBadPhone": { tr: "Numara geçersiz", en: "Bad number", de: "Nummer ungültig" },
   // The customer asked not to be called by the AI (the record's switch, or
   // the phone agent hearing it on an earlier call).
+  // Unsubscribed from marketing email through a link in an earlier mail.
+  "bulk.skipUnsubscribed": {
+    tr: "Abonelikten çıktı",
+    en: "Unsubscribed",
+    de: "Abgemeldet",
+  },
   "bulk.skipNoAiCalls": {
     tr: "Asistanla aranmak istemiyor",
     en: "Asked for no AI calls",
@@ -913,6 +919,25 @@ const dictionary = {
     tr: "Müşteri, sesli asistanın kendisini aramamasını istedi. Toplu aramalar onu atlar; buradan arama başlatırken önce sorulur. Hatırlatmalar ve mesajlar gitmeye devam eder. Bir aramada bunu isteyen arayanı asistan kendisi işaretler; işareti yalnızca bir kişi kaldırabilir.",
     en: "They asked not to be called by the voice agent. Bulk call runs skip them, and placing a call from here asks first. Reminders and messages still go. The voice agent turns this on when a caller asks on a call; only a person can turn it off.",
     de: "Der Kunde möchte nicht vom Sprachassistenten angerufen werden. Sammelaktionen per Anruf überspringen ihn, und ein Anruf von hier fragt vorher nach. Erinnerungen und Nachrichten gehen weiter. Bittet ein Anrufer im Gespräch darum, setzt der Assistent das selbst; aufheben kann es nur ein Mensch.",
+  },
+  // The marketing-email opt-out (customers.marketingEmailOptOutAt), a fact in
+  // the record footer: the value reads Unsubscribed once the customer used the
+  // link, blank before. Read-only, because only the customer's own link sets
+  // it.
+  "customers.marketingEmail": {
+    tr: "Pazarlama e-postası",
+    en: "Marketing email",
+    de: "Werbe-E-Mails",
+  },
+  "customers.marketingEmailHint": {
+    tr: "Kampanya, toplu işlem ve geri kazanım e-postalarının altında abonelikten çıkma bağlantısı olur. Müşteri bunu kullanınca burada Abonelikten çıktı yazar ve bu e-postalar ona artık gitmez. Onaylar, hatırlatmalar ve WhatsApp etkilenmez. Bunu yalnızca müşterinin kendi bağlantısı değiştirir.",
+    en: "Campaign, bulk and win-back emails end with an unsubscribe link. Once the customer uses it, this reads Unsubscribed and those emails stop for them. Confirmations, reminders and WhatsApp are not affected. Only the customer's own link changes it.",
+    de: "Kampagnen-, Sammel- und Rückgewinnungs-E-Mails enden mit einem Abmeldelink. Nutzt der Kunde ihn, steht hier Abgemeldet, und diese E-Mails gehen nicht mehr an ihn. Bestätigungen, Erinnerungen und WhatsApp sind nicht betroffen. Ändern kann das nur der Link des Kunden selbst.",
+  },
+  "customers.unsubscribed": {
+    tr: "Abonelikten çıktı",
+    en: "Unsubscribed",
+    de: "Abgemeldet",
   },
   // The record's ⋯ menu and its delete sheet (CustomerDeleteSheet). Owners
   // only; the menu is not drawn for anybody else.

@@ -104,6 +104,59 @@ export function withOpenPixel(html: string, token: string | undefined): string {
   return `${html}<img src="${site}/e/o/${token}" width="1" height="1" alt="" style="display:none;max-height:1px;max-width:1px;" />`;
 }
 
+// ── Marketing mail and its unsubscribe ─────────────────────────────────────
+//
+// Which customer mail is MARKETING: a campaign, a bulk run, a win-back. These
+// carry a visible unsubscribe link and the List-Unsubscribe headers, and stop
+// for a customer who used one (customers.marketingEmailOptOutAt). Everything
+// else a business sends by email (confirmations, reminders, follow-ups,
+// cancellation notices, replies typed in the composer) is transactional or a
+// conversation, carries no link, and never stops for an opt-out.
+//
+// By message kind, because the kind is the one fact every send path already
+// has on the row: the first attempt, the retry queue and the claim.
+const MARKETING_EMAIL_KINDS: ReadonlySet<string> = new Set([
+  "email_campaign",
+  "email_bulk",
+  "email_winback",
+]);
+
+export function isMarketingEmailKind(kind: string): boolean {
+  return MARKETING_EMAIL_KINDS.has(kind);
+}
+
+// The link behind "Unsubscribe", on this deployment's own site
+// (convex/http.ts /e/u/<token>). The token is the message row's trackingToken:
+// random, minted per message, resolving to exactly one business and one
+// customer. Every business sends from the same domain, so nothing about the
+// link may name or reach another business; a token is all it carries.
+export function unsubscribeUrl(token: string | undefined): string | undefined {
+  const site = process.env.CONVEX_SITE_URL;
+  if (!token || !site) return undefined;
+  return `${site}/e/u/${token}`;
+}
+
+// The visible link at the foot of a marketing mail, in the customer's
+// language. Small and grey, after the body and before the open pixel. A mail
+// with no link URL (no site URL configured) goes without it rather than with a
+// dead one.
+const UNSUBSCRIBE_LABEL: Record<string, string> = {
+  tr: "Abonelikten çık",
+  en: "Unsubscribe",
+  de: "Abmelden",
+};
+
+export function withUnsubscribeFooter(
+  html: string,
+  url: string | undefined,
+  language: string | undefined,
+): string {
+  if (!url) return html;
+  const lang = (language ?? "").trim().toLowerCase().slice(0, 2);
+  const label = UNSUBSCRIBE_LABEL[lang] ?? UNSUBSCRIBE_LABEL.en;
+  return `${html}<p style="margin-top:24px;font-size:12px;line-height:1.4;color:#8a8a8a;"><a href="${url}" style="color:#8a8a8a;">${label}</a></p>`;
+}
+
 // UTF-8-safe base64: btoa alone throws on anything past latin1, and an invite
 // for "Erkek saç kesimi" is past latin1 on its first ç. Chunked so the
 // fromCharCode spread never meets an argument-count ceiling.
@@ -131,6 +184,12 @@ export async function sendEmail(args: {
   // attachment's content type because that parameter — not the filename — is
   // what mail clients key on to offer the event.
   ics?: { content: string; method: "REQUEST" | "CANCEL" };
+  // Marketing mail only (isMarketingEmailKind): the same link as the visible
+  // footer, as RFC 2369 List-Unsubscribe plus RFC 8058 one-click, which is
+  // what Gmail and Yahoo require of bulk senders and what lets a mail client
+  // show its own Unsubscribe button. The client POSTs to the URL, and the
+  // route's POST is what unsubscribes.
+  unsubscribeUrl?: string;
 }): Promise<EmailSendResult> {
   const apiKey = args.apiKey;
   if (!apiKey) return { ok: false, reason: "email-not-configured" };
@@ -147,6 +206,14 @@ export async function sendEmail(args: {
         subject: args.subject,
         html: args.html,
         ...(args.replyTo ? { reply_to: args.replyTo } : {}),
+        ...(args.unsubscribeUrl
+          ? {
+              headers: {
+                "List-Unsubscribe": `<${args.unsubscribeUrl}>`,
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+              },
+            }
+          : {}),
         ...(args.ics
           ? {
               attachments: [

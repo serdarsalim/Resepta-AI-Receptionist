@@ -115,7 +115,14 @@ export function skipReason(
   // claim (claimNextCall), so a request made on an earlier call in the same
   // run, or switched on mid-run, still keeps the phone from ringing.
   if (channel === "call" && customer.noAiCallsAt !== undefined) return "no-ai-calls";
-  if (channel === "email") return customer.email ? null : "no-email";
+  if (channel === "email") {
+    if (!customer.email) return "no-email";
+    // Unsubscribed from marketing email (customers.marketingEmailOptOutAt),
+    // and a bulk email is marketing. WhatsApp and calls are other channels.
+    // delivery.claimForRetry refuses the same at send time, for whoever
+    // unsubscribes after the run fanned out.
+    return customer.marketingEmailOptOutAt !== undefined ? "unsubscribed" : null;
+  }
   // Both phone channels want a dialable/messageable number. customers.phone is
   // E.164-gated on write (orgAuth.assertE164), so this only catches rows that
   // predate that gate — but a run that dials a malformed string is a run that
@@ -715,6 +722,16 @@ export async function noteBulkItemResult(
   // failure of the send, and counting it as one would report a clean cancel
   // as dozens of errors. It reads as cancelled and counts against nothing.
   const cancelled = !ok && message.error === "bulk-cancelled";
+  // Refused because the customer unsubscribed after the run fanned out. Not
+  // a failure either: it is the skip the fan-out would have made had they
+  // clicked a minute sooner, and it reads and counts as one.
+  if (!ok && message.error === "unsubscribed") {
+    await ctx.db.patch(item._id, { status: "skipped", reason: "unsubscribed" });
+    const run = await ctx.db.get(message.bulkRunId);
+    if (run) await ctx.db.patch(run._id, { skippedCount: run.skippedCount + 1 });
+    await settleRun(ctx, message.bulkRunId);
+    return;
+  }
   await ctx.db.patch(item._id, {
     status: cancelled ? "cancelled" : ok ? "done" : "failed",
     reason: ok || cancelled ? undefined : (message.error ?? "send-failed"),

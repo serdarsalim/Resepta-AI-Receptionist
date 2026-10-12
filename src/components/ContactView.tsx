@@ -514,6 +514,24 @@ export function ContactView({
                   onChange={(next) => void setNoAiCalls({ customerId, on: next })}
                 />
               </span>
+              {/* Marketing email (2026-10-13): a fact, not a switch. It is
+                  set by the customer's own unsubscribe link and by nothing in
+                  the app, so there is nothing here to flip. Blank until then,
+                  the Last reply rule; the date rides the title. */}
+              <MetaLabel
+                label={t("customers.marketingEmail")}
+                hint={t("customers.marketingEmailHint")}
+              />
+              <span
+                className="whitespace-nowrap"
+                title={
+                  customer.marketingEmailOptOutAt !== undefined
+                    ? formatDateTime(customer.marketingEmailOptOutAt, language)
+                    : undefined
+                }
+              >
+                {customer.marketingEmailOptOutAt !== undefined ? t("customers.unsubscribed") : ""}
+              </span>
             </div>
             </div>
           </section>

@@ -755,6 +755,9 @@ export async function queueOrgAlert(
 // thread is for what a customer was told.
 const STEADY_STATE_FAILURES = new Set([
   "no-consent",
+  // The customer unsubscribed from marketing email; the record says so. Like
+  // no-consent, a fact about one customer that recurs with every campaign.
+  "unsubscribed",
   "wa-not-configured",
   "session-window-closed",
   // Email-only org, customer without an address. Like no-consent this is a

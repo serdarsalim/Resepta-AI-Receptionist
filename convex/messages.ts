@@ -10,6 +10,8 @@ import {
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireOrg } from "./lib/orgAuth";
 import { isDeleting } from "./lib/customerDeletion";
+import { isMarketingEmailKind } from "./lib/email";
+import { recordActivity } from "./lib/activity";
 import { buttonsFor, buttonLabelsFor } from "./lib/metaTemplate";
 import { alertFailedSend } from "./lib/alerts";
 import { classifyFailure, nextAttemptDelay } from "./lib/sendFailure";
@@ -313,6 +315,98 @@ export const recordEmailOpen = internalMutation({
       }
     }
     return null;
+  },
+});
+
+// ── Marketing-mail unsubscribe (GET and POST /e/u/<token>, convex/http.ts) ──
+//
+// The token is the message row's trackingToken, the same opaque per-message
+// token the open pixel uses (Nudge's design). It resolves to exactly one
+// business and one customer: the row's org, and the row's customer, checked to
+// belong to that same org before anything is read off it or written to it.
+// Every business sends from one shared domain, so this check, not the URL, is
+// what keeps one business's link from touching another's customer.
+//
+// Only a MARKETING mail's token works (lib/email isMarketingEmailKind): those
+// are the only mails that carry the link. A confirmation's token sits in plain
+// sight in its open-pixel URL, and must not be a way to unsubscribe anybody.
+async function unsubscribeTarget(
+  ctx: QueryCtx,
+  token: string,
+): Promise<{ customer: Doc<"customers">; org: Doc<"orgs"> } | null> {
+  const message = await ctx.db
+    .query("messages")
+    .withIndex("by_tracking_token", (q) => q.eq("trackingToken", token))
+    .first();
+  if (
+    !message ||
+    message.direction !== "out" ||
+    !isMarketingEmailKind(message.kind) ||
+    !message.customerId
+  ) {
+    return null;
+  }
+  const [customer, org] = await Promise.all([
+    ctx.db.get(message.customerId),
+    ctx.db.get(message.orgId),
+  ]);
+  if (!customer || !org || customer.orgId !== message.orgId || isDeleting(customer)) {
+    return null;
+  }
+  return { customer, org };
+}
+
+const unsubscribeAnswer = v.union(
+  v.object({
+    business: v.string(),
+    language: v.string(),
+    unsubscribed: v.boolean(),
+  }),
+  v.null(),
+);
+
+// The GET: what the page should say, changing nothing. Link scanners and mail
+// previews follow GETs, and none of them is the customer deciding.
+export const unsubscribeContext = internalQuery({
+  args: { token: v.string() },
+  returns: unsubscribeAnswer,
+  handler: async (ctx, { token }) => {
+    const target = await unsubscribeTarget(ctx, token);
+    if (!target) return null;
+    return {
+      business: target.org.name,
+      language: target.customer.language ?? target.org.language,
+      unsubscribed: target.customer.marketingEmailOptOutAt !== undefined,
+    };
+  },
+});
+
+// The POST: the page's button, or the mail client's one-click (RFC 8058).
+// Idempotent; the first moment is kept. Unknown tokens answer null and the
+// page says the link no longer works. One activity row, by the system, so the
+// business can see when it happened and that nobody on the team did it.
+export const unsubscribeByToken = internalMutation({
+  args: { token: v.string() },
+  returns: unsubscribeAnswer,
+  handler: async (ctx, { token }) => {
+    const target = await unsubscribeTarget(ctx, token);
+    if (!target) return null;
+    const { customer, org } = target;
+    if (customer.marketingEmailOptOutAt === undefined) {
+      await ctx.db.patch(customer._id, { marketingEmailOptOutAt: Date.now() });
+      await recordActivity(ctx, {
+        orgId: org._id,
+        kind: "customer_updated",
+        customerId: customer._id,
+        detail: "marketingEmailOptOut",
+        system: true,
+      });
+    }
+    return {
+      business: org.name,
+      language: customer.language ?? org.language,
+      unsubscribed: true,
+    };
   },
 });
 

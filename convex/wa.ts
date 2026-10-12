@@ -15,8 +15,11 @@ import {
   customerSender,
   emailBodyHtml,
   emailLaneConfigured,
+  isMarketingEmailKind,
   sendEmail,
+  unsubscribeUrl,
   withOpenPixel,
+  withUnsubscribeFooter,
 } from "./lib/email";
 import { appointmentIcs } from "./lib/ics";
 import { resolveWaAccount } from "./lib/platformConfig";
@@ -1328,6 +1331,11 @@ export const sendAppointmentMessage = internalAction({
     // Switched off on a WhatsApp-only rule, skipped silently on "both" for a
     // customer it cannot reach, a visible row on email-only: the verdict in
     // lib/lifecycleSend, shared with the assistants' advance check.
+    // A win-back is marketing (lib/email isMarketingEmailKind): it carries
+    // the unsubscribe link, and a customer who used one gets no win-back
+    // email. Confirmations, reminders, follow-ups and cancellation notices
+    // are not, and an opt-out never stops them.
+    const marketing = isMarketingEmailKind(`email_${messageKind}`);
     const byEmail = emailVerdict({
       channel: channelPref,
       configured: emailLaneConfigured(mailConfig),
@@ -1335,6 +1343,7 @@ export const sendAppointmentMessage = internalAction({
       address: Boolean(customer.email),
       hasWords: Boolean(body),
       language,
+      unsubscribed: marketing && customer.marketingEmailOptOutAt !== undefined,
     });
     if (byEmail.reason) {
       await fail(byEmail.reason);
@@ -1378,7 +1387,10 @@ export const sendAppointmentMessage = internalAction({
       // per-customer fact; recordEmailOpen's prefetch guard and the relay
       // caveat apply as ever.
       const tracked = contentTemplate;
-      const trackingToken = tracked ? crypto.randomUUID() : undefined;
+      // Marketing mail always gets a token, tracked or not: it is also what
+      // the unsubscribe link resolves.
+      const trackingToken = tracked || marketing ? crypto.randomUUID() : undefined;
+      const unsubscribe = marketing ? unsubscribeUrl(trackingToken) : undefined;
       // Confirmations carry the appointment as a real calendar invite;
       // cancellations carry the retraction under the same UID, so the entry
       // the invite created disappears again. Only these two kinds: a reminder
@@ -1437,9 +1449,10 @@ export const sendAppointmentMessage = internalAction({
         from: sender,
         to: customer.email,
         subject,
-        html: withOpenPixel(emailHtml, trackingToken),
+        html: withOpenPixel(withUnsubscribeFooter(emailHtml, unsubscribe, language), trackingToken),
         replyTo,
         ics,
+        unsubscribeUrl: unsubscribe,
       });
       await ctx.runMutation(internal.messages.applySendResult, {
         messageId: emailMessageId,

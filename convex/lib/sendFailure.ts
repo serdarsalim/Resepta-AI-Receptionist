@@ -38,6 +38,9 @@ export const EVOLUTION_NO_REACTION = "evolution-no-reaction";
 // Our own refusals, raised before the provider was ever called.
 const LOCAL_REFUSALS = new Set([
   "no-consent",
+  // A marketing mail (campaign, bulk, win-back) to a customer who
+  // unsubscribed from marketing email. Their decision; only they undo it.
+  "unsubscribed",
   "wa-not-configured",
   "session-window-closed",
   "email-not-configured",

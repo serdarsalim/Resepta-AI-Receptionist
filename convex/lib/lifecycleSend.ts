@@ -119,8 +119,19 @@ export function emailVerdict(a: {
   address: boolean;
   hasWords: boolean;
   language: string;
+  // A marketing send (a win-back) to a customer who unsubscribed from
+  // marketing email (customers.marketingEmailOptOutAt). Unset for every
+  // transactional kind, which an opt-out never stops.
+  unsubscribed?: boolean;
 }): { send: boolean; reason?: string } {
   if (a.channel === "whatsapp") return { send: false };
+  // Their own choice, so on "both" WhatsApp simply carries it. On email-only
+  // the refusal is the row, as consent's is: kept as the record that the
+  // business correctly did not mail them, never alerted on, never shown in
+  // the thread (lib/thread neverLeftSilently).
+  if (a.unsubscribed) {
+    return a.channel === "email" ? { send: false, reason: "unsubscribed" } : { send: false };
+  }
   if (a.channel === "email" && (!a.configured || !a.sender)) {
     return { send: false, reason: "email-not-configured" };
   }

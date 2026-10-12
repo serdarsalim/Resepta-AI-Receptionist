@@ -46,8 +46,11 @@ import {
   customerSender,
   emailBodyHtml,
   emailLaneConfigured,
+  isMarketingEmailKind,
   sendEmail,
+  unsubscribeUrl,
   withOpenPixel,
+  withUnsubscribeFooter,
 } from "./lib/email";
 import { emailConfig, resolveWaAccount, type EmailConfig } from "./lib/platformConfig";
 import { sendWaCloudImage, sendWaCloudTemplate, sendWaCloudText } from "./lib/waCloud";
@@ -144,6 +147,13 @@ export const claimForRetry = internalMutation({
     const bulk = await bulkRunGate(ctx, message);
     if (bulk === "paused") return null;
     if (bulk === "cancelled") return { refused: "bulk-cancelled" as const };
+    // Marketing mail to a customer who unsubscribed after it was queued: a
+    // campaign or bulk row written before they clicked, or a win-back's
+    // retry. Every queued marketing mail crosses this claim, so this is the
+    // check that cannot be skipped (customers.marketingEmailOptOutAt).
+    if (isMarketingEmailKind(message.kind) && customer.marketingEmailOptOutAt !== undefined) {
+      return { refused: "unsubscribed" as const };
+    }
 
     const waAccount = await resolveWaAccount(
       ctx,
@@ -187,6 +197,10 @@ export const claimForRetry = internalMutation({
       lane: message.lane ?? "cloud",
       evolution,
       isEmail: message.kind.startsWith("email_"),
+      // Campaign, bulk and win-back mail carry the unsubscribe link and
+      // headers (lib/email), in the customer's language.
+      marketing: isMarketingEmailKind(message.kind),
+      language,
       body: message.body,
       to: customer.phone,
       email: customer.email,
@@ -269,6 +283,8 @@ export const retryDue = internalAction({
 
 type RetryJob = {
   isEmail: boolean;
+  marketing: boolean;
+  language: string;
   // Which number the FIRST attempt went out on, read off the row rather than
   // re-derived. See claimForRetry.
   lane: "cloud" | "evolution";
@@ -307,8 +323,10 @@ async function attempt(
     if (!job.body) return { ok: false, reason: "no-body" };
     // Mirrors the first attempt exactly — display From, escaped body,
     // reply-to into the app — so a retry is the same mail, later, not a
-    // slightly different one.
+    // slightly different one. A marketing mail's unsubscribe link resolves
+    // through the same token as its pixel.
     const domain = job.mailConfig.domain;
+    const unsubscribe = job.marketing ? unsubscribeUrl(job.trackingToken) : undefined;
     const sent = await sendEmail({
       apiKey: job.mailConfig.apiKey,
       from: job.emailFrom,
@@ -318,9 +336,13 @@ async function attempt(
       // field and are rebuilt the way the first attempt built them.
       subject:
         job.emailSubject ?? (job.when ? `${job.orgName}, ${job.when}` : job.orgName),
-      html: withOpenPixel(emailBodyHtml(job.body), job.trackingToken),
+      html: withOpenPixel(
+        withUnsubscribeFooter(emailBodyHtml(job.body), unsubscribe, job.language),
+        job.trackingToken,
+      ),
       replyTo:
         job.inboundAddress && domain ? `${job.inboundAddress}@${domain}` : undefined,
+      unsubscribeUrl: unsubscribe,
     });
     return sent.ok ? { ok: true } : { ok: false, reason: sent.reason };
   }
