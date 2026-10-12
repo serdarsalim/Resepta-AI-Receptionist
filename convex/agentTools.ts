@@ -29,6 +29,15 @@ import { serviceKey } from "./services";
 import { spokenDuration, spokenPrice } from "./lib/speech";
 import { noteCall, noteMessageById, recomputeThread } from "./lib/thread";
 import { isDeleting, liveCustomer } from "./lib/customerDeletion";
+import {
+  beginCustomerDeletion,
+  customerFootprint,
+  deleteConfirmExpiry,
+  deleteConfirmToken,
+  DELETE_CONFIRM_TTL_MS,
+  footprintSignature,
+  footprintValidator,
+} from "./customerDeletion";
 
 const scope = {
   orgId: v.id("orgs"),
@@ -945,6 +954,93 @@ export const logActivity = internalMutation({
     // where they belong, on the customer's own timeline, and the journal plus
     // recent_actions is the audit surface for the import itself.
     return { calls: calls.length, messages: messages.length, skipped, actionId };
+  },
+});
+
+// ── Deleting a customer ──────────────────────────────────────────────────────
+//
+// A data-removal request (KVKK), done from the assistant: "delete Ayşe and
+// everything you have on her". Two calls, Nudge's preview_delete_contacts
+// shape. The preview names the person and counts what would go, and hands
+// back a confirm token bound to those counts and to a ten-minute window; the
+// delete recounts and refuses a token that no longer matches. A message that
+// lands in between changes the count, so the person always approves what
+// actually goes. Any member may do it, as in the app (customers.remove).
+
+export const previewDeleteCustomer = internalQuery({
+  args: { orgId: v.id("orgs"), customerId: v.string() },
+  returns: v.object({
+    customer: v.object({
+      id: v.id("customers"),
+      name: v.string(),
+      phone: v.union(v.string(), v.null()),
+      email: v.union(v.string(), v.null()),
+    }),
+    footprint: footprintValidator,
+    signature: v.string(),
+  }),
+  handler: async (ctx, { orgId, customerId }) => {
+    const customer = await ctx.db.get(customerId as Id<"customers">).catch(() => null);
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) {
+      throw new Error("No customer with that id.");
+    }
+    const footprint = await customerFootprint(ctx, customer);
+    return {
+      customer: {
+        id: customer._id,
+        name: fullName(customer),
+        phone: customer.phone || null,
+        email: customer.email ?? null,
+      },
+      footprint,
+      signature: footprintSignature(footprint),
+    };
+  },
+});
+
+export const deleteCustomer = internalMutation({
+  args: { ...scope, customerId: v.string(), confirmToken: v.string() },
+  returns: v.object({
+    name: v.string(),
+    footprint: footprintValidator,
+    actionId: v.id("agentActions"),
+  }),
+  handler: async (ctx, { orgId, userId, connectionId, customerId, confirmToken }) => {
+    const customer = await customerInOrg(ctx, orgId, customerId);
+    const expiresAt = deleteConfirmExpiry(confirmToken);
+    const now = Date.now();
+    if (expiresAt === null || expiresAt < now || expiresAt > now + DELETE_CONFIRM_TTL_MS) {
+      throw new Error(
+        "That confirmToken has expired, or preview_delete_customer did not issue it. Run preview_delete_customer again and show the person what would go.",
+      );
+    }
+    const footprint = await customerFootprint(ctx, customer);
+    if (confirmToken !== deleteConfirmToken(customer._id, footprintSignature(footprint), expiresAt)) {
+      throw new Error(
+        "That confirmToken does not match a fresh preview of this customer: something changed since (a message arrived, a note was added), or it was issued for someone else. Run preview_delete_customer again and show the person the new counts before deleting.",
+      );
+    }
+    const name = fullName(customer);
+    // Journalled as irreversible, and holding counts and the id only. Nudge
+    // keeps the names and phones here as the record of who went; under KVKK
+    // that record is exactly what was asked to go, so this one says that a
+    // customer was deleted, by whom and how much, and never whom.
+    const actionId = await journal(ctx, {
+      orgId,
+      connectionId,
+      userId,
+      tool: "delete_customer",
+      args: { customerId: customer._id },
+      targetTable: "customers",
+      targetId: customer._id,
+      before: { counts: footprint.counts, capped: footprint.capped },
+      after: null,
+      reversible: false,
+    });
+    await beginCustomerDeletion(ctx, customer, {
+      agent: { actorId: userId, connectionId, agentActionId: actionId },
+    });
+    return { name, footprint, actionId };
   },
 });
 

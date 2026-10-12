@@ -16,6 +16,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { httpAction, internalQuery, type ActionCtx } from "./_generated/server";
 import { planToken } from "./lib/planToken";
+import { DELETE_CONFIRM_TTL_MS, deleteConfirmToken } from "./customerDeletion";
 import type { VoiceVariableInput } from "./lib/voiceVariables";
 import {
   bearer,
@@ -27,7 +28,7 @@ import {
   type ToolDef as ProtocolToolDef,
 } from "./lib/mcpProtocol";
 
-const SERVER_INFO = { name: "randevu", version: "1.3.0" };
+const SERVER_INFO = { name: "randevu", version: "1.4.0" };
 
 // Which lines went and which arrived. A whole-prompt dump makes a human scroll
 // two screens to find the sentence that changed, and approve it without having
@@ -506,6 +507,92 @@ const TOOLS: ToolDef[] = [
         skipped: res.skipped,
         actionId: res.actionId,
         ...(res.actionId ? { undoWith: `undo(actionId: "${res.actionId}")` } : {}),
+      };
+    },
+  },
+  // ── Deleting a customer (any member, as in the app) ─────────────────────────
+  // A data-removal request: the person asked this business to erase them.
+  // Preview first, always: the token binds the delete to the counts shown.
+  {
+    name: "preview_delete_customer",
+    title: "Preview deleting a customer",
+    description:
+      "Step one of erasing a person from this business, for a data-removal request. Takes the exact customer id (from search_customers or get_customer, never a name) and returns who that is and what would go with them: appointments, messages, calls, notes, assistant replies, bulk-send entries and inbox marks, plus the audit rows that would be emptied of them. Returns a confirmToken that delete_customer needs, valid for 10 minutes. Show the person the name and the counts and get a clear yes before deleting.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        customerId: { type: "string", description: "From search_customers or get_customer." },
+      },
+      required: ["customerId"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true },
+    handler: async (ctx, args, who) => {
+      const customerId = str(args, "customerId");
+      if (!customerId) throw new Error("customerId is required");
+      const res = await ctx.runQuery(internal.agentTools.previewDeleteCustomer, {
+        orgId: who.orgId as never,
+        customerId,
+      });
+      const { counts, capped } = res.footprint;
+      // The clock is read here, in the action: a query must not.
+      const expiresAt = Date.now() + DELETE_CONFIRM_TTL_MS;
+      return {
+        customer: res.customer,
+        willDelete: {
+          appointments: counts.appointments,
+          messages: counts.messages,
+          calls: counts.calls,
+          notes: counts.notes,
+          assistantReplies: counts.chatTurns,
+          bulkSendEntries: counts.bulkRunItems,
+          inboxPins: counts.inboxPins,
+          inboxReadMarks: counts.inboxReads,
+        },
+        willEmpty: { activityRows: counts.activity, journalEntries: counts.journal },
+        ...(capped.length > 0
+          ? { atLeast: `These counts stopped at a cap and mean "at least": ${capped.join(", ")}.` }
+          : {}),
+        confirmToken: deleteConfirmToken(res.customer.id, res.signature, expiresAt),
+        expiresInMinutes: DELETE_CONFIRM_TTL_MS / 60_000,
+        note:
+          "Deleting cannot be undone, and nothing is sent to the customer about it. Their record leaves every list and search at once and the rest is removed in the background within moments; anything still waiting to be sent to them is cancelled. The activity feed keeps a line saying a customer was deleted and by whom, never who. Copies outside this business's records are not touched: the phone provider's recordings and transcripts of their calls, and the copies the messaging and email providers keep. Confirm with the person, then call delete_customer with this confirmToken and the same customerId.",
+      };
+    },
+  },
+  {
+    name: "delete_customer",
+    title: "Delete a customer permanently",
+    description:
+      "Step two. Permanently erases the customer and everything this business holds on them, and cancels anything still waiting to be sent to them. Needs the confirmToken from preview_delete_customer for the same customer, less than 10 minutes old; if anything changed since the preview (a message arrived, a note was added), this refuses and you preview again. Not undoable: undo refuses it. Only call after the person has seen the preview and said yes.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        customerId: { type: "string" },
+        confirmToken: { type: "string", description: "From preview_delete_customer." },
+      },
+      required: ["customerId", "confirmToken"],
+      additionalProperties: false,
+    },
+    annotations: { destructiveHint: true, idempotentHint: false },
+    handler: async (ctx, args, who) => {
+      const customerId = str(args, "customerId");
+      const confirmToken = str(args, "confirmToken");
+      if (!customerId) throw new Error("customerId is required");
+      if (!confirmToken) {
+        throw new Error("confirmToken is required: run preview_delete_customer first");
+      }
+      const res = await ctx.runMutation(internal.agentTools.deleteCustomer, {
+        orgId: who.orgId as never,
+        userId: who.userId as never,
+        connectionId: who.connectionId as never,
+        customerId,
+        confirmToken,
+      });
+      return {
+        ok: true,
+        note: `Deleted ${res.name}. They are gone from every list now, and the rest of their records are being removed in the background. This cannot be undone; recent_actions keeps a line that a customer was deleted, without their name.`,
+        actionId: res.actionId,
       };
     },
   },
