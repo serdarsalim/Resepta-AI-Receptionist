@@ -310,8 +310,9 @@ export async function scheduleLifecycleMessages(
     suppressOwnerAlert?: boolean;
   },
   // How many messages to the CUSTOMER were scheduled: one per live rule on
-  // this trigger. The assistants read it to know whether the business's own
-  // confirmation is on its way, and stand down only when it is (2026-10-13).
+  // this trigger. Scheduled is not delivered: the assistants pair a nonzero
+  // count with lib/lifecycleSend.lifecycleReaches, the send path's own
+  // predicates, before they treat the business's message as on its way.
 ): Promise<number> {
   const org = await ctx.db.get(orgId);
   if (!org) return 0;
