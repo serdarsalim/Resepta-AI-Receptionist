@@ -73,6 +73,7 @@ import {
   contactUpdateResult,
 } from "./retell";
 import { voiceValuesFromToolArgs } from "./lib/voicePayload";
+import { answerOrEmpty } from "./lib/nonAnswer";
 import {
   CHANGES_PER_DAY,
   NEAREST_FREE_NOTE,
@@ -2078,9 +2079,17 @@ async function executeTool(
       startRefusal(ctx, context, startAt, did);
 
     if (name === "book_appointment") {
+      // A placeholder is no name (lib/nonAnswer), whether the model wrote it
+      // or an old call stored it on the card: either reads as missing.
       const customerName =
-        String(input.name ?? "").trim() ||
-        `${customer.firstName} ${customer.lastName ?? ""}`.trim();
+        answerOrEmpty(String(input.name ?? "").trim(), "name") ||
+        [
+          answerOrEmpty(customer.firstName, "name"),
+          answerOrEmpty(customer.lastName, "name"),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
       if (!customerName || customerName === customer.phone) {
         return { error: "missing-name", note: "Ask the customer for their name first." };
       }

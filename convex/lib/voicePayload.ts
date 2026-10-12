@@ -2,6 +2,8 @@
 // once before the values reach either the live tool path or the durable
 // post-call reconciler.
 
+import { isNonAnswer } from "./nonAnswer";
+
 export function coerceVoiceValues(
   source: Record<string, unknown>,
 ): Record<string, string> {
@@ -11,8 +13,11 @@ export function coerceVoiceValues(
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_]*$/.test(key)) continue;
     const text = String(value).trim();
     // Missing analysis values arrive as empty strings. Empty means "not
-    // collected", never "erase a value a person already confirmed".
-    if (text) out[key] = text;
+    // collected", never "erase a value a person already confirmed". A
+    // non-answer ("Belirtilmedi", "Not specified" and their siblings,
+    // lib/nonAnswer) is the same thing written as words, and goes the same
+    // way: it never fills a field, never blanks one, and is never read back.
+    if (text && !isNonAnswer(text)) out[key] = text;
   }
   return out;
 }

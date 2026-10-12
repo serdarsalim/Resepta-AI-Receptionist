@@ -32,6 +32,7 @@ import {
   todayInZone,
 } from "./lib/businessHours";
 import { voiceValuesFromToolArgs } from "./lib/voicePayload";
+import { answerOrEmpty } from "./lib/nonAnswer";
 import { queueOrgAlert } from "./lib/alerts";
 import { formatAppointmentTime } from "./lib/format";
 import {
@@ -774,7 +775,10 @@ http.route({
       // writing down "five o'clock tomorrow" as a zone-less stamp used to
       // book two hours late in summer Vienna.
       const startAt = parseLocalStart(String(args.start ?? ""), org.timezone);
-      const customerName = String(args.name ?? "").trim();
+      // A placeholder ("Bilinmiyor", "Yok") is no name (lib/nonAnswer): it is
+      // answered as a missing one, so the agent asks rather than filing a
+      // booking, and a customer card, under it.
+      const customerName = answerOrEmpty(String(args.name ?? "").trim(), "name");
       // Nudge's rule for a booking nobody can be identified for: refuse it and
       // say why. A number the caller reads out is exactly what must not be
       // booked against, so the agent is told not to ask for one.

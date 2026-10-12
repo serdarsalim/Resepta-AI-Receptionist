@@ -20,6 +20,7 @@ import { spokenDateTime, spokenDuration, spokenPrice } from "./speech";
 import { formatAppointmentTime } from "./format";
 import { formatMoney } from "./money";
 import { noteText } from "./noteBody";
+import { answerOrEmpty, isNonAnswer } from "./nonAnswer";
 
 export type AgentVariableStyle = "spoken" | "written";
 
@@ -67,7 +68,24 @@ export function builtinAgentVariables(args: {
     voiceVisible?: boolean;
   }[];
 }): Record<string, string> {
-  const { org, customer, style } = args;
+  const { org, style } = args;
+  // The card as an agent may hear it: a placeholder a call stored before
+  // lib/nonAnswer existed reads as an empty field, so it is neither spoken as
+  // a fact ("Belirtilmedi Bey") nor offered as the caller's details. Same
+  // rule as the registry rows in retell.beforeCallContext.
+  const customer = args.customer
+    ? {
+        ...args.customer,
+        firstName: answerOrEmpty(args.customer.firstName, "name"),
+        lastName: answerOrEmpty(args.customer.lastName, "name"),
+        email: answerOrEmpty(args.customer.email),
+        custom: Object.fromEntries(
+          Object.entries(args.customer.custom ?? {}).filter(
+            ([, value]) => !isNonAnswer(value),
+          ),
+        ),
+      }
+    : null;
   const lang = customer?.language ?? org.language;
   const currency = org.currency ?? "TRY";
   return {

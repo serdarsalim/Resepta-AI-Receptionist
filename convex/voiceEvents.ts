@@ -10,6 +10,7 @@ import {
 import { connectionField } from "./lib/connections";
 import { requireOrg } from "./lib/orgAuth";
 import { coerceVoiceValues } from "./lib/voicePayload";
+import { withoutNonAnswers } from "./lib/nonAnswer";
 import { VOICE_SUMMARY_FIELD } from "./lib/voiceAgentTemplate";
 
 const PROCESS_BACKOFF = [60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 3 * 60 * 60_000];
@@ -248,7 +249,14 @@ export const process = internalAction({
       // collected", so a discovery call's card read as six answers buried in
       // eight lines of SIP plumbing. What we injected is not something the
       // caller told us, and this record only claims the latter.
-      const collected = { ...afterValues, ...duringValues };
+      //
+      // Nor is a non-answer ("Belirtilmedi", "Not specified", lib/nonAnswer).
+      // Dropped from each bag BEFORE they merge, so a placeholder from the
+      // live extraction cannot hide a real value the analysis recovered.
+      const collected = {
+        ...withoutNonAnswers(afterValues),
+        ...withoutNonAnswers(duringValues),
+      };
 
       // Retell prices the call in USD cents on call_cost.combined_cost, and
       // only the call_analyzed event carries it. Converted to micro-USD here

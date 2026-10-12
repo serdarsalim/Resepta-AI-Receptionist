@@ -42,6 +42,7 @@ import { voiceVariableInput } from "./lib/voiceVariables";
 import { spokenClock, spokenDateTime, spokenLead } from "./lib/speech";
 import { customerConflict } from "./lib/overlap";
 import { RESERVED_CONTACT_KEYS } from "./lib/keys";
+import { answerOrEmpty, isNonAnswer } from "./lib/nonAnswer";
 import { withChange } from "./lib/agentChange";
 import { recordActivity } from "./lib/activity";
 import { MAX_UPCOMING_PER_PHONE } from "./lib/bookingLimits";
@@ -1180,6 +1181,13 @@ export const beforeCallContext = internalQuery({
     ]);
     const next = nextUpcomingOf(appointments, Date.now(), ["scheduled", "confirmed"]);
     const fieldsById = new Map(fields.map((field) => [String(field._id), field]));
+    // What the card says, minus any placeholder a call stored before
+    // lib/nonAnswer existed: injected, "Belirtilmedi" becomes a fact the agent
+    // reads back ("Belirtilmedi Bey"). It is withheld exactly like an empty
+    // field, so the agent asks once instead.
+    const firstName = answerOrEmpty(customer?.firstName, "name");
+    const lastName = answerOrEmpty(customer?.lastName, "name");
+    const email = answerOrEmpty(customer?.email);
     const dynamicVariables: Record<string, string> = {};
     for (const variable of variables.sort((a, b) => a.order - b.order)) {
       let value = "";
@@ -1191,21 +1199,19 @@ export const beforeCallContext = internalQuery({
           value = org.name;
           break;
         case "customer_name":
-          value = customer
-            ? [customer.firstName, customer.lastName].filter(Boolean).join(" ").trim()
-            : "";
+          value = [firstName, lastName].filter(Boolean).join(" ").trim();
           break;
         case "customer_first_name":
-          value = customer?.firstName ?? "";
+          value = firstName;
           break;
         case "customer_last_name":
-          value = customer?.lastName ?? "";
+          value = lastName;
           break;
         case "customer_phone":
           value = customer?.phone ?? normalised ?? "";
           break;
         case "customer_email":
-          value = customer?.email ?? "";
+          value = email;
           break;
         case "customer_language":
           value = customer?.language ?? org.language;
@@ -1219,7 +1225,7 @@ export const beforeCallContext = internalQuery({
           const field = variable.beforeFieldId
             ? fieldsById.get(String(variable.beforeFieldId))
             : null;
-          value = field && customer ? customer.custom?.[field.key] ?? "" : "";
+          value = field && customer ? answerOrEmpty(customer.custom?.[field.key]) : "";
           break;
         }
       }
@@ -2485,8 +2491,12 @@ export const voiceBook = internalMutation({
         };
       }
     }
+    // A placeholder handed over as the caller's name ("Bilinmiyor", "Yok") is
+    // no name at all (lib/nonAnswer), so it never becomes one: the record
+    // keeps its number as the name, as for a caller who gave none.
+    const givenName = answerOrEmpty(args.name.trim(), "name");
     if (!customer) {
-      const [firstName, ...rest] = args.name.trim().split(/\s+/).filter(Boolean);
+      const [firstName, ...rest] = givenName.split(/\s+/).filter(Boolean);
       const customerId = await ctx.db.insert("customers", {
         orgId: args.orgId,
         firstName: firstName || phone,
@@ -2502,7 +2512,13 @@ export const voiceBook = internalMutation({
         source: "voice",
       });
       customer = await ctx.db.get(customerId);
-    } else if (!customer.firstName || customer.firstName === phone) {
+    } else if (
+      !customer.firstName ||
+      customer.firstName === phone ||
+      // A placeholder stored before the filter existed is replaced the same
+      // way an empty name is.
+      isNonAnswer(customer.firstName, "name")
+    ) {
       // A caller the agent already saved details for exists BEFORE the
       // booking — save_customer_details creates them from the number alone —
       // so this branch, not the insert above, is the common one on a real
@@ -2513,7 +2529,7 @@ export const voiceBook = internalMutation({
       // it is the caller's name for the booking, not a customer record edit.
       // A record that already has its first and last name from the agent's
       // own capture never reaches this branch.
-      const [firstName, ...rest] = args.name.trim().split(/\s+/).filter(Boolean);
+      const [firstName, ...rest] = givenName.split(/\s+/).filter(Boolean);
       if (firstName) {
         await ctx.db.patch(customer._id, {
           firstName,
@@ -3102,6 +3118,15 @@ export async function applyVoiceContactValues(
   for (const [rawKey, rawValue] of Object.entries(args.values)) {
     const key = rawKey.trim();
     if (!key) continue;
+    // A non-answer is "not collected", the same as a missing value
+    // (lib/nonAnswer): it never lands on a field and never blanks one. The
+    // entry points already drop it (coerceVoiceValues); this is the gate's
+    // own copy of the rule, so no caller can route around it. Empty stays on
+    // its old path below, where it may clear a custom property. A placeholder
+    // sent for a picklist field would otherwise come back "rejected", and the
+    // agent would be told to ask the caller again about something they never
+    // mentioned.
+    if (rawValue.trim() && isNonAnswer(rawValue)) continue;
 
     // The built-in columns, before the custom map is consulted: name and email
     // are reserved keys down there and would otherwise be ignored on the way
@@ -3114,18 +3139,22 @@ export async function applyVoiceContactValues(
       // returned "" is not.
       if (!value) continue;
       if (target.field === "email") {
-        if (args.fillOnlyMissing && customer.email) continue;
+        if (args.fillOnlyMissing && customer.email && !isNonAnswer(customer.email)) continue;
         if (!SPOKEN_EMAIL_RE.test(value)) {
           rejected.push(target.label);
           continue;
         }
         identityPatch.email = value.toLowerCase();
       } else {
+        // "Yok" or "Anonim" answers a question but is nobody's name.
+        if (isNonAnswer(value, "name")) continue;
         // Stored exactly as the agent gave it. It heard the whole sentence
         // and decided where the given name ended; this is not the place to
         // second-guess that with a rule about spaces.
         const current = target.field === "firstName" ? customer.firstName : customer.lastName;
-        if (args.fillOnlyMissing && current) continue;
+        // A placeholder stored before the filter existed counts as missing,
+        // so the first real answer replaces it (Nudge's mayOverwrite).
+        if (args.fillOnlyMissing && current && !isNonAnswer(current, "name")) continue;
         identityPatch[target.field] = value;
       }
       updated.push(key);
@@ -3149,8 +3178,9 @@ export async function applyVoiceContactValues(
     // Post-call analysis is an inference over a transcript, not a correction
     // from the caller. It may recover a value the live extraction missed, but
     // it never gets to replace something already confirmed during this or an
-    // earlier call.
-    if (args.fillOnlyMissing && custom[key]) continue;
+    // earlier call. A stored non-answer is not something confirmed: it reads
+    // as empty here, so a real answer finally replaces it.
+    if (args.fillOnlyMissing && custom[key] && !isNonAnswer(custom[key])) continue;
     const coerced = coerceContactValue(field, rawValue);
     if (!coerced.ok) {
       rejected.push(field.label);

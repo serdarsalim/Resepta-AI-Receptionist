@@ -225,6 +225,13 @@ the request. Processing retries with backoff, materializes or merges the
 `calls` row, and applies allowed customer updates. Event keys make provider
 retries idempotent.
 
+A value that says the call did not establish something ("Belirtilmedi", "Not
+specified", "Nicht angegeben", `lib/nonAnswer.ts`) is dropped everywhere a
+collected value is handled: the live save, the post-call inference, the
+call's own collected list and the booking name. One stored before
+2026-10-13 counts as an empty field: the next real answer replaces it, and it
+is never injected into a call.
+
 The provider sends `call_ended` before its analysis is ready. Resepta records
 the call immediately, then waits for `call_analyzed`. If that later event is
 missed, a bounded recovery fetches the provider's per-call analysis. Exhausted

@@ -612,6 +612,17 @@ through save_customer_details, and the template + booking tools force the
 asks. The registry exists ONLY to teach the post-call analysis about
 org-specific fields. An empty Sorar is the healthy default, not a gap.
 
+**A non-answer is not an answer** (2026-10-13). "Belirtilmedi", "Not
+specified", "Nicht angegeben" and their siblings (`lib/nonAnswer.ts`, Nudge's
+list in three languages) are what a model writes when told to leave a field
+empty. They are never stored: `coerceVoiceValues` drops them like empty
+strings, and `applyVoiceContactValues`, the gate both lanes share, skips them
+and lets a real answer replace one stored earlier. They are never read back:
+the ring-time injection and `builtinAgentVariables` treat a stored one as an
+empty field. "Yok", "None" and "Keine" count only where a name is expected;
+in a custom field, "no allergies" is the answer a clinic needs. Any new path
+that saves what an agent collected goes through those two functions.
+
 **Confirmations vs. late emails.** The agent asks for e-posta AFTER booking
 (a booking must not wait on spelling), so booking-time confirmations can
 race an empty email column and fail `no-email-address`.
