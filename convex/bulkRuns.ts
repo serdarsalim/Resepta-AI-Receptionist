@@ -42,6 +42,7 @@ import { noteMessageById } from "./lib/thread";
 import { isDeleting } from "./lib/customerDeletion";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { cleanError } from "./lib/mcpProtocol";
 import {
   action,
   internalAction,
@@ -970,7 +971,9 @@ export const dialNext = internalAction({
       // Deliberately no scheduling here. The item stays "dialing" and the
       // chain resumes from finishByCallId when the call_ended webhook lands.
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      // The reason, not the "Uncaught Error … at handler" frame placeCall's
+      // error arrives in across runAction.
+      const message = cleanError(error);
       await ctx.runMutation(internal.bulkRuns.failItem, {
         itemId: claim.itemId,
         reason: message.slice(0, 200),

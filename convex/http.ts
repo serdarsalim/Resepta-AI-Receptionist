@@ -33,6 +33,8 @@ import {
   todayInZone,
 } from "./lib/businessHours";
 import { voiceValuesFromToolArgs } from "./lib/voicePayload";
+import { cleanError } from "./lib/mcpProtocol";
+import type { AgentBooking } from "./retell";
 import { answerOrEmpty } from "./lib/nonAnswer";
 import { queueOrgAlert } from "./lib/alerts";
 import { formatAppointmentTime } from "./lib/format";
@@ -843,12 +845,12 @@ http.route({
           externalUid = booking.uid;
         }
       }
-      let booking: {
-        serviceName?: string;
-        serviceNames?: string[];
-        existing?: boolean;
-        notified?: boolean;
-      };
+      // A refusal comes back as DATA (retell.BookRefusal): a code to branch
+      // on and the sentence the agent reads. It used to be thrown, and a
+      // message crossing runMutation arrives as "Uncaught Error: …" with a
+      // stack, so the checks below never matched and the agent was handed
+      // the stack (review, 2026-10-13). Only a genuine failure throws now.
+      let booking: AgentBooking;
       try {
         booking = await ctx.runMutation(internal.retell.voiceBook, {
           orgId: org._id,
@@ -860,11 +862,18 @@ http.route({
           service: spokenService,
         });
       } catch (err) {
-        const message = err instanceof Error ? err.message : "book-failed";
-        // Past the day's change cap nothing more is booked here: the agent
-        // says a colleague will be in touch, and the team is emailed so that
-        // promise has an owner (bookingProblem, decided 2026-10-13).
-        if (message === "too-many-changes") {
+        console.error("voice booking failed", cleanError(err));
+        booking = {
+          ok: false,
+          code: "book-failed",
+          note: "The booking could not be saved just now.",
+        };
+      }
+      if (!booking.ok) {
+        // Past the day's change cap, or the booking failing outright: the
+        // agent says a colleague will be in touch, and the team is emailed
+        // so that promise has an owner.
+        if (booking.code === "too-many-changes" || booking.code === "book-failed") {
           await queueOrgAlert(ctx, {
             orgId: org._id,
             template: "bookNeedsPerson",
@@ -873,19 +882,24 @@ http.route({
           });
           return respond({
             booked: false,
-            error: message,
-            note: changeRefusalNote("too-many-changes", "booked", "voice"),
+            error: booking.code,
+            note:
+              booking.code === "too-many-changes"
+                ? changeRefusalNote("too-many-changes", "booked", "voice")
+                : `${booking.note} Tell the caller a colleague will be in touch about it, and carry on.`,
           });
         }
         // A taken time or the caller's own clash: the nearest free times
         // either side, so the agent counters instead of stalling.
-        const near = /^(slot-taken|customer-busy)/.test(message)
-          ? await nearestFree({ at: startAt, services: asked })
-          : {};
+        const near =
+          booking.code === "slot-taken" || booking.code === "customer-busy"
+            ? await nearestFree({ at: startAt, services: asked })
+            : {};
         return respond({
-          error: message,
+          booked: false,
+          error: booking.code,
           ...near,
-          ...(near.nearest_free ? { note: NEAREST_FREE_NOTE } : {}),
+          note: booking.note + (near.nearest_free ? ` ${NEAREST_FREE_NOTE}` : ""),
         });
       }
       return respond({

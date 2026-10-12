@@ -2252,6 +2252,18 @@ async function alreadyBooked(
   );
 }
 
+// A booking refused, as DATA: a code a caller branches on and the sentence the
+// agent reads back (2026-10-13). It used to be thrown as a message, and a
+// message crossing ctx.runMutation arrives as "Uncaught Error: <code>\n at …",
+// so the callers' `=== "too-many-changes"` and `/^slot-taken/` never matched
+// on a live booking: no handover email, no nearest free times, and the agent
+// was handed a stack trace. Never compare an error's text across a function
+// boundary; return the refusal.
+export type BookRefusal = { code: string; note: string };
+
+const SLOT_TAKEN_NOTE =
+  "That time is full: every person is busy then. Offer another time.";
+
 // Every guard a booking must clear before it is written, as the sentence the
 // agent reads back when it does not: lead time, the caller's own clash,
 // capacity, closures over the whole span, a handover the business offers.
@@ -2278,7 +2290,7 @@ async function bookingProblem(
       address?: string;
     };
   },
-): Promise<string | null> {
+): Promise<BookRefusal | null> {
   const lines = a.lines;
   const totalMinutes = a.totalMinutes;
   // The booking page's brake on how many open bookings one person may hold
@@ -2297,7 +2309,10 @@ async function bookingProblem(
         (row.status === "scheduled" || row.status === "confirmed"),
     ).length;
     if (upcoming >= MAX_UPCOMING_PER_PHONE) {
-      return `too-many-upcoming: this customer already has ${upcoming} upcoming appointments, the most one person can hold, so nothing new was booked. Say so; they can move or cancel one of the ones they have.`;
+      return {
+        code: "too-many-upcoming",
+        note: `This customer already has ${upcoming} upcoming appointments, the most one person can hold, so nothing new was booked. Say so; they can move or cancel one of the ones they have.`,
+      };
     }
     // Past the day's change cap the assistants refuse BOOKINGS too, and hand
     // over to a person (decided 2026-10-13): counted-but-never-refused let a
@@ -2305,7 +2320,7 @@ async function bookingProblem(
     // sentence: each lane words the handover its own way (changeRefusalNote).
     const holder = await ctx.db.get(a.customerId);
     if (holder && changesToday(holder.agentChangesAt, now) >= CHANGES_PER_DAY) {
-      return "too-many-changes";
+      return { code: "too-many-changes", note: "" };
     }
   }
   if (!a.providerHeld) {
@@ -2327,9 +2342,10 @@ async function bookingProblem(
         spokenLead(leadMs / 60_000, bookingOrg?.language) ?? `${leadMs / 60_000} minutes`;
       // A sentence, not a slug, for the same reason as customer-busy below:
       // the agent reads this back, and it must name the remedy.
-      return (
-        `lead-time: "${needed?.name ?? "this item"}" must be ordered ${notice} in advance. Apologise, say how much notice it needs, and offer the earliest day that satisfies it.`
-      );
+      return {
+        code: "lead-time",
+        note: `"${needed?.name ?? "This item"}" must be ordered ${notice} in advance. Apologise, say how much notice it needs, and offer the earliest day that satisfies it.`,
+      };
     }
     const duration = totalMinutes ?? a.durationMinutes ?? 30;
     const endAt = a.startAt + duration * 60_000;
@@ -2363,9 +2379,10 @@ async function bookingProblem(
       const when = bookingOrg
         ? spokenClock(freeAt, bookingOrg.timezone, bookingOrg.language)
         : new Date(freeAt).toISOString();
-      return (
-        `customer-busy: this caller already has an appointment overlapping that time. Theirs ends at ${when}. Offer that time or later, and never put two services at the same moment.`
-      );
+      return {
+        code: "customer-busy",
+        note: `This customer already has an appointment overlapping that time. Theirs ends at ${when}. Offer that time or later, and never put two services at the same moment.`,
+      };
     }
     // Goods rows (an explicit 0 — unset means a legacy row, assume 30)
     // hold no chair, so they never count toward a full shop.
@@ -2399,9 +2416,9 @@ async function bookingProblem(
       ).filter((row) => row.active).length,
     );
     if (duration > 0 && overlapping >= capacity) {
-      // The message is the tool result the agent reads back, so it names
-      // the conflict in a way the agent can act on: offer another time.
-      return "slot-taken";
+      // The note is what the agent reads back, so it names the conflict in a
+      // way the agent can act on: offer another time.
+      return { code: "slot-taken", note: SLOT_TAKEN_NOTE };
     }
   }
   // The closure test on the WHOLE SPAN, and here rather than in either
@@ -2433,7 +2450,7 @@ async function bookingProblem(
       // Same error the capacity guard throws: the agent's job either way is
       // to offer another time, and the facts it needs to pick one already
       // rode out with check_availability.
-      if (shut) return "slot-taken";
+      if (shut) return { code: "slot-taken", note: SLOT_TAKEN_NOTE };
     }
   }
   const fulfillment = a.fulfillment;
@@ -2448,9 +2465,10 @@ async function bookingProblem(
         ? (bookingOrg?.pickupEnabled ?? true)
         : (bookingOrg?.deliveryEnabled ?? true);
     if (!offered) {
-      return (
-        `not-offered: this business does not do ${fulfillment.kind} for products. Offer the other way, and never promise ${fulfillment.kind}.`
-      );
+      return {
+        code: "not-offered",
+        note: `This business does not do ${fulfillment.kind} for products. Offer the other way, and never promise ${fulfillment.kind}.`,
+      };
     }
   }
   return null;
@@ -2497,7 +2515,9 @@ const voiceBookArgs = {
 // The matched name goes back to the agent so it can read the booking back
 // to the caller in the salon's own vocabulary — and so a miss is visible to
 // whoever is reading the call rather than silent.
-const voiceBookReturns = v.object({
+const voiceBookReturns = v.union(
+  v.object({
+  ok: v.literal(true),
   appointmentId: v.id("appointments"),
   // The first match, kept for the singular caller. serviceNames carries the
   // whole visit.
@@ -2509,19 +2529,31 @@ const voiceBookReturns = v.object({
   // scheduled to the customer. The chat agent stands down on it, and only
   // on it: an existing booking schedules nothing, so the agent must answer.
   notified: v.optional(v.boolean()),
-});
+  }),
+  // Refused: see BookRefusal. Returned, never thrown.
+  v.object({ ok: v.literal(false), code: v.string(), note: v.string() }),
+);
 export type AgentBooking = Infer<typeof voiceBookReturns>;
 
 // The booking itself, as a plain function: voiceBook below is its mutation
 // for the live tools, and a drafted reply's changes run it inside ONE
 // transaction with the others (chatAgent.applyIntentsTx), so a draft's
-// changes land together or not at all (2026-10-13). Throws the sentence
-// the agent reads back when a guard refuses.
+// changes land together or not at all (2026-10-13). A guard's refusal is
+// RETURNED ({ ok: false, code, note }), never thrown: see BookRefusal.
 export async function agentBookTx(
   ctx: MutationCtx,
   args: ObjectType<typeof voiceBookArgs>,
 ): Promise<AgentBooking> {
-  const phone = assertE164(args.phone);
+  let phone: string;
+  try {
+    phone = assertE164(args.phone);
+  } catch {
+    return {
+      ok: false,
+      code: "bad-phone",
+      note: "This customer's number is not one a booking can be made under. Tell them a colleague will be in touch about it.",
+    };
+  }
   let customer = await ctx.db
     .query("customers")
     .withIndex("by_org_phone", (q) => q.eq("orgId", args.orgId).eq("phone", phone))
@@ -2560,6 +2592,7 @@ export async function agentBookTx(
     if (same) {
       const names = (same.items ?? []).map((item) => item.name);
       return {
+        ok: true,
         appointmentId: same._id,
         ...(names[0] ? { serviceName: names[0] } : {}),
         ...(names.length > 0 ? { serviceNames: names } : {}),
@@ -2640,7 +2673,7 @@ export async function agentBookTx(
     providerHeld: Boolean(args.externalUid),
     fulfillment,
   });
-  if (problem) throw new Error(problem);
+  if (problem) return { ok: false, ...problem };
   const appointmentId = await ctx.db.insert("appointments", {
     orgId: args.orgId,
     customerId: customer._id,
@@ -2688,6 +2721,7 @@ export async function agentBookTx(
     agentChangesAt: withChange(customer.agentChangesAt, Date.now()),
   });
   return {
+    ok: true,
     appointmentId,
     serviceName: line?.name,
     serviceNames: lines.length ? lines.map((item) => item.name) : undefined,

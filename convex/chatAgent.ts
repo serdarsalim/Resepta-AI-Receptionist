@@ -93,6 +93,7 @@ import {
   type ApprovalFailure,
 } from "./lib/agentChange";
 import { cancelOwnTx, moveOwnTx, writeOwnChange } from "./agentAppointments";
+import { cleanError } from "./lib/mcpProtocol";
 import { loadClosures } from "./lib/closureRows";
 
 // The WhatsApp chat agent's runtime (docs/chat-agent.md). One inbound
@@ -1860,7 +1861,7 @@ async function executeTool(
         outcome: IntentOutcome | null;
         keep: (adjust?: (intent: AgentIntent) => void) => void;
       }
-    | { ok: false; reason: string }
+    | { ok: false; reason: string; note?: string }
   > => {
     if (!draft) return { ok: false, reason: "calendar-error" };
     const merged = JSON.parse(JSON.stringify(draft.intents)) as AgentIntent[];
@@ -1872,7 +1873,7 @@ async function executeTool(
         intents: merged,
       }),
     ) as DraftOutcome;
-    if (!verdict.ok) return { ok: false, reason: verdict.reason };
+    if (!verdict.ok) return { ok: false, reason: verdict.reason, note: verdict.note };
     return {
       ok: true,
       outcome: position >= 0 ? (verdict.results[position] ?? null) : null,
@@ -2141,23 +2142,27 @@ async function executeTool(
       };
       // A taken time or the customer's own clash: the nearest free times
       // either side, so the assistant counters instead of stalling.
-      const bookingRefused = async (error: string) => {
+      // A refusal's CODE decides (retell.BookRefusal); its note is what the
+      // model reads.
+      const bookingRefused = async (code: string, note?: string) => {
         // Past the day's change cap: a person takes it from here, through
         // escalate_to_staff and the business's handover setting.
-        if (error === "too-many-changes") {
+        if (code === "too-many-changes") {
           return {
             booked: false,
-            error,
+            error: code,
             note: changeRefusalNote("too-many-changes", "booked", "chat"),
           };
         }
-        const near = /^(slot-taken|customer-busy)/.test(error)
-          ? await nearestFree({ at: startAt, services: spoken })
-          : {};
+        const near =
+          code === "slot-taken" || code === "customer-busy"
+            ? await nearestFree({ at: startAt, services: spoken })
+            : {};
         return {
-          error,
+          booked: false,
+          error: code,
           ...near,
-          ...(near.nearest_free ? { note: NEAREST_FREE_NOTE } : {}),
+          note: [note, near.nearest_free ? NEAREST_FREE_NOTE : ""].filter(Boolean).join(" "),
         };
       };
       if (dry) {
@@ -2173,7 +2178,7 @@ async function executeTool(
           serviceNames: [],
           ...(plan.fulfillment ? { fulfillment: plan.fulfillment } : {}),
         });
-        if (!sim.ok) return await bookingRefused(sim.reason);
+        if (!sim.ok) return await bookingRefused(sim.reason, sim.note);
         const made: Extract<IntentOutcome, { kind: "book" }> =
           sim.outcome?.kind === "book" ? sim.outcome : { kind: "book" };
         // Already held: sending would make nothing, so nothing is kept.
@@ -2190,7 +2195,9 @@ async function executeTool(
         };
       }
       const made = await commitBooking(ctx, context, plan);
-      return typeof made.error === "string" ? await bookingRefused(made.error) : made;
+      return typeof made.error === "string"
+        ? await bookingRefused(made.error, typeof made.note === "string" ? made.note : undefined)
+        : made;
     }
 
     // Existing appointments, through the module the phone agent uses too
@@ -2475,7 +2482,9 @@ async function executeTool(
   } catch (err) {
     // A tool that throws is a result the model can read, not a dead turn: it
     // apologises and escalates instead of leaving the customer on silence.
-    return { error: err instanceof Error ? err.message : "tool-failed" };
+    // The sentence, never the "Uncaught Error … at handler" frame Convex
+    // wraps a thrown error in when it crosses a function boundary.
+    return { error: cleanError(err) };
   }
 }
 
@@ -2654,9 +2663,19 @@ async function commitBooking(
           }
         : {}),
     });
+    // A refusal is returned as data (retell.BookRefusal): its code is what
+    // the caller branches on, its note what the model reads.
+    if (!booking.ok) return { booked: false, error: booking.code, note: booking.note };
     return bookedAnswer(context, plan, booking);
   } catch (err) {
-    return { error: err instanceof Error ? err.message : "book-failed" };
+    // Not a refusal: the booking itself failed. The model gets the sentence,
+    // never the stack Convex wraps it in.
+    console.warn("chat booking failed", cleanError(err));
+    return {
+      booked: false,
+      error: "book-failed",
+      note: "The booking could not be saved just now. Tell the customer a person from the team will take care of it, then call escalate_to_staff.",
+    };
   }
 }
 
@@ -2762,12 +2781,15 @@ type IntentOutcome =
 
 type DraftOutcome =
   | { ok: true; results: IntentOutcome[] }
-  | { ok: false; index: number; reason: string };
+  // `note`: the sentence the model reads, when the refusal came with one.
+  | { ok: false; index: number; reason: string; note?: string };
 
 // A refusal, as the error that rolls the transaction back. JSON in a
 // ConvexError so it survives the trip out of a nested mutation intact.
-function draftRefusal(index: number, reason: string): ConvexError<string> {
-  return new ConvexError(JSON.stringify({ ok: false, index, reason }));
+function draftRefusal(index: number, reason: string, note?: string): ConvexError<string> {
+  return new ConvexError(
+    JSON.stringify({ ok: false, index, reason, ...(note ? { note } : {}) }),
+  );
 }
 
 // What a thrown error says about a draft, when it is one of ours.
@@ -2837,30 +2859,26 @@ async function applyIntentsTx(
       ) {
         throw draftRefusal(index, "calendar-error");
       }
-      let made;
-      try {
-        made = await agentBookTx(ctx, {
-          orgId: a.orgId,
-          name: intent.name,
-          phone: customer.phone,
-          startAt,
-          services: intent.services,
-          source: "chat",
-          ...(intent.fulfillment
-            ? {
-                fulfillment: {
-                  kind: intent.fulfillment.kind,
-                  ...(intent.asap ? { asap: true } : {}),
-                  ...(intent.fulfillment.address
-                    ? { address: intent.fulfillment.address }
-                    : {}),
-                },
-              }
-            : {}),
-        });
-      } catch (err) {
-        throw draftRefusal(index, err instanceof Error ? err.message : "book-failed");
-      }
+      const made = await agentBookTx(ctx, {
+        orgId: a.orgId,
+        name: intent.name,
+        phone: customer.phone,
+        startAt,
+        services: intent.services,
+        source: "chat",
+        ...(intent.fulfillment
+          ? {
+              fulfillment: {
+                kind: intent.fulfillment.kind,
+                ...(intent.asap ? { asap: true } : {}),
+                ...(intent.fulfillment.address
+                  ? { address: intent.fulfillment.address }
+                  : {}),
+              },
+            }
+          : {}),
+      });
+      if (!made.ok) throw draftRefusal(index, made.code, made.note);
       results.push({
         kind: "book",
         ...(made.existing ? { existing: true } : {}),

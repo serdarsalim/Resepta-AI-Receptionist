@@ -12,6 +12,7 @@
 
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { cleanError } from "./lib/mcpProtocol";
 import { action, internalAction, type ActionCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { voiceVariableInput, normaliseVoiceVariableKey, type VoiceVariableInput } from "./lib/voiceVariables";
@@ -1524,7 +1525,8 @@ async function provisionAgent(
     });
     return { status: "complete", agentId };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "phone-agent-setup-failed";
+    // The code, not the frame a nested call's error arrives in.
+    const message = cleanError(error) || "phone-agent-setup-failed";
     await ctx.runMutation(internal.voiceProvisioning.fail, {
       jobId,
       leaseToken,

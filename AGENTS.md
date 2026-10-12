@@ -681,7 +681,7 @@ when an email lands — voice or staff edit — guarded on ALL confirmation
 attempts having failed, so a channel that already carried the message never
 double-sends. Any new email-writing path must call it.
 
-**Two Convex/React traps that each cost hours here.** (1) Convex validates
+**Three Convex/React traps that each cost hours here.** (1) Convex validates
 RETURNS as strictly as arguments: extending a handler's result without
 extending its `returns` validator makes every call throw at runtime, and
 TypeScript cannot catch it — extra properties pass structural assignment.
@@ -689,7 +689,15 @@ When a result type changes, change the validator in the same edit. (2) A
 context value's setters must be referentially stable (useCallback): a setter
 minted inside the value memo re-triggers every effect that lists it in deps
 — the header search's claiming effect ran per keystroke and its cleanup
-wiped the query.
+wiped the query. (3) An error's TEXT does not survive a function boundary: a
+message thrown in a mutation arrives in the calling action as "Uncaught
+Error: <msg>\n at handler …", so `err.message === "code"` or an anchored
+regex silently never matches (the assistants' booking refusals did exactly
+this until 2026-10-13). A refusal a caller branches on is RETURNED as data
+(`{ ok: false, code }`) or thrown as a `ConvexError` and read from `.data`.
+The frontend's `raw.includes("code")` checks survive the framing and stay;
+anything handing an error to a model or a stored reason goes through
+`cleanError` (lib/mcpProtocol).
 
 ## The assistants touch only the customer's own appointments (2026-10-13)
 
