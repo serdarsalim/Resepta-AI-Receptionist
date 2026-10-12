@@ -81,7 +81,31 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 // the honest kind of bump: Update genuinely reaches existing agents. The
 // stale "if the calendar is not connected" clause went with it: Resepta is
 // always the calendar.
+//
+// Folded into the same v14 before it shipped (P1c of the Nudge port, so an
+// owner clicks Update once for all of it), every piece sync-deliverable:
+//   - a hard call-length cap, max_call_duration_ms on the agent doc, Nudge's
+//     ten minutes (MAX_CALL_DURATION_MS below);
+//   - a holding line on all five calendar tools: a few words in the agent's
+//     own language while the tool runs, never naming a day or a time, which
+//     Nudge learned when "booking it for Monday at 3 PM" was followed by the
+//     confirmation saying it again (Nudge f2a44605, HOLDING_LINES below);
+//   - `start` described as the business's local wall time, YYYY-MM-DDTHH:MM,
+//     the way the chat tools and Nudge's tools already ask for it, instead of
+//     "an ISO 8601 timestamp", which invites a model to write UTC with a Z.
+// None of the new wording names a tool. Tool answers are served live to every
+// template version, and descriptions arrive with the tools they describe, so
+// neither can promise a tool an older agent lacks (Nudge ba2d956a).
 export const VOICE_AGENT_TEMPLATE_VERSION = 14;
+
+// The longest one call may run before the provider ends it. Ten minutes,
+// Nudge's number on the same field (7bf2c681): its median answered call ran
+// 108 seconds and the one that reached the cap had looped on one question. A
+// salon booking takes two or three minutes, so the cap only ever meets a call
+// that has gone wrong, and it bounds what that call can cost. The call record
+// shows such an ending as "Hit the maximum call length"
+// (calls.end.max_duration_reached).
+export const MAX_CALL_DURATION_MS = 600_000;
 
 // Voicemail handling, learned from Nudge's implementation rather than from the
 // provider's docs (its docs/journal/2026-08.md → 2026-08-25 session 2, where every claim
@@ -398,18 +422,60 @@ type JsonSchema = {
   required?: string[];
 };
 
+// What the agent says WHILE a calendar tool runs. Without it the caller hears
+// nothing from the moment they finish asking until the answer is spoken: the
+// model writing the call, the round trip to us (and to the calendar provider
+// on the parked lane), then the model writing the answer. That is the pause a
+// caller fills with "alo?", and it reads as the agent being slow even when
+// every hop is quick.
+//
+// An instruction to the model (execution_message_type "prompt"), not a fixed
+// sentence, so the words vary from one check to the next and stay in the
+// conversation's register. Written in the agent's language for the reason the
+// prompts are: the model leans toward the language it is instructed in.
+//
+// A few words, and NEVER a day or a time. Nudge's first real booking said
+// "Booking the meeting for Monday at 3 PM now" and then the confirmation said
+// Monday at 3 PM again (f2a44605); the prompt's own rule is to say a detail
+// once, and the confirmation after the tool is where it belongs. Before v14
+// check_availability and book_appointment spoke during execution with the
+// provider's default instruction, which has no such limit, and the other
+// three stayed silent.
+type HoldingKind = "check" | "book" | "find" | "move" | "cancel";
+
+const HOLDING_LINES: Record<VoiceAgentLanguage, Record<HoldingKind, string>> = {
+  "tr-TR": {
+    check: 'Sadece birkaç kelime söyle, örneğin "Bir saniye, bakıyorum." Gün ya da saat söyleme.',
+    book: 'Sadece birkaç kelime söyle, örneğin "Bir saniye." Gün, saat ya da hizmet söyleme; randevuyu kaydettikten sonra bir kez onaylayacaksın.',
+    find: 'Sadece birkaç kelime söyle, örneğin "Hemen bakıyorum." Gün ya da saat söyleme.',
+    move: 'Sadece birkaç kelime söyle, örneğin "Bir saniye." Gün ya da saat söyleme; yeni saati değiştirdikten sonra bir kez onaylayacaksın.',
+    cancel: 'Sadece birkaç kelime söyle, örneğin "Bir saniye." Gün ya da saat söyleme.',
+  },
+  "en-US": {
+    check: 'Say only a few words, like "One moment, let me check." Name no day or time.',
+    book: 'Say only a few words, like "One moment." Name no day, time or service; you confirm the booking once, after.',
+    find: 'Say only a few words, like "Let me look that up." Name no day or time.',
+    move: 'Say only a few words, like "One moment." Name no day or time; you confirm the new time once, after.',
+    cancel: 'Say only a few words, like "One moment." Name no day or time.',
+  },
+  "de-DE": {
+    check: "Sag nur ein paar Worte, etwa „Einen Moment, ich schaue nach.“ Nenne keinen Tag und keine Uhrzeit.",
+    book: "Sag nur ein paar Worte, etwa „Einen Moment.“ Nenne keinen Tag, keine Uhrzeit und keine Leistung; den Termin bestätigst du danach einmal.",
+    find: "Sag nur ein paar Worte, etwa „Ich sehe kurz nach.“ Nenne keinen Tag und keine Uhrzeit.",
+    move: "Sag nur ein paar Worte, etwa „Einen Moment.“ Nenne keinen Tag und keine Uhrzeit; die neue Zeit bestätigst du danach einmal.",
+    cancel: "Sag nur ein paar Worte, etwa „Einen Moment.“ Nenne keinen Tag und keine Uhrzeit.",
+  },
+};
+
 function customTool(
   site: string,
   name: string,
   description: string,
   parameters: JsonSchema,
-  // Whether the agent talks WHILE the tool runs. Off, the caller hears nothing
-  // from the moment they finish asking until the round trip comes back — us,
-  // then possibly the calendar provider — and silence on a phone reads as the
-  // agent being slow even when the answer is quick. On only for the two tools
-  // that can leave the deployment; the pure reads return fast enough that
-  // filler would just make the agent chattier.
-  speakDuringExecution = false,
+  // The holding line (HOLDING_LINES above). Absent, the tool runs in silence,
+  // which only save_customer_details still does: it answers in about a second
+  // while the caller is mid-flow, and v10 measured a filler there as chatter.
+  holdingLine?: string,
 ) {
   return {
     type: "custom",
@@ -419,7 +485,13 @@ function customTool(
     method: "POST",
     parameter_type: "json",
     parameters,
-    speak_during_execution: speakDuringExecution,
+    speak_during_execution: holdingLine !== undefined,
+    ...(holdingLine !== undefined
+      ? {
+          execution_message_type: "prompt",
+          execution_message_description: holdingLine,
+        }
+      : {}),
     speak_after_execution: true,
     timeout_ms: 15000,
   };
@@ -491,6 +563,7 @@ export function appointmentReceptionistTemplate(args: {
 }) {
   const prompt = args.prompt ?? codePrompt(args.language);
   const empty = { type: "object" as const, properties: {} };
+  const holding = HOLDING_LINES[args.language];
   const tools = [
     customTool(
       args.site,
@@ -511,7 +584,7 @@ export function appointmentReceptionistTemplate(args: {
         },
         required: ["date"],
       },
-      true,
+      holding.check,
     ),
     customTool(
       args.site,
@@ -532,27 +605,35 @@ export function appointmentReceptionistTemplate(args: {
             description:
               "Every service the caller asked for, in their own words, in the order they said them. One entry for a single service.",
           },
+          // The business's wall time, never UTC (v14). "An ISO 8601
+          // timestamp" invites a model to write UTC, or to put a Z on the
+          // local time it holds, and a Z is read as the instant it names:
+          // three hours late in Istanbul. The server reads a zone-less stamp
+          // at the business (lib/businessHours parseLocalStart), and chat's
+          // tools have always asked for this shape.
           start: {
             type: "string",
             description:
-              "Confirmed start of the WHOLE visit as an ISO 8601 timestamp. Do not add up the services yourself; the booking is one block and its length is worked out here.",
+              "Confirmed start of the WHOLE visit as the local time at the business: YYYY-MM-DDTHH:MM, 24-hour, no time zone and no Z, like 2026-10-14T15:00. It is the date you checked and the time the caller agreed, never converted to UTC. Do not add up the services yourself; the booking is one block and its length is worked out here.",
           },
         },
         required: ["name", "start"],
       },
-      true,
+      holding.book,
     ),
     customTool(
       args.site,
       "find_appointment",
       "Find the caller's next appointment before discussing, cancelling or moving it.",
       empty,
+      holding.find,
     ),
     customTool(
       args.site,
       "cancel_appointment",
       "Cancel the next appointment only after naming it and receiving explicit confirmation.",
       empty,
+      holding.cancel,
     ),
     customTool(
       args.site,
@@ -563,11 +644,13 @@ export function appointmentReceptionistTemplate(args: {
         properties: {
           start: {
             type: "string",
-            description: "Confirmed new start as an ISO 8601 timestamp.",
+            description:
+              "Confirmed new start as the local time at the business: YYYY-MM-DDTHH:MM, 24-hour, no time zone and no Z, like 2026-10-14T15:00. Never converted to UTC.",
           },
         },
         required: ["start"],
       },
+      holding.move,
     ),
   ];
 
@@ -627,6 +710,10 @@ export function appointmentReceptionistTemplate(args: {
       // detection_prompt the live agent carries — a PATCH that omits that key
       // DROPS it, which is Nudge's scar and not a thing to rediscover.
       voicemail_option: { action: { type: VOICEMAIL_ACTION } },
+      // See MAX_CALL_DURATION_MS. An agent-doc field like voicemail_option,
+      // so new agents are born with it and syncTemplate's PATCH carries it to
+      // existing ones.
+      max_call_duration_ms: MAX_CALL_DURATION_MS,
       post_call_analysis_data: [summaryAnalysisField(args.language)],
     },
   };

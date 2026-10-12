@@ -22,6 +22,8 @@ detail that appears only in backend code and the platform-admin console.
 - An agent detects an answering machine on an outbound call and hangs up
   (template v13). It leaves no message: message wording is a per-business
   decision, and a control for it on the agent page is open work.
+- No call runs past ten minutes (template v14): the provider ends it, and the
+  call record says "Hit the maximum call length".
 - A business requests its phone number by uploading a company registration
   document. The tenant sees three states — received, approved, live — and is
   never told which parts of the pipeline are people. Operator reality: the
@@ -435,6 +437,33 @@ The template hangs up rather than leaving a message, deliberately: a message
 guessed in shared code would be worse than the silence it replaced, and an
 empty one records a beep the salon paid for. A per-business message wants a
 control on the agent page (Nudge's `setVoicemail` is the shape to copy).
+
+## Template v14 (2026-10-13)
+
+P1 opened v14 with the asked time and the nearest free times (Scheduling
+dependency above); P1c folded in the rest of Nudge's voice work before it
+shipped, so an owner clicks Update once. Every piece is a tool or agent-doc
+field, so `syncTemplate` delivers all of it to existing agents.
+
+- **A ten-minute ceiling.** `max_call_duration_ms` on the agent doc
+  (`MAX_CALL_DURATION_MS`, Nudge's number), riding the same PATCH as the
+  voicemail field. A booking takes two or three minutes; the cap meets only a
+  call that has gone wrong and bounds what it costs.
+- **A holding line on the five calendar tools.** Each one speaks during
+  execution with a prompt-type message in the agent's language
+  (`HOLDING_LINES`): a few words, never a day or a time, because the
+  confirmation after the tool says those once (Nudge f2a44605).
+  `save_customer_details` keeps its v10 silence.
+- **`start` is the business's wall time.** `book_appointment` and
+  `reschedule_appointment` ask for `YYYY-MM-DDTHH:MM`, no zone and no Z, the
+  shape chat's tools already ask for; the server reads a zone-less stamp at
+  the business (`parseLocalStart`) and still takes a stamp with an explicit
+  offset as the instant it names.
+- **Wording never names another tool.** Tool answers from `/retell/functions`
+  reach every template version at once, while descriptions and holding lines
+  arrive with their own tools, so only the five calendar tools (present since
+  v1) may be named in a live answer, and `end_call` never, since a business
+  can switch it off (Nudge ba2d956a).
 
 ## Current limits
 

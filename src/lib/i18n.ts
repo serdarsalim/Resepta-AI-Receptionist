@@ -3058,9 +3058,9 @@ const dictionary = {
   // being offered. Its last sentence is the load-bearing one: the sync
   // replaces tools and knobs and never the owner's prompt.
   "voiceDetail.templateBehindHint": {
-    tr: "Güncelleme, asistanın yanıt hızını iyileştirir, takvime bakarken konuşmasını sağlar, arama özetlerini kendi dilinizde yazdırır ve görüşmeyi erken kapatmasını önler. Talimat metnine dokunmaz.",
-    en: "Updating makes the agent answer faster, talk while it checks the calendar, write call summaries in your language, and stop it hanging up too early. Your instructions are not touched.",
-    de: "Die Aktualisierung lässt den Agenten schneller antworten, beim Kalenderblick weitersprechen, Anrufzusammenfassungen in Ihrer Sprache schreiben und verhindert, dass er zu früh auflegt. Ihre Anweisung bleibt unverändert.",
+    tr: "Güncellemeden sonra asistan arayana hangi saatin uygun olduğunu sorar, o saat doluysa en yakın boş saatleri önerir, takvime bakarken sessiz kalmak yerine kısa bir söz söyler ve on dakikayı geçen aramayı sonlandırır. Talimat metnine dokunmaz.",
+    en: "After the update the agent asks which time suits the caller, offers the nearest free times when that one is taken, says a few words instead of going quiet while it checks the calendar, and ends any call that runs past ten minutes. Your instructions are not touched.",
+    de: "Nach dem Update fragt der Agent, welche Uhrzeit passt, bietet bei einer belegten Zeit die nächsten freien an, sagt beim Blick in den Kalender kurz etwas, statt zu schweigen, und beendet Anrufe nach zehn Minuten. Ihre Anweisung bleibt unverändert.",
   },
   "voiceDetail.templateUpdate": {
     tr: "Güncelle",

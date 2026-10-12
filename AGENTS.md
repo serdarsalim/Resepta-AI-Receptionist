@@ -581,6 +581,15 @@ The legacy `/retell/mcp` carries no call at all, so it identifies nobody:
 refuses. Never add a tool argument that names a customer, a phone or an
 appointment.
 
+**Tool answers are live; tool definitions are versioned** (2026-10-13).
+Whatever `/retell/functions` says reaches every agent at once, whatever
+template it runs, while a tool's schema, description and holding line reach an
+agent only when its owner clicks Update. So a sentence in a tool answer may
+name only the five calendar tools every version has carried since v1, never
+`end_call` (a business can switch it off), and new tool wording names no other
+tool at all (Nudge ba2d956a). A time a tool takes is the business's wall time,
+`YYYY-MM-DDTHH:MM`, never UTC.
+
 **Numbers.** `agentLines` is the per-number, per-direction binding table
 (inbound and outbound may be different agents), reconciled from every clean
 roster read and written directly by `attachLine`/`detachLine`. Provisioning
