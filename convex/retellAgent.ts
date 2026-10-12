@@ -1292,12 +1292,15 @@ async function wireAgent(
   return { ok: true, url, version: draft.version };
 }
 
+// A refusal (the line is not on this provider account, or another agent
+// answers it) is RETURNED: provisioning lets the line go and finishes the
+// agent without one. Anything else (the provider failing) still throws.
 async function bindInboundNumber(
   key: string,
   site: string,
   number: string,
   agentId: string,
-) {
+): Promise<{ ok: true } | { ok: false; reason: string }> {
   const numberData: unknown = await (
     await call(key, "GET", "v2/list-phone-numbers")
   ).json();
@@ -1311,13 +1314,13 @@ async function bindInboundNumber(
     inbound_agents?: Array<{ agent_id?: string }>;
   }>;
   const target = numbers.find((candidate) => candidate.phone_number === number);
-  if (!target) throw new Error("phone-line-not-found");
+  if (!target) return { ok: false, reason: "phone-line-not-found" };
   const assigned = [
     target.inbound_agent_id,
     ...(target.inbound_agents ?? []).map((candidate) => candidate.agent_id),
   ].filter(Boolean);
   if (assigned.some((assignedId) => assignedId !== agentId)) {
-    throw new Error("phone-line-already-assigned");
+    return { ok: false, reason: "phone-line-already-assigned" };
   }
   await call(key, "PATCH", `update-phone-number/${encodeURIComponent(number)}`, {
     inbound_agents: [
@@ -1325,6 +1328,7 @@ async function bindInboundNumber(
     ],
     inbound_webhook_url: `${site}/retell/inbound`,
   });
+  return { ok: true };
 }
 
 // Native creation is a durable orchestration, not a browser sequence. The
@@ -1341,7 +1345,16 @@ const createAgentArgs = {
 const createAgentResult = v.object({
   status: v.union(v.literal("working"), v.literal("complete")),
   agentId: v.union(v.string(), v.null()),
+  // The line asked for was let go of, and why: the agent was made without it
+  // (lineUsable or the provider refused it). Absent when no line was asked
+  // for or it was attached.
+  lineRefused: v.optional(v.string()),
 });
+type CreateAgentResult = {
+  status: "working" | "complete";
+  agentId: string | null;
+  lineRefused?: string;
+};
 
 // All of provisioning except who is asking. Everything past the lease — engine,
 // agent, publish, connect, line, runtime wiring — reads the job row and never
@@ -1358,7 +1371,7 @@ async function provisionAgent(
     // Absent on the signed-in path, where `begin` resolves it from the session.
     orgId?: Id<"orgs">;
   },
-): Promise<{ status: "working" | "complete"; agentId: string | null }> {
+): Promise<CreateAgentResult> {
   const leaseToken = crypto.randomUUID();
   const started = (await ctx.runMutation(internal.voiceProvisioning.begin, {
     ...args,
@@ -1493,28 +1506,44 @@ async function provisionAgent(
       status: "connecting",
       retellVersion: initialVersion,
     });
+    // The line, judged BEFORE anything records it, for the number actually
+    // being bound: begin resumes the newest unfinished job, keeps that job's
+    // number once its agent exists, and a line can be given to another
+    // business while a job sits waiting. Recorded first (connect), a refused
+    // line sat on the agent's row claiming it, and the job failed with the
+    // number frozen on it, so every retry was refused again (2026-10-13).
+    // A refusal now lets the line go and the agent finishes without one.
+    const asked = started.row.inboundNumber;
+    let lineRefused: string | undefined;
+    if (asked) {
+      const usable = await ctx.runQuery(internal.retell.lineUsable, {
+        orgId: started.row.orgId,
+        number: asked,
+      });
+      if (!usable.ok) lineRefused = usable.reason ?? "number-not-assigned-to-this-workspace";
+    }
     await ctx.runMutation(internal.voiceProvisioning.connect, {
       jobId,
       leaseToken,
       retellAgentId: agentId,
-      inboundNumber: started.row.inboundNumber,
+      inboundNumber: lineRefused ? undefined : asked,
       generalPrompt: String(template.llm.general_prompt ?? ""),
       promptVersion: initialVersion,
     });
-    if (started.row.inboundNumber) {
-      // Judged HERE, for the number actually being bound, not only when the
-      // request arrived: begin resumes the newest unfinished job, keeps that
-      // job's number once its agent exists, and a line can be given to
-      // another business while a job sits waiting. The provider-side check in
-      // bindInboundNumber sees only whether an agent answers it right now.
-      const usable = await ctx.runQuery(internal.retell.lineUsable, {
-        orgId: started.row.orgId,
-        number: started.row.inboundNumber,
+    if (asked && !lineRefused) {
+      // The provider's own answer: whether another agent answers the line
+      // right now, or the account has no such line.
+      const bound = await bindInboundNumber(key, site, asked, agentId);
+      if (!bound.ok) lineRefused = bound.reason;
+    }
+    if (asked && lineRefused) {
+      console.warn("provisioning let a line go", asked, lineRefused);
+      await ctx.runMutation(internal.voiceProvisioning.dropNumber, {
+        jobId,
+        leaseToken,
+        retellAgentId: agentId,
+        number: asked,
       });
-      if (!usable.ok) {
-        throw new Error(usable.reason ?? "number-not-assigned-to-this-workspace");
-      }
-      await bindInboundNumber(key, site, started.row.inboundNumber, agentId);
     }
     const context = await editorContext(ctx, agentId, args.orgId);
     const wired = await wireAgent(ctx, agentId, context);
@@ -1523,7 +1552,7 @@ async function provisionAgent(
       leaseToken,
       retellVersion: wired.version ?? undefined,
     });
-    return { status: "complete", agentId };
+    return { status: "complete", agentId, ...(lineRefused ? { lineRefused } : {}) };
   } catch (error) {
     // The code, not the frame a nested call's error arrives in.
     const message = cleanError(error) || "phone-agent-setup-failed";
@@ -1678,10 +1707,8 @@ export const teardownForOrg = internalAction({
 export const createAgent = action({
   args: createAgentArgs,
   returns: createAgentResult,
-  handler: async (ctx, args): Promise<{
-    status: "working" | "complete";
-    agentId: string | null;
-  }> => await provisionAgent(ctx, args),
+  handler: async (ctx, args): Promise<CreateAgentResult> =>
+    await provisionAgent(ctx, args),
 });
 
 // The same provisioning for a caller that established the org without a
@@ -1691,10 +1718,8 @@ export const createAgent = action({
 export const createAgentForOrg = internalAction({
   args: { orgId: v.id("orgs"), ...createAgentArgs },
   returns: createAgentResult,
-  handler: async (ctx, args): Promise<{
-    status: "working" | "complete";
-    agentId: string | null;
-  }> => await provisionAgent(ctx, args),
+  handler: async (ctx, args): Promise<CreateAgentResult> =>
+    await provisionAgent(ctx, args),
 });
 
 // Onboarding's auto-provision (docs/chat-agent.md §7): every org that

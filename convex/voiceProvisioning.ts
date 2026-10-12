@@ -98,25 +98,6 @@ export const begin = internalMutation({
     const inboundNumber = args.inboundNumber?.trim() || undefined;
     if (!name) throw new Error("agent-name-required");
     if (!voiceId) throw new Error("agent-voice-required");
-    // The line a new agent answers must be one THIS workspace may use: on its
-    // allowlist, and not held by another workspace inbound or outbound
-    // (retell.lineUsable, the check every later reassignment already runs).
-    // The provisioning action's bindInboundNumber only refuses a line that
-    // has an inbound agent at the provider right now, so a line provisioned
-    // to another salon, or one it dials out from, could be taken by naming it
-    // here, from the app or from the MCP's create_phone_agent (2026-10-13).
-    // This is the early answer for the number asked for; the action checks
-    // again, at bind time, for the number the job actually binds (a resumed
-    // job keeps its own).
-    if (inboundNumber) {
-      const usable = await ctx.runQuery(internal.retell.lineUsable, {
-        orgId,
-        number: inboundNumber,
-      });
-      if (!usable.ok) {
-        throw new Error(usable.reason ?? "number-not-assigned-to-this-workspace");
-      }
-    }
 
     // The fleet default a NEW agent is born with — resolved here because the
     // provisioning action has no ctx.db. Null (unset or stale row) means the
@@ -146,6 +127,31 @@ export const begin = internalMutation({
     }
     if (row && (row.leaseUntil ?? 0) > Date.now()) {
       return { claimed: false, complete: false, apiKey, orgName: org.name, platformVoiceModel, platformHighPriority, row };
+    }
+
+    // The line a new agent answers must be one THIS workspace may use: on its
+    // allowlist, and not held by another workspace inbound or outbound
+    // (retell.lineUsable, the check every later reassignment already runs).
+    // The provisioning action's bindInboundNumber only refuses a line that
+    // has an inbound agent at the provider right now, so a line provisioned
+    // to another salon, or one it dials out from, could be taken by naming it
+    // here, from the app or from the MCP's create_phone_agent (2026-10-13).
+    //
+    // Only when the number asked for becomes the job's number: a new job, or
+    // one whose agent does not exist yet. A job resuming after its agent was
+    // made keeps its own number, and the action judges THAT one before it
+    // records or binds it, dropping it rather than failing (2026-10-13).
+    // Refusing here as well wedged such a job: the form resends the job's
+    // own number, so a line that became unusable while the job waited
+    // refused every retry, and the agent never finished.
+    if (inboundNumber && !row?.retellAgentId) {
+      const usable = await ctx.runQuery(internal.retell.lineUsable, {
+        orgId,
+        number: inboundNumber,
+      });
+      if (!usable.ok) {
+        throw new Error(usable.reason ?? "number-not-assigned-to-this-workspace");
+      }
     }
 
     const now = Date.now();
@@ -274,6 +280,39 @@ export const connect = internalMutation({
       templateVersion: job.templateVersion,
       ...mirror,
     });
+  },
+});
+
+// A line the job asked for that this workspace may not have after all, or
+// that the provider would not give the new agent: let go of, rather than
+// failing the job over it (2026-10-13). Failing kept the number on the job,
+// and a job whose agent exists never edits its number, so every retry hit
+// the same refusal and the agent never finished. Cleared from the job and
+// from the agent's own row (an earlier attempt may have recorded it there),
+// so nothing goes on claiming the line. The owner attaches a line afterwards
+// through the usual picker, which runs its own checks.
+export const dropNumber = internalMutation({
+  args: {
+    jobId: v.id("voiceAgentProvisioning"),
+    leaseToken: v.string(),
+    retellAgentId: v.string(),
+    number: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job || job.leaseToken !== args.leaseToken) throw new Error("setup-lease-lost");
+    if (job.inboundNumber === args.number) {
+      await ctx.db.patch(job._id, { inboundNumber: undefined, updatedAt: Date.now() });
+    }
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", args.retellAgentId))
+      .unique();
+    if (agent && agent.orgId === job.orgId && agent.inboundNumber === args.number) {
+      await ctx.db.patch(agent._id, { inboundNumber: undefined });
+    }
+    return null;
   },
 });
 

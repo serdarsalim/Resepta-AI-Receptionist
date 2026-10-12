@@ -85,7 +85,11 @@ then:
 2. creates the response engine and agent;
 3. publishes the initial agent version;
 4. connects the new agent to the org;
-5. assigns the selected line, if any; and
+5. assigns the selected line, if any, once `retell.lineUsable` and the
+   provider both accept it. A refused line is let go of rather than failing
+   the job (`voiceProvisioning.dropNumber`): the agent finishes without one,
+   the result names why (`lineRefused`), and the owner attaches a line
+   afterwards through the usual picker; and
 6. publishes the private Resepta runtime connection and call-result route.
 
 `voiceAgentProvisioning` checkpoints every external resource ID and protects

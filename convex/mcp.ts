@@ -1359,7 +1359,7 @@ const TOOLS: ToolDef[] = [
         language: language as "tr-TR" | "en-US" | "de-DE",
         voiceId,
         inboundNumber: str(args, "inboundNumber"),
-      })) as { status: "working" | "complete"; agentId: string | null };
+      })) as { status: "working" | "complete"; agentId: string | null; lineRefused?: string };
 
       if (result.status !== "complete" || !result.agentId) {
         // Another attempt holds the lease. Handing back the SAME requestId is
@@ -1379,14 +1379,22 @@ const TOOLS: ToolDef[] = [
         retellAgentId: result.agentId,
         name,
       });
+      const asked = str(args, "inboundNumber");
       return {
         ok: true,
         agentId: result.agentId,
         voiceId,
         language,
         actionId: recorded.actionId,
+        // A line provisioning let go of (lineUsable or the provider refused
+        // it) is said, not implied: the agent exists without it.
+        ...(result.lineRefused ? { lineRefused: result.lineRefused } : {}),
         note: `Created "${name}". It is connected and enabled${
-          str(args, "inboundNumber") ? ` on ${str(args, "inboundNumber")}` : ", with no inbound line yet"
+          result.lineRefused
+            ? `, but ${asked || "the line asked for"} could not be attached (${result.lineRefused}), so it has no inbound line yet`
+            : asked
+              ? ` on ${asked}`
+              : ", with no inbound line yet"
         }. This cannot be undone.`,
       };
     },
