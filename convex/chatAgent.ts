@@ -66,7 +66,7 @@ import {
   todayInZone,
 } from "./lib/businessHours";
 import { formatAppointmentTime } from "./lib/format";
-import { createBooking, getAvailableSlots } from "./lib/calcomApi";
+import { createBooking, getAvailableSlots, releaseHeldBooking } from "./lib/calcomApi";
 import { laneAvailability, laneForReply, loadEvolutionCreds } from "./lib/waLane";
 import { sendWaCloudText } from "./lib/waCloud";
 import { sendEvolutionText } from "./lib/evolution";
@@ -2614,22 +2614,55 @@ function bookedAnswer(
   };
 }
 
-// The booking itself: cal.com first when it holds the inventory, then
-// voiceBook, which runs every guard again (bookingProblem) inside its own
-// transaction. Shared by the live tool and the approval of a drafted booking.
+// The booking itself, for the live tool (a drafted booking is applied by
+// applyIntentsTx and refuses a cal.com one): voiceBook runs every guard
+// (bookingProblem) inside its own transaction. When cal.com holds the
+// inventory it is asked to hold the slot only after the same guards pass
+// (retell.checkBook), and handed it back if the write refuses after all.
 async function commitBooking(
   ctx: Pick<ActionCtx, "runQuery" | "runMutation">,
   context: TurnContext,
   plan: BookingPlan,
 ): Promise<Record<string, unknown>> {
   const { org, customer } = context;
-  let externalUid: string | undefined;
+  const bookArgs = {
+    orgId: context.orgId,
+    name: plan.name,
+    phone: customer.phone,
+    startAt: plan.startAt,
+    services: plan.spokenServices,
+    service: plan.spokenService,
+    source: "chat" as const,
+    ...(plan.fulfillment
+      ? {
+          fulfillment: {
+            kind: plan.fulfillment.kind,
+            ...(plan.asap ? { asap: true } : {}),
+            ...(plan.fulfillment.address
+              ? { address: plan.fulfillment.address }
+              : {}),
+          },
+        }
+      : {}),
+  };
+  // The slot cal.com is holding for this booking, released again if the
+  // write refuses after all.
+  let held: { apiKey: string; uid: string } | undefined;
   // The pair rather than a flag: this branch passes both to createBooking,
   // and only the direct test narrows them off null. A goods-only order stays
   // local, the voice webhook's rule: cal.com has nothing zero-length, and an
   // externalUid would skip voiceBook's guards, lead time included.
   if (org.calcomApiKey && org.calcomEventTypeId && !plan.goodsOnly) {
-    const booking = await createBooking({
+    // Every guard first (2026-10-13). Asked after cal.com, a refusal at the
+    // write (the day's change cap) or a repeated yes left a booking there
+    // that nothing would ever cancel.
+    const checked = await ctx.runQuery(internal.retell.checkBook, bookArgs);
+    if (!("clear" in checked)) {
+      return checked.ok
+        ? bookedAnswer(context, plan, checked)
+        : { booked: false, error: checked.code, note: checked.note };
+    }
+    const made = await createBooking({
       apiKey: org.calcomApiKey,
       eventTypeId: org.calcomEventTypeId,
       startIso: new Date(plan.startAt).toISOString(),
@@ -2638,39 +2671,26 @@ async function commitBooking(
       timeZone: org.timezone,
       language: org.language,
     });
-    if (!booking.ok) return { error: booking.reason };
-    externalUid = booking.uid;
+    if (!made.ok) return { error: made.reason };
+    if (made.uid) held = { apiKey: org.calcomApiKey, uid: made.uid };
   }
   try {
     const booking = await ctx.runMutation(internal.retell.voiceBook, {
-      orgId: context.orgId,
-      name: plan.name,
-      phone: customer.phone,
-      startAt: plan.startAt,
-      externalUid,
-      services: plan.spokenServices,
-      service: plan.spokenService,
-      source: "chat",
-      ...(plan.fulfillment
-        ? {
-            fulfillment: {
-              kind: plan.fulfillment.kind,
-              ...(plan.asap ? { asap: true } : {}),
-              ...(plan.fulfillment.address
-                ? { address: plan.fulfillment.address }
-                : {}),
-            },
-          }
-        : {}),
+      ...bookArgs,
+      externalUid: held?.uid,
     });
     // A refusal is returned as data (retell.BookRefusal): its code is what
     // the caller branches on, its note what the model reads.
-    if (!booking.ok) return { booked: false, error: booking.code, note: booking.note };
+    if (!booking.ok) {
+      if (held) await releaseHeldBooking(held);
+      return { booked: false, error: booking.code, note: booking.note };
+    }
     return bookedAnswer(context, plan, booking);
   } catch (err) {
     // Not a refusal: the booking itself failed. The model gets the sentence,
     // never the stack Convex wraps it in.
     console.warn("chat booking failed", cleanError(err));
+    if (held) await releaseHeldBooking(held);
     return {
       booked: false,
       error: "book-failed",

@@ -10,7 +10,7 @@ import {
 } from "./lib/metaSig";
 import { handler as mcpHandler } from "./mcp";
 import { handler as voiceMcpHandler } from "./voiceMcp";
-import { createBooking, getAvailableSlots } from "./lib/calcomApi";
+import { createBooking, getAvailableSlots, releaseHeldBooking } from "./lib/calcomApi";
 import { writeOwnChange } from "./agentAppointments";
 import {
   fetchReceivedEmail,
@@ -822,7 +822,23 @@ http.route({
             : {}),
         });
       }
-      let externalUid: string | undefined;
+      const bookArgs = {
+        orgId: org._id,
+        name: customerName,
+        phone: callerPhone,
+        startAt,
+        services: spokenServices,
+        service: spokenService,
+      };
+      // A refusal comes back as DATA (retell.BookRefusal): a code to branch
+      // on and the sentence the agent reads. It used to be thrown, and a
+      // message crossing runMutation arrives as "Uncaught Error: …" with a
+      // stack, so the checks below never matched and the agent was handed
+      // the stack (review, 2026-10-13). Only a genuine failure throws now.
+      let booking: AgentBooking | undefined;
+      // The slot cal.com is holding for this booking, released again if the
+      // write refuses after all.
+      let held: { apiKey: string; uid: string } | undefined;
       if (org.calcomApiKey && org.calcomEventTypeId) {
         // Goods-only orders never touch cal.com: nothing zero-length exists
         // there, and an externalUid would make voiceBook skip its own guards
@@ -832,42 +848,45 @@ http.route({
           spoken: spokenServices ?? (spokenService ? [spokenService] : []),
         })) as { goodsOnly: boolean };
         if (!goodsOnly) {
-          const booking = await createBooking({
-            apiKey: org.calcomApiKey,
-            eventTypeId: org.calcomEventTypeId,
-            startIso: new Date(startAt).toISOString(),
-            name: customerName,
-            phone: callerPhone,
-            timeZone: org.timezone,
-            language: org.language,
-          });
-          if (!booking.ok) return respond({ error: booking.reason });
-          externalUid = booking.uid;
+          // Every guard the write will run, judged BEFORE cal.com is asked to
+          // hold the slot (retell.checkBook, 2026-10-13). Asked after, a
+          // refusal at the write (the day's change cap) or a repeated yes
+          // left a booking at cal.com that nothing would ever cancel.
+          const checked = await ctx.runQuery(internal.retell.checkBook, bookArgs);
+          if ("clear" in checked) {
+            const made = await createBooking({
+              apiKey: org.calcomApiKey,
+              eventTypeId: org.calcomEventTypeId,
+              startIso: new Date(startAt).toISOString(),
+              name: customerName,
+              phone: callerPhone,
+              timeZone: org.timezone,
+              language: org.language,
+            });
+            if (!made.ok) return respond({ error: made.reason });
+            if (made.uid) held = { apiKey: org.calcomApiKey, uid: made.uid };
+          } else {
+            booking = checked;
+          }
         }
       }
-      // A refusal comes back as DATA (retell.BookRefusal): a code to branch
-      // on and the sentence the agent reads. It used to be thrown, and a
-      // message crossing runMutation arrives as "Uncaught Error: …" with a
-      // stack, so the checks below never matched and the agent was handed
-      // the stack (review, 2026-10-13). Only a genuine failure throws now.
-      let booking: AgentBooking;
-      try {
-        booking = await ctx.runMutation(internal.retell.voiceBook, {
-          orgId: org._id,
-          name: customerName,
-          phone: callerPhone,
-          startAt,
-          externalUid,
-          services: spokenServices,
-          service: spokenService,
-        });
-      } catch (err) {
-        console.error("voice booking failed", cleanError(err));
-        booking = {
-          ok: false,
-          code: "book-failed",
-          note: "The booking could not be saved just now.",
-        };
+      if (!booking) {
+        try {
+          booking = await ctx.runMutation(internal.retell.voiceBook, {
+            ...bookArgs,
+            externalUid: held?.uid,
+          });
+        } catch (err) {
+          console.error("voice booking failed", cleanError(err));
+          booking = {
+            ok: false,
+            code: "book-failed",
+            note: "The booking could not be saved just now.",
+          };
+        }
+        // Refused after all (a change racing this one): cal.com lets the
+        // slot go rather than hold it for a booking that does not exist.
+        if (!booking.ok && held) await releaseHeldBooking(held);
       }
       if (!booking.ok) {
         // Past the day's change cap, or the booking failing outright: the

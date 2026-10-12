@@ -2535,26 +2535,44 @@ const voiceBookReturns = v.union(
 );
 export type AgentBooking = Infer<typeof voiceBookReturns>;
 
-// The booking itself, as a plain function: voiceBook below is its mutation
-// for the live tools, and a drafted reply's changes run it inside ONE
-// transaction with the others (chatAgent.applyIntentsTx), so a draft's
-// changes land together or not at all (2026-10-13). A guard's refusal is
-// RETURNED ({ ok: false, code, note }), never thrown: see BookRefusal.
-export async function agentBookTx(
-  ctx: MutationCtx,
+// Everything a booking is judged on, reading only: the number, the customer
+// on it (null for a first-time caller), the services matched, whether they
+// already hold exactly this booking, and every guard (bookingProblem). The
+// write (agentBookTx) and the pre-check before cal.com is told (checkBook)
+// both start here, so neither can judge a booking differently. A refusal is
+// data (BookRefusal), returned whole.
+type BookingPlan =
+  | { kind: "decided"; result: AgentBooking }
+  | {
+      kind: "clear";
+      phone: string;
+      customer: Doc<"customers"> | null;
+      lines: MatchedLine[];
+      line: MatchedLine | undefined;
+      totalMinutes: number | undefined;
+      fulfillment: ObjectType<typeof voiceBookArgs>["fulfillment"];
+    };
+
+async function planBooking(
+  ctx: QueryCtx,
   args: ObjectType<typeof voiceBookArgs>,
-): Promise<AgentBooking> {
+  // cal.com holds (or is about to hold) the slot: capacity is its question.
+  providerHeld: boolean,
+): Promise<BookingPlan> {
   let phone: string;
   try {
     phone = assertE164(args.phone);
   } catch {
     return {
-      ok: false,
-      code: "bad-phone",
-      note: "This customer's number is not one a booking can be made under. Tell them a colleague will be in touch about it.",
+      kind: "decided",
+      result: {
+        ok: false,
+        code: "bad-phone",
+        note: "This customer's number is not one a booking can be made under. Tell them a colleague will be in touch about it.",
+      },
     };
   }
-  let customer = await ctx.db
+  const customer = await ctx.db
     .query("customers")
     .withIndex("by_org_phone", (q) => q.eq("orgId", args.orgId).eq("phone", phone))
     .unique();
@@ -2565,11 +2583,6 @@ export async function agentBookTx(
         ? [args.service]
         : [];
   const lines = await matchServices(ctx, args.orgId, spokenServices);
-  const line = lines[0];
-  // Double-booking guard, but only when Resepta's own book is the truth. An
-  // externalUid means cal.com already accepted this slot — it owns the
-  // inventory, and refusing here after it said yes would leave the two
-  // calendars telling different stories.
   // The whole visit, not the first service. A haircut then a beard trim is
   // one 45-minute block, and guarding only the first 30 would leave the
   // second half of it bookable by somebody else.
@@ -2592,14 +2605,72 @@ export async function agentBookTx(
     if (same) {
       const names = (same.items ?? []).map((item) => item.name);
       return {
-        ok: true,
-        appointmentId: same._id,
-        ...(names[0] ? { serviceName: names[0] } : {}),
-        ...(names.length > 0 ? { serviceNames: names } : {}),
-        existing: true,
+        kind: "decided",
+        result: {
+          ok: true,
+          appointmentId: same._id,
+          ...(names[0] ? { serviceName: names[0] } : {}),
+          ...(names.length > 0 ? { serviceNames: names } : {}),
+          existing: true,
+        },
       };
     }
   }
+  // Every guard, in the one place every booking path shares. A first-time
+  // caller has no record yet, and so nothing of theirs to clash with.
+  const problem = await bookingProblem(ctx, {
+    orgId: args.orgId,
+    customerId: customer?._id ?? null,
+    startAt: args.startAt,
+    lines,
+    totalMinutes,
+    durationMinutes: args.durationMinutes,
+    providerHeld,
+    fulfillment,
+  });
+  if (problem) return { kind: "decided", result: { ok: false, ...problem } };
+  return {
+    kind: "clear",
+    phone,
+    customer,
+    lines,
+    line: lines[0],
+    totalMinutes,
+    fulfillment,
+  };
+}
+
+// The cal.com lane's pre-check (parked, 2026-10-13): every refusal the
+// booking itself would make, and whether the customer already holds it,
+// judged BEFORE cal.com is asked to hold the slot. The booking used to be
+// created at cal.com first, so a refusal from voiceBook (the daily cap, the
+// customer's own clash) left an orphan booking there. Capacity is cal.com's
+// question, as it is in the write.
+export const checkBook = internalQuery({
+  args: voiceBookArgs,
+  returns: v.union(
+    voiceBookReturns,
+    v.object({ ok: v.literal(true), clear: v.literal(true) }),
+  ),
+  handler: async (ctx, args) => {
+    const plan = await planBooking(ctx, args, true);
+    return plan.kind === "decided" ? plan.result : { ok: true as const, clear: true as const };
+  },
+});
+
+// The booking itself, as a plain function: voiceBook below is its mutation
+// for the live tools, and a drafted reply's changes run it inside ONE
+// transaction with the others (chatAgent.applyIntentsTx), so a draft's
+// changes land together or not at all (2026-10-13). A guard's refusal is
+// RETURNED ({ ok: false, code, note }), never thrown: see BookRefusal.
+export async function agentBookTx(
+  ctx: MutationCtx,
+  args: ObjectType<typeof voiceBookArgs>,
+): Promise<AgentBooking> {
+  const plan = await planBooking(ctx, args, Boolean(args.externalUid));
+  if (plan.kind !== "clear") return plan.result;
+  const { phone, lines, line, totalMinutes, fulfillment } = plan;
+  let customer = plan.customer;
   // A placeholder handed over as the caller's name ("Bilinmiyor", "Yok") is
   // no name at all (lib/nonAnswer), so it never becomes one: the record
   // keeps its number as the name, as for a caller who gave none.
@@ -2661,19 +2732,6 @@ export async function agentBookTx(
   if (customer.consentAt === undefined) {
     await ctx.db.patch(customer._id, { consentAt: Date.now() });
   }
-  // Every guard, in the one place the dry run shares (bookingProblem),
-  // thrown as the sentence the agent reads back.
-  const problem = await bookingProblem(ctx, {
-    orgId: args.orgId,
-    customerId: customer._id,
-    startAt: args.startAt,
-    lines,
-    totalMinutes,
-    durationMinutes: args.durationMinutes,
-    providerHeld: Boolean(args.externalUid),
-    fulfillment,
-  });
-  if (problem) return { ok: false, ...problem };
   const appointmentId = await ctx.db.insert("appointments", {
     orgId: args.orgId,
     customerId: customer._id,

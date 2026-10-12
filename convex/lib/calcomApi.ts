@@ -162,6 +162,23 @@ export async function cancelBooking(args: {
   }
 }
 
+// A booking an assistant had cal.com hold for a write that then refused,
+// handed back (2026-10-13). Best effort: a failure is logged for the
+// operator and never put to the customer, who was already told no.
+export async function releaseHeldBooking(held: {
+  apiKey: string;
+  uid: string;
+}): Promise<void> {
+  const released = await cancelBooking({
+    apiKey: held.apiKey,
+    uid: held.uid,
+    reason: "The booking could not be completed.",
+  });
+  if (!released.ok) {
+    console.error("cal.com release failed", held.uid, released.reason);
+  }
+}
+
 // Rescheduling MINTS A NEW BOOKING. The response carries a new uid and cal.com
 // retires the old one, so the caller must write `uid` back onto the appointment
 // or the next cancel will address a booking that no longer exists. The
