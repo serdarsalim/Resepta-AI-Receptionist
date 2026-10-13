@@ -61,6 +61,8 @@ import { InfoTip } from "./InfoTip";
 import { Card } from "./Card";
 import { CheckSwitch } from "./CheckSwitch";
 import { SegmentedControl } from "./SegmentedControl";
+import { buttonClass } from "./Control";
+import { EditorSaveBar } from "./EditorSaveBar";
 import { Sheet } from "./Sheet";
 
 // Nudge settings conventions: label-left/input-right on the shared RowLabel
@@ -1877,16 +1879,20 @@ function RulesCard({
             hiding it in a tooltip: a bare glyph is only obvious to someone who
             already knows the way out, and this page is reached by drilling in
             from a list you need to get back to. */}
-        {/* Three columns with equal outer tracks, so the title is centred on
-            the ROW rather than on whatever is left over beside the button —
-            which matters now that the button's width follows a translated
-            word ("Back" / "Geri" / "Zurück"). */}
-        <div className="mb-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        {/* From sm, three columns with equal outer tracks, so the title is
+            centred on the ROW rather than on whatever is left over beside the
+            button — which matters now that the button's width follows a
+            translated word ("Back" / "Geri" / "Zurück"). Below sm the title
+            takes what Back and the save bar leave (auto | 1fr | auto),
+            centred in that: equal outer tracks holding Discard and Save in
+            Turkish or German pushed the row past a phone's width. */}
+        <div className="mb-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[1fr_auto_1fr]">
           <button
             type="button"
             onClick={() => openRule(null)}
             title={t("settings.rulesBack")}
-            className="flex h-9 w-fit shrink-0 items-center gap-1 rounded-lg px-2 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]"
+            // The scale's sm, the height of the save bar across the row.
+            className={`${buttonClass("ghost", "sm")} w-fit`}
           >
             {/* A chevron, not "←". The long-shafted arrow read as a stray
                 line of punctuation at the size the row needs, and it was
@@ -1914,57 +1920,45 @@ function RulesCard({
               on a long message the foot of the page is below the fold, and a
               Save button people have to hunt for is a Save button that does
               not get pressed. They appear only when there is something to
-              save — a permanently lit Save teaches you to ignore it. */}
-          <span className="flex items-center justify-end gap-2">
+              save — a permanently lit Save teaches you to ignore it. The
+              shared save bar; its state sentence waits for sm, where the row
+              has the width. */}
+          <span className="flex items-center justify-end">
             {ownTemplate?.hasUnsavedChanges && (
-              <>
-                <span
-                  className="hidden shrink-0 items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 sm:inline-flex dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-400"
-                  title={t("settings.templateUnsavedHint")}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                  {t("settings.templateUnsaved")}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void (async () => {
-                      const ok = await confirm({
-                        title: t("settings.templateDiscard"),
-                        body: t("settings.templateDiscardConfirm"),
-                        confirmLabel: t("settings.templateDiscard"),
-                      });
-                      if (!ok) return;
-                      await discardTemplateDraft({
+              <EditorSaveBar
+                status={t("settings.templateUnsaved")}
+                statusTitle={t("settings.templateUnsavedHint")}
+                statusFromSm
+                onDiscard={() => {
+                  void (async () => {
+                    const ok = await confirm({
+                      title: t("settings.templateDiscard"),
+                      body: t("settings.templateDiscardConfirm"),
+                      confirmLabel: t("settings.templateDiscard"),
+                    });
+                    if (!ok) return;
+                    await discardTemplateDraft({
+                      templateId: ownTemplate._id,
+                    });
+                    setResetToken((n) => n + 1);
+                  })();
+                }}
+                discardLabel={t("settings.templateDiscard")}
+                onSave={() => {
+                  void (async () => {
+                    setSaving(true);
+                    try {
+                      await commitTemplateDraft({
                         templateId: ownTemplate._id,
                       });
-                      setResetToken((n) => n + 1);
-                    })();
-                  }}
-                  className="shrink-0 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--muted)] transition-colors hover:border-red-300 hover:text-red-600 dark:hover:text-red-400"
-                >
-                  {t("settings.templateDiscard")}
-                </button>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => {
-                    void (async () => {
-                      setSaving(true);
-                      try {
-                        await commitTemplateDraft({
-                          templateId: ownTemplate._id,
-                        });
-                      } finally {
-                        setSaving(false);
-                      }
-                    })();
-                  }}
-                  className="shrink-0 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)] disabled:opacity-60"
-                >
-                  {saving ? t("common.saving") : t("common.save")}
-                </button>
-              </>
+                    } finally {
+                      setSaving(false);
+                    }
+                  })();
+                }}
+                saveLabel={saving ? t("common.saving") : t("common.save")}
+                busy={saving}
+              />
             )}
           </span>
         </div>
@@ -2058,38 +2052,37 @@ function RulesCard({
             and a button that is missing until you have earned it is a button
             you have to learn about first. */}
         <div className="flex items-center justify-between gap-2 pt-2">
+          {/* Borderless and muted until hovered, like the agent page's
+              Delete at the foot of its editor; it was the one bordered red
+              button in the app, and 30px against a 36px Save. Both are the
+              scale's sm now. */}
           <button
             type="button"
             onClick={() => void deleteRule(opened)}
-            className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600 transition-colors hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+            className={buttonClass("danger", "sm")}
           >
             {t("settings.deleteRule")}
           </button>
-          <span className="flex items-center gap-2">
-            <span className="text-xs text-[var(--muted)]">
-              {ownTemplate?.hasUnsavedChanges
-                ? t("settings.templateNotLive")
-                : ""}
-            </span>
-            <button
-              type="button"
-              disabled={!ownTemplate?.hasUnsavedChanges || saving}
-              onClick={() => {
-                if (!ownTemplate) return;
-                void (async () => {
-                  setSaving(true);
-                  try {
-                    await commitTemplateDraft({ templateId: ownTemplate._id });
-                  } finally {
-                    setSaving(false);
-                  }
-                })();
-              }}
-              className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-50"
-            >
-              {saving ? t("common.saving") : t("common.save")}
-            </button>
-          </span>
+          <EditorSaveBar
+            status={
+              ownTemplate?.hasUnsavedChanges ? t("settings.templateNotLive") : null
+            }
+            statusTitle={t("settings.templateUnsavedHint")}
+            onSave={() => {
+              if (!ownTemplate) return;
+              void (async () => {
+                setSaving(true);
+                try {
+                  await commitTemplateDraft({ templateId: ownTemplate._id });
+                } finally {
+                  setSaving(false);
+                }
+              })();
+            }}
+            saveLabel={saving ? t("common.saving") : t("common.save")}
+            saveDisabled={!ownTemplate?.hasUnsavedChanges}
+            busy={saving}
+          />
         </div>
         {/* The confirm has to be mounted in THIS branch too. useConfirm's
             promise only resolves when its dialog is on screen, so without

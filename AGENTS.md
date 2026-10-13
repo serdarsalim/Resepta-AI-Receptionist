@@ -480,7 +480,15 @@ what does a booking of a timeless service mean in each reader — not a
 - Phone numbers are E.164 with dial code or they don't exist (`+905...`);
   backend rejects anything else.
 - No Save buttons — autosave on blur/change. Explanatory copy behind tooltips,
-  not inline paragraphs.
+  not inline paragraphs. Deliberate exceptions, each because one press puts
+  words live: the voice agent's Publish (a new version at the provider, which
+  every next call speaks) and the automation editor's Save (customers keep
+  getting the last saved message until it is pressed); plus the knowledge
+  editor's Cancel/Save, for the portal reason given under "Knowledge reads as
+  prose". Where an exception applies the controls are `EditorSaveBar`, and
+  ONE thing in that row is boxed: the action that ends the state. The state
+  is an amber dot and a sentence, unboxed; Discard is `quiet`, never red
+  (Nudge, 2026-09-21; here 2026-10-13).
 - Small commits per logical unit.
 
 ## Editing, adding, density (recurring, stop it)

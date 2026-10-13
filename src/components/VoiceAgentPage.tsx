@@ -8,6 +8,8 @@ import type { TranslationKey } from "@/lib/i18n";
 import { VoicePicker } from "./VoicePicker";
 import { InfoTip } from "./InfoTip";
 import { useConfirm } from "./ConfirmDialog";
+import { buttonClass, fieldClass } from "./Control";
+import { EditorSaveBar } from "./EditorSaveBar";
 import { PromptEditor } from "./PromptEditor";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
@@ -49,8 +51,8 @@ import {
 // Unsaved work SURVIVES leaving. There was a leave-guard dialog here that
 // threw the draft away on confirm, which is the wrong trade: a half-written
 // prompt is real work, and losing it to a mis-click is worse than the thing
-// the guard protected against. The amber pill was already doing that job —
-// nothing on this page can be mistaken for live while it is showing.
+// the guard protected against. The amber Unsaved mark was already doing that
+// job — nothing on this page can be mistaken for live while it is showing.
 
 type Detail = {
   agentId: string;
@@ -230,8 +232,8 @@ export function VoiceAgentPage({
         setVoice(detail.voiceId ?? "");
         setPersona(detail.personaName ?? "");
         // A draft left behind on this browser wins over what the server says,
-        // because it is the newer intent. The amber pill keeps it honest about
-        // not being live.
+        // because it is the newer intent. The amber Unsaved mark keeps it honest
+        // about not being live.
         const stored = readDraft(agentId);
         if (stored) {
           if (stored.prompt !== undefined) setDraft(stored.prompt);
@@ -274,7 +276,7 @@ export function VoiceAgentPage({
   // The draft follows the edits. Leaving the page, closing the tab or coming
   // back tomorrow all find the work where it was left — losing typed work to a
   // mis-click is worse than the thing a leave-guard was protecting against,
-  // and the amber pill already stops a draft being mistaken for live.
+  // and the amber Unsaved mark already stops a draft being mistaken for live.
   useEffect(() => {
     if (!restored) return;
     if (dirty) {
@@ -488,35 +490,20 @@ export function VoiceAgentPage({
               />
             )}
           </h2>
+          {/* The shared save bar. The state is said out loud rather than
+              implied by an enabled button: an edited prompt looks live, and
+              the agent is still answering the phone with the version Retell
+              has. */}
           {dirty && (
-            <>
-              {/* Said out loud rather than implied by an enabled button: an
-                  edited prompt looks live, and the agent is still answering
-                  the phone with the version Retell has. */}
-              <span
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-400"
-                title={t("voiceDetail.unsavedHint")}
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                {t("voiceDetail.unsaved")}
-              </span>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={discardAll}
-                className="shrink-0 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] hover:border-red-300 hover:text-red-600 disabled:opacity-50"
-              >
-                {t("voiceDetail.discard")}
-              </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={saveAll}
-                className="shrink-0 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)] disabled:opacity-50"
-              >
-                {saving ? t("voiceDetail.publishing") : t("voiceDetail.publish")}
-              </button>
-            </>
+            <EditorSaveBar
+              status={t("voiceDetail.unsaved")}
+              statusTitle={t("voiceDetail.unsavedHint")}
+              onDiscard={discardAll}
+              discardLabel={t("voiceDetail.discard")}
+              onSave={saveAll}
+              saveLabel={saving ? t("voiceDetail.publishing") : t("voiceDetail.publish")}
+              busy={saving}
+            />
           )}
           {status && !dirty && (
             <span className="shrink-0 text-xs text-[var(--muted)]">{status}</span>
@@ -544,8 +531,9 @@ export function VoiceAgentPage({
               }}
               // w-auto is load-bearing: globals.css gives every select
               // width:100% in the base layer, so a select without it eats its
-              // whole flex line and drops Test call to the next row.
-              className="w-auto shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs text-[var(--muted)] disabled:opacity-50"
+              // whole flex line and drops Test call to the next row. The
+              // scale's sm field, the height of the save bar beside it.
+              className={`${fieldClass("sm")} w-auto shrink-0 text-[var(--muted)]`}
             >
               {/* No "None": with attach semantics an empty pick means
                   nothing, and detaching lives in the agents table where it
@@ -571,10 +559,9 @@ export function VoiceAgentPage({
               setTestOpen(true);
             }}
             // Ghost, so no border: AGENTS.md, "Borders belong to CONTAINERS
-            // (cards, inputs, dropdown panels) — never to buttons." This already
-            // carried the ghost recipe verbatim (text-muted + hover wash) and a
-            // container border on top of it.
-            className="shrink-0 rounded-lg px-3 py-1.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] disabled:opacity-50"
+            // (cards, inputs, dropdown panels) — never to buttons." The
+            // scale's quiet sm, one height with the save bar on its row.
+            className={buttonClass("quiet", "sm")}
           >
             {t("voiceDetail.test")}
           </button>
@@ -827,30 +814,26 @@ export function VoiceAgentPage({
                       onBack();
                     })();
                   }}
-                  className="rounded-lg px-3 py-1.5 text-xs text-[var(--muted)] hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-950/30"
+                  className={buttonClass("danger", "sm")}
                 >
                   {t("settings.voiceDisconnect")}
                 </button>
               )}
-              <div className="ml-auto flex items-center gap-2">
-                {dirty && (
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={discardAll}
-                    className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--muted)] hover:border-red-300 hover:text-red-600 disabled:opacity-50"
-                  >
-                    {t("voiceDetail.discard")}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  disabled={saving || !dirty}
-                  onClick={saveAll}
-                  className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)] disabled:opacity-50"
-                >
-                  {saving ? t("voiceDetail.publishing") : t("voiceDetail.publish")}
-                </button>
+              {/* The same bar as the header's, at the foot a long scroll ends
+                  on. Publish stays here when there is nothing to publish,
+                  disabled: the foot of the form is where people look for
+                  it. */}
+              <div className="ml-auto">
+                <EditorSaveBar
+                  status={dirty ? t("voiceDetail.unsaved") : null}
+                  statusTitle={t("voiceDetail.unsavedHint")}
+                  onDiscard={dirty ? discardAll : undefined}
+                  discardLabel={t("voiceDetail.discard")}
+                  onSave={saveAll}
+                  saveLabel={saving ? t("voiceDetail.publishing") : t("voiceDetail.publish")}
+                  saveDisabled={!dirty}
+                  busy={saving}
+                />
               </div>
             </div>
           </div>
