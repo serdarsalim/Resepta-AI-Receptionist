@@ -18,12 +18,20 @@ export function Sheet({
   title,
   hint,
   wide = false,
+  dirty = false,
   onClose,
   children,
 }: {
   title: string;
   hint?: string;
   wide?: boolean;
+  // The sheet holds words somebody typed: a bulk message, a campaign. Escape
+  // and a click on the backdrop then leave it open, and only Cancel (or
+  // sending) closes it. Both gestures are reflexes, Escape most of all: it is
+  // also how the variable and emoji menus inside the sheet are dismissed, and
+  // the sheet hears that same keypress on window. Nudge's composers never
+  // close on either, for the same reason.
+  dirty?: boolean;
   onClose: () => void;
   children: React.ReactNode;
 }) {
@@ -32,15 +40,18 @@ export function Sheet({
   // Callers pass inline closures, so onClose has a new identity every parent
   // render. The mount effect below must NOT depend on it: re-running it
   // re-fires the autofocus, which steals focus from whatever field the user
-  // is typing in. The ref always holds the latest closure instead.
+  // is typing in. The ref always holds the latest closure instead. `dirty`
+  // rides a ref for the same reason.
   const onCloseRef = useRef(onClose);
+  const dirtyRef = useRef(dirty);
   useEffect(() => {
     onCloseRef.current = onClose;
-  }, [onClose]);
+    dirtyRef.current = dirty;
+  }, [onClose, dirty]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || dirtyRef.current) return;
       // Sheets can open another sheet (for example an agent detail opening a
       // variable editor). Only the topmost dialog owns Escape; otherwise one
       // keypress closes both layers because both listeners live on window.
@@ -68,7 +79,7 @@ export function Sheet({
       // mousedown, not click: a drag that starts inside the panel and ends on
       // the backdrop must not close it.
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget && !dirty) onClose();
       }}
       role="presentation"
     >

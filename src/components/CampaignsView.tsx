@@ -238,7 +238,13 @@ function ComposeSheet({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Sheet title={t("campaign.new")} onClose={onClose}>
+    // The subject saves on blur to the template row, so only the name and the
+    // line are a draft that Escape could lose (see Sheet's `dirty`).
+    <Sheet
+      title={t("campaign.new")}
+      dirty={Boolean(name.trim() || body.trim())}
+      onClose={onClose}
+    >
       {confirmDialog}
       <div className="space-y-3">
         <div>

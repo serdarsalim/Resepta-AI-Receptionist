@@ -211,7 +211,13 @@ export function BulkComposer({
   };
 
   return (
-    <Sheet title={t(`bulk.compose.${channel}`)} onClose={onClose}>
+    // dirty once anything is typed: Escape and the backdrop then leave the
+    // draft alone (see Sheet). A call run holds nothing typed, only a pick.
+    <Sheet
+      title={t(`bulk.compose.${channel}`)}
+      dirty={Boolean(subject.trim() || body.trim())}
+      onClose={onClose}
+    >
       {confirmDialog}
       <div className="space-y-3">
         {/* The count, before anything else on the sheet. "How many people is

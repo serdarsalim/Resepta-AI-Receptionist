@@ -502,7 +502,10 @@ list.** Use `Sheet` (Sheet.tsx). An always-visible "name + Add" row is a
 question the page asks nobody, and it charges vertical rent on every visit to
 pay for a task done twice a year. The entry point is a button; the fields
 appear when you mean them. If one gesture could create two DIFFERENT kinds of
-thing, the sheet asks which — do not stack both forms and hope.
+thing, the sheet asks which — do not stack both forms and hope. A sheet that
+holds typed words passes `dirty` (the bulk and campaign composers do): Escape
+and a backdrop click then leave it open and only Cancel closes it, because
+Escape is also how the variable and emoji menus inside it close (2026-10-13).
 
 **3. Vertical space is the scarce resource.** A row carrying a name and an
 email is ONE line, not three: identity reads across, controls sit in columns
