@@ -276,7 +276,7 @@ export const PRIVACY: Record<Language, LegalDoc> = {
       {
         heading: "Your rights",
         body: [
-          "Under KVKK, Türkiye's data protection law, you can ask to see your data, have it corrected or deleted, and object to how it is processed.",
+          "You can ask to see your data, have it corrected or deleted, and object to how it is processed.",
           "Write to us at {contact} and we will answer within thirty days.",
           "If you are a customer of a business that uses Resepta, your record belongs to that business, so ask the business directly. It can correct your details, stop AI calls or marketing email to you, or delete your record. If your request reaches us, we pass it on to the business.",
           "To stop marketing emails yourself, use the unsubscribe link at the bottom of any of them.",
@@ -373,7 +373,7 @@ export const PRIVACY: Record<Language, LegalDoc> = {
       {
         heading: "Ihre Rechte",
         body: [
-          "Nach dem KVKK, dem türkischen Datenschutzgesetz, können Sie Auskunft über Ihre Daten verlangen, sie berichtigen oder löschen lassen und der Verarbeitung widersprechen.",
+          "Sie können Auskunft über Ihre Daten verlangen, sie berichtigen oder löschen lassen und der Verarbeitung widersprechen.",
           "Schreiben Sie uns an {contact}; wir antworten innerhalb von dreißig Tagen.",
           "Wenn Sie Kunde eines Betriebs sind, der Resepta nutzt, gehört Ihr Datensatz diesem Betrieb; wenden Sie sich direkt an ihn. Er kann Ihre Angaben berichtigen, KI-Anrufe oder Werbe-E-Mails an Sie stoppen oder Ihren Datensatz löschen. Erreicht uns Ihre Anfrage, leiten wir sie an den Betrieb weiter.",
           "Werbe-E-Mails können Sie selbst über den Abmeldelink am Ende jeder dieser E-Mails abbestellen.",
