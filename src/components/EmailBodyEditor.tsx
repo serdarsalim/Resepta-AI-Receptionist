@@ -110,10 +110,14 @@ function ToolbarButton({
       // delete button can appear on hover — every tooltip in the row lit up at
       // once and stacked on top of each other. A named group only answers to
       // its own name, which makes this component safe wherever it is mounted.
-      className={`group/tip relative min-w-6 rounded px-1.5 py-0.5 text-xs leading-5 ${
+      // h-7, the control scale's xs (Control.tsx): the same 28px as the
+      // variable and emoji pickers at the end of this strip, which were the
+      // strip's odd ones out at 22px with a border. Nudge's EditorToolbar is
+      // h-7 too. The hover is the foreground wash, which shows in dark.
+      className={`group/tip relative inline-flex h-7 min-w-7 items-center justify-center rounded-md px-1.5 text-xs ${
         active
           ? "bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] text-[var(--accent)]"
-          : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+          : "text-[var(--muted)] hover:bg-[var(--control-hover)] hover:text-[var(--foreground)]"
       }`}
     >
       {children}

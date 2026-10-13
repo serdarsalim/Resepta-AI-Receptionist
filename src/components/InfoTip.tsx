@@ -244,7 +244,10 @@ export function InfoTip({
         aria-label="More info"
         onFocus={show}
         onBlur={hide}
-        className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-[var(--border)] text-[10px] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--foreground)] transition-colors"
+        // 14px, down from 16 (Nudge 68e5f13c, Serdar there 2026-09-16): beside
+        // a 12px label the 16px ring read as a second control. This is THE
+        // one (i), so its size changes here and nowhere else.
+        className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border border-[var(--border)] text-[9px] leading-none text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--foreground)] transition-colors"
       >
         i
       </button>

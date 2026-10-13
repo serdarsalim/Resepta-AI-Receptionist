@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Picker, { Theme, EmojiStyle, type EmojiClickData } from "emoji-picker-react";
+import { iconButtonClass } from "./Control";
 
 const PANEL_W = 320;
 const PANEL_H = 400;
@@ -24,10 +25,12 @@ export function EmojiPicker({
 }: {
   onPick: (emoji: string) => void;
   title: string;
-  // The trigger's face. Defaults to the bordered pill the composer toolbars
-  // use; a message bubble's react button passes its own icon and classes,
-  // because a toolbar pill floating beside a bubble reads as a second
-  // message rather than as an affordance belonging to the one below it.
+  // The trigger's face. Defaults to the borderless square the composer
+  // toolbars use (the scale's quiet xs, Nudge de116934: a border around a
+  // control inside an editor is chrome drawn twice); a message bubble's react
+  // button passes its own icon and classes, because a toolbar control floating
+  // beside a bubble reads as a second message rather than as an affordance
+  // belonging to the one below it.
   children?: React.ReactNode;
   className?: string;
   // Composers gate every other control on whether a message can be sent at
@@ -86,10 +89,7 @@ export function EmojiPicker({
         aria-label={title}
         disabled={disabled}
         onClick={() => (pos ? setPos(null) : openPanel())}
-        className={
-          className ??
-          "inline-flex items-center rounded-full border border-[var(--border)] px-2 py-0.5 text-sm leading-none transition-colors hover:bg-[var(--muted-bg)]"
-        }
+        className={className ?? iconButtonClass("quiet", "xs")}
       >
         {children ?? "🙂"}
       </button>

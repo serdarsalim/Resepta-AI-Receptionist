@@ -15,6 +15,7 @@ import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { foldSearch } from "@/lib/useTableState";
+import { buttonClass } from "./Control";
 
 export function VariableInsertDropdown({
   onInsert,
@@ -97,11 +98,16 @@ export function VariableInsertDropdown({
 
   return (
     <>
+      {/* Borderless, the scale's quiet xs (Nudge de116934). It sits in an
+          editor's toolbar or right under the box it writes into, and a border
+          around each control inside an editor is chrome drawn twice; it was
+          also the one bordered pill among the email toolbar's plain
+          buttons. Borders belong to containers (AGENTS.md). */}
       <button
         ref={triggerRef}
         type="button"
         onClick={toggle}
-        className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] px-2.5 py-0.5 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+        className={buttonClass("quiet", "xs")}
       >
         {t("editor.insertVariable")}
         <svg
