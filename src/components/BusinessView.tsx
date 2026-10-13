@@ -25,7 +25,8 @@ import { ViewOnlyPill } from "./ViewOnlyPill";
 import { CheckSwitch } from "./CheckSwitch";
 import { FIELD, ROW_GRID, RowLabel } from "./RowLabel";
 import { presetLanguage } from "../../convex/lib/industryPresets";
-import { InlineEditValue, OptionsEditor } from "./RecordField";
+import { InlineEditValue } from "./RecordField";
+import { TagPillsEditor } from "./TagPillsEditor";
 import { keyFromLabel, normaliseKey } from "../../convex/lib/keys";
 import { slugifyInboundAddress } from "../../convex/lib/inboundAddress";
 
@@ -1616,7 +1617,15 @@ function FieldTableRow({
               <div className="text-xs text-[var(--muted)]">
                 {t("fields.optionsFor", { name: field.label })}
               </div>
-              <OptionsEditor options={field.options ?? []} onChange={onSetOptions} />
+              <TagPillsEditor
+                values={field.options ?? []}
+                onChange={onSetOptions}
+                copy={{
+                  add: t("fields.addOption"),
+                  placeholder: t("fields.optionPlaceholder"),
+                  remove: (option) => t("fields.removeOption", { option }),
+                }}
+              />
             </div>
           </td>
         </tr>

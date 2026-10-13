@@ -4637,6 +4637,18 @@ const dictionary = {
     en: "Options for {name}.",
     de: "Optionen für {name}.",
   },
+  // The list field's options editor (TagPillsEditor): the dashed pill that
+  // opens the input, and each pill's ×, for screen readers.
+  "fields.addOption": {
+    tr: "+ Seçenek ekle",
+    en: "+ Add option",
+    de: "+ Option hinzufügen",
+  },
+  "fields.removeOption": {
+    tr: "Seçeneği kaldır: {option}",
+    en: "Remove option: {option}",
+    de: "Option entfernen: {option}",
+  },
   "fields.optionPlaceholder": {
     tr: "Seçenek ekle…",
     en: "Add an option…",

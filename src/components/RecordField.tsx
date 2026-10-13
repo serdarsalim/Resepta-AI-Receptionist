@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { InfoTip } from "./InfoTip";
-import { useLanguage } from "@/lib/LanguageProvider";
 
 // Record fields, ported from Nudge's ContactView (StackedField +
 // InlineEditValue). A record page shows VALUES, not a form: the value reads as
@@ -197,72 +196,5 @@ export function InlineEditValue({
       // figures, because a number input also spends ~16px on its spinner.
       className={`px-2 py-1 ${size} ${compact ? "max-sm:w-full sm:w-24" : ""}`}
     />
-  );
-}
-
-// Options for a list field: removable pills plus "Add an option". Ported from
-// Nudge's NativeOptionsEditor; writes the whole array back through onChange,
-// so the caller decides where it lands (a contact field, a variable's
-// choices). Enter adds and keeps the input focused for the next option.
-export function OptionsEditor({
-  options,
-  onChange,
-}: {
-  options: string[];
-  onChange: (options: string[]) => void;
-}) {
-  const { t } = useLanguage();
-  const [draft, setDraft] = useState("");
-  const add = () => {
-    const value = draft.trim();
-    setDraft("");
-    if (!value || options.includes(value)) return;
-    onChange([...options, value]);
-  };
-  return (
-    <div className="space-y-2">
-      {options.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {options.map((option) => (
-            <span
-              key={option}
-              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-xs"
-            >
-              {option}
-              <button
-                type="button"
-                onClick={() => onChange(options.filter((o) => o !== option))}
-                aria-label={option}
-                className="text-[var(--muted)] hover:text-red-600"
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      <div className="flex items-center gap-2">
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              add();
-            }
-          }}
-          placeholder={t("fields.optionPlaceholder")}
-          className="w-56 rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs"
-        />
-        <button
-          type="button"
-          onClick={add}
-          disabled={!draft.trim()}
-          className="rounded-md px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] disabled:opacity-50"
-        >
-          {t("common.add")}
-        </button>
-      </div>
-    </div>
   );
 }
