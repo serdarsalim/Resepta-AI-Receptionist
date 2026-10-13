@@ -16,6 +16,9 @@
 //     CUSTOMER. Drives reminder dispatch. A salon closed on Monday still wants
 //     Monday's reminders going out for Tuesday's appointments.
 
+// The only import, and a leaf like this module: the browser reads both.
+import { insideNotice } from "./minNotice";
+
 // One day's open window. Half-open [startMinute, endMinute), minutes from
 // local midnight — the same convention isWithinActiveWindow has always used,
 // so 18:00 is CLOSED at an 18:00 close.
@@ -404,8 +407,9 @@ export function parseLocalStart(raw: string, tz: string): number {
 // Is the time a customer asked for free, judged the way both agents judge it
 // (2026-10-13: the voice tool gained the chat tool's `time` answer). A FULL
 // block (capacity exhausted, retell.bookedBetween) covering it, outside the
-// day's hours or a closure, or already past. null when `time` is not HH:MM.
-// The asked minute only: the booking itself still judges the whole visit.
+// day's hours or a closure, already past, or sooner than the business's
+// minimum notice (lib/minNotice). null when `time` is not HH:MM. The asked
+// minute only: the booking itself still judges the whole visit.
 export function judgeRequestedTime(args: {
   dayIso: string;
   time: string;
@@ -414,10 +418,12 @@ export function judgeRequestedTime(args: {
   full: { startAt: number; durationMinutes: number | null }[];
   closures?: Closure[] | null;
   nowMs: number;
+  // The business's minimum notice, ms. Omitted = none.
+  noticeMs?: number;
 }): {
   at: number;
   available: boolean;
-  reason?: "already-booked" | "outside-open-hours" | "in-the-past";
+  reason?: "already-booked" | "outside-open-hours" | "in-the-past" | "too-soon";
 } | null {
   const match = args.time.trim().match(/^(\d{1,2}):(\d{2})$/);
   const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(args.dayIso);
@@ -441,16 +447,19 @@ export function judgeRequestedTime(args: {
   );
   const withinHours = isWithinActiveWindow(at, args.tz, args.hours ?? {}, args.closures);
   const inPast = at < args.nowMs;
+  const tooSoon = !inPast && insideNotice(at, args.nowMs, args.noticeMs ?? 0);
   return {
     at,
-    available: !conflict && withinHours && !inPast,
+    available: !conflict && withinHours && !inPast && !tooSoon,
     ...(conflict
       ? { reason: "already-booked" as const }
       : !withinHours
         ? { reason: "outside-open-hours" as const }
         : inPast
           ? { reason: "in-the-past" as const }
-          : {}),
+          : tooSoon
+            ? { reason: "too-soon" as const }
+            : {}),
   };
 }
 
@@ -521,6 +530,8 @@ export function suggestFreeSlots(args: {
   // permissive default isWithinActiveWindow takes, and for the same reason.
   closures?: Closure[] | null;
   nowMs: number;
+  // The business's minimum notice, ms (lib/minNotice). Omitted = none.
+  noticeMs?: number;
 }): number[] {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(args.dayIso);
   const hours = args.hours;
@@ -543,8 +554,9 @@ export function suggestFreeSlots(args: {
   // every entry, so a per-weekday org always has a real window.
   if (!hasClockBounds(hours)) return [];
   const slotMs = 30 * 60_000;
-  // A slot starting in five minutes is not an offer anyone can accept.
-  const earliest = args.nowMs + 15 * 60_000;
+  // A slot starting in five minutes is not an offer anyone can accept, and
+  // nothing inside the business's minimum notice is an offer at all.
+  const earliest = args.nowMs + Math.max(15 * 60_000, args.noticeMs ?? 0);
   const free: number[] = [];
   for (let minute = win.startMinute; minute + 30 <= win.endMinute; minute += 30) {
     // A slot the lunch break eats must never be read aloud. Checked on the

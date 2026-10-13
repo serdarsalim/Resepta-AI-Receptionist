@@ -25,9 +25,9 @@
 //
 // 2. THE CALENDAR AT THE MOMENT OF THE CHANGE. A move re-runs the booking
 //    page's own rules (booking.ts) in the same transaction that writes it:
-//    the span fits that day's hours, no closure, capacity with the appointment
-//    not blocking itself, no clash with the customer's other bookings, a
-//    good's lead time. What check_availability said a minute ago is a hint;
+//    the business's minimum notice, the span fits that day's hours, no
+//    closure, capacity with the appointment not blocking itself, no clash
+//    with the customer's other bookings, a good's lead time. What check_availability said a minute ago is a hint;
 //    this is the answer. It used to check only that the start was not in the
 //    past and fell inside opening hours, so a move could land on a full slot.
 //
@@ -77,6 +77,7 @@ import {
 } from "./lib/businessHours";
 import { loadClosures } from "./lib/closureRows";
 import { customerConflict } from "./lib/overlap";
+import { insideNotice, minNoticeMs } from "./lib/minNotice";
 import { recordActivity, statusChange } from "./lib/activity";
 import { lifecycleReaches } from "./lib/lifecycleSend";
 
@@ -345,6 +346,9 @@ async function moveRefusal(
 ): Promise<ChangeRefusal | null> {
   if (startAt < now - PAST_GRACE_MS) return "past";
   if (startAt > now + MAX_AHEAD_MS) return "too-far";
+  // The business's minimum notice binds a move as it binds a booking
+  // (lib/minNotice, 2026-10-13), as it does on the manage page.
+  if (insideNotice(startAt, now, minNoticeMs(org))) return "too-soon";
   const duration = durationOf(appointment);
   const leadMs = await goodsLeadMs(ctx, appointment);
   if (leadMs > 0 && startAt < now + leadMs) return "lead-time";

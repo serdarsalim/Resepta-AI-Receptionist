@@ -60,13 +60,14 @@ export function insideNotice(startAt: number, now: number, noticeMs: number): bo
   return noticeMs > 0 && startAt < now + noticeMs - NOTICE_SLACK_MS;
 }
 
-// The notice as the assistants' tool answers say it: English, because those
-// go to a model that answers in the customer's language. Whole days read as
-// days, the way the owner set them (Nudge's noticePhrase).
-export function noticePhrase(hours: number): string {
+// The notice as the assistants' tool answers say it ("2 hours", "1 day"):
+// English, because those go to a model that answers in the customer's
+// language. Whole days read as days, the way the owner set them (Nudge's
+// noticePhrase).
+export function noticeSpan(hours: number): string {
   if (hours >= 24 && hours % 24 === 0) {
     const days = hours / 24;
-    return days === 1 ? "1 day's" : `${days} days'`;
+    return days === 1 ? "1 day" : `${days} days`;
   }
-  return hours === 1 ? "1 hour's" : `${hours} hours'`;
+  return hours === 1 ? "1 hour" : `${hours} hours`;
 }

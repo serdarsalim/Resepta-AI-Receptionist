@@ -895,9 +895,17 @@ Nudge's `meetingTools.ts`; do not grow a second path.
   refused for three minutes after any change, and that refusal promises a
   colleague, so it emails the team like every other phone handover.
 - **A move is judged in the transaction that writes it**, with the booking
-  page's own helpers exported from `booking.ts`: the span fits that day's
-  hours, no closure, capacity with the row not blocking itself, no clash with
-  the customer's other bookings, a good's lead time.
+  page's own helpers exported from `booking.ts`: the business's minimum
+  notice, the span fits that day's hours, no closure, capacity with the row
+  not blocking itself, no clash with the customer's other bookings, a good's
+  lead time.
+- **The business's minimum notice binds every customer-facing door**
+  (`orgs.minNoticeHours`, `lib/minNotice`, 2026-10-13): the booking page and
+  its manage page, both assistants' bookings (`bookingProblem`, so a draft
+  is judged by it when it is sent) and moves (`too-soon`, with the nearest
+  free times). Unset is one hour, 0 is none, an ASAP order is exempt. Only the
+  team's calendar may book inside it, and its verdict says so. A new door
+  that takes a time from a customer or an assistant reads the same helper.
 - **Six changes a day per customer** (`customers.agentChangesAt`,
   `lib/agentChange.ts`, Nudge's number). Bookings, moves and cancels by the
   assistants, moves and cancels on the customer's own manage page
@@ -915,7 +923,8 @@ Nudge's `meetingTools.ts`; do not grow a second path.
 - **A "no" about a time carries the nearest free times**
   (`retell.nearestFreeTimes`, built on the booking page's `freeStarts`, so
   what it offers the write will accept). Both lanes' `check_availability`
-  answer the asked `time` through one verdict (`judgeRequestedTime`).
+  answer the asked `time` through one verdict (`judgeRequestedTime`), which
+  also answers a time inside the minimum notice as `too-soon`.
 - **A booking asked for twice is one booking**: `voiceBook` returns the
   customer's open appointment at that exact minute with the same services (a
   recent ASAP order with the same lines) instead of making a second; a

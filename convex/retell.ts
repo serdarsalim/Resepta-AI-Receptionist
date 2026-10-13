@@ -54,6 +54,7 @@ import {
 import { lifecycleReaches } from "./lib/lifecycleSend";
 import { recordActivity } from "./lib/activity";
 import { MAX_UPCOMING_PER_PHONE } from "./lib/bookingLimits";
+import { insideNotice, minNoticeHoursOf, noticeSpan } from "./lib/minNotice";
 import { callErased, isDeleting } from "./lib/customerDeletion";
 import { isDemo } from "./demo";
 import { freeStarts, goodsLeadMs } from "./booking";
@@ -2330,6 +2331,22 @@ async function bookingProblem(
       return { code: "too-many-changes", note: "" };
     }
   }
+  // The business's minimum notice (orgs.minNoticeHours, 2026-10-13): the
+  // booking page's floor is every door's now, and the assistants used to
+  // refuse only the past. Here, in the guard every booking path shares, so
+  // the phone, a live chat, a draft's dry run and its sending all judge it
+  // alike, cal.com's lane too. An ASAP order is placed for "now" by
+  // definition and is exempt, as it is on the page.
+  if (!a.fulfillment?.asap) {
+    const noticeOrg = await ctx.db.get(a.orgId);
+    const noticeHours = noticeOrg ? minNoticeHoursOf(noticeOrg) : 0;
+    if (insideNotice(a.startAt, Date.now(), noticeHours * 60 * 60_000)) {
+      return {
+        code: "too-soon",
+        note: `That is too soon: this business takes appointments at least ${noticeSpan(noticeHours)} ahead, so nothing was booked. Offer a later time.`,
+      };
+    }
+  }
   if (!a.providerHeld) {
     // Goods-only orders sum to 0 and fall through every occupancy guard
     // below by construction — a cake holds no chair. What a good DOES
@@ -2817,7 +2834,7 @@ export const voiceBook = internalMutation({
 // (2026-10-13, Nudge's "a refusal answered with one free time either side").
 // Judged by the booking page's own slot rules (booking.freeStarts): capacity,
 // the customer's other bookings, closures over the whole visit, that day's
-// hours, a good's lead time, and the page's hour of notice. So whatever this
+// hours, a good's lead time, and the business's minimum notice. So whatever this
 // offers, the booking or the move that follows will accept. The asked day
 // first, then outward a day at a time (a week ahead, three days back, never
 // before today) until there is a time on each side, which is how a full

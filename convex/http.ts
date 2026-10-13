@@ -38,6 +38,7 @@ import type { AgentBooking } from "./retell";
 import { answerOrEmpty } from "./lib/nonAnswer";
 import { queueOrgAlert } from "./lib/alerts";
 import { formatAppointmentTime } from "./lib/format";
+import { minNoticeHoursOf, minNoticeMs, noticeSpan } from "./lib/minNotice";
 import { languageFromAcceptHeader, unsubscribePage } from "./lib/unsubscribePage";
 import {
   NEAREST_FREE_NOTE,
@@ -682,6 +683,9 @@ http.route({
           closures,
           todayIso: today,
         });
+        // The business's minimum notice (lib/minNotice): nothing sooner is
+        // offered, and a time asked for inside it is answered as too soon.
+        const noticeHours = minNoticeHoursOf(org);
         const suggested = suggestFreeSlots({
           dayIso,
           tz: org.timezone,
@@ -689,6 +693,7 @@ http.route({
           full: booked.full,
           closures,
           nowMs: Date.now(),
+          noticeMs: minNoticeMs(org),
         });
         // The time the caller asked for, answered as a fact: the chat tool's
         // `time`, given to the phone too (2026-10-13). Without it the agent
@@ -704,6 +709,7 @@ http.route({
                 full: booked.full,
                 closures,
                 nowMs: Date.now(),
+                noticeMs: minNoticeMs(org),
               })
             : null;
         const requested = asked
@@ -740,6 +746,7 @@ http.route({
           // agent that knew "09:00-18:00" would offer 09:00 on a Sunday the
           // salon is shut.
           ...openness,
+          ...(noticeHours > 0 ? { minimum_notice: noticeSpan(noticeHours) } : {}),
           note:
             (asked
               ? "requested_time answers the time the caller asked for; trust it." +
@@ -762,7 +769,10 @@ http.route({
             (openness.upcoming_closures
               ? ", and never on a date in upcoming_closures"
               : "") +
-            ".",
+            "." +
+            (noticeHours > 0
+              ? " Never offer a time sooner than minimum_notice from now."
+              : ""),
         });
       }
       const result = await getAvailableSlots({
@@ -908,10 +918,13 @@ http.route({
                 : `${booking.note} Tell the caller a colleague will be in touch about it, and carry on.`,
           });
         }
-        // A taken time or the caller's own clash: the nearest free times
-        // either side, so the agent counters instead of stalling.
+        // A taken time, the caller's own clash or a time inside the
+        // business's minimum notice: the nearest free times either side, so
+        // the agent counters instead of stalling.
         const near =
-          booking.code === "slot-taken" || booking.code === "customer-busy"
+          booking.code === "slot-taken" ||
+          booking.code === "customer-busy" ||
+          booking.code === "too-soon"
             ? await nearestFree({ at: startAt, services: asked })
             : {};
         return respond({
@@ -1168,8 +1181,9 @@ http.route({
             : {}),
           ...near,
           note:
-            changeRefusalNote(known, did, "voice") +
-            (near.nearest_free ? ` ${NEAREST_FREE_NOTE}` : ""),
+            changeRefusalNote(known, did, "voice", {
+              noticeHours: minNoticeHoursOf(org),
+            }) + (near.nearest_free ? ` ${NEAREST_FREE_NOTE}` : ""),
         });
       };
       // The daily cap is judged with the change (writeOwnChange), after a

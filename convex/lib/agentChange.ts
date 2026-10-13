@@ -2,10 +2,11 @@
 // cancel is refused, and the shape of a change a draft is still waiting to
 // make.
 //
-// A LEAF: it imports only convex/values, so http.ts, chatAgent.ts,
-// agentAppointments.ts and the schema can all read it without an import cycle
-// between them.
+// A LEAF: it imports only convex/values and the minNotice leaf, so http.ts,
+// chatAgent.ts, agentAppointments.ts and the schema can all read it without an
+// import cycle between them.
 import { v, type Infer } from "convex/values";
+import { noticeSpan } from "./minNotice";
 //
 // Ported from Nudge (bookingLinks.CHANGES_PER_DAY, meetingTools.ts,
 // 2026-10-11), with Nudge's number: six changes a day per customer, counted
@@ -73,6 +74,9 @@ export type ChangeRefusal =
   | "too-many-changes"
   | "past"
   | "too-far"
+  // Sooner than the business's minimum notice (orgs.minNoticeHours,
+  // lib/minNotice), which binds a move as it binds a booking.
+  | "too-soon"
   // A good that needs more notice than the new time leaves.
   | "lead-time"
   // The new span leaves the day's opening hours or runs into a closure.
@@ -92,6 +96,7 @@ export const CHANGE_REFUSALS: readonly ChangeRefusal[] = [
   "too-many-changes",
   "past",
   "too-far",
+  "too-soon",
   "lead-time",
   "outside-open-hours",
   "slot-taken",
@@ -106,6 +111,7 @@ export function isTimeRefusal(reason: string): boolean {
     reason === "slot-taken" ||
     reason === "customer-busy" ||
     reason === "outside-open-hours" ||
+    reason === "too-soon" ||
     reason === "lead-time" ||
     reason === "past"
   );
@@ -133,6 +139,8 @@ export function changeRefusalNote(
   reason: ChangeRefusal,
   did: "moved" | "cancelled" | "booked",
   lane: "voice" | "chat",
+  // The business's minimum notice in hours, for the too-soon sentence.
+  facts?: { noticeHours?: number },
 ): string {
   const who = lane === "voice" ? "caller" : "customer";
   const lookAgain =
@@ -158,6 +166,10 @@ export function changeRefusalNote(
       return `The ${who} already has another appointment overlapping that time, so it was NOT ${did}. Offer a time that does not overlap it.`;
     case "outside-open-hours":
       return `The appointment would start outside the opening hours, run past closing, or run into a closed period then, so it was NOT ${did}. Offer a time that fits inside open_hours.`;
+    case "too-soon":
+      return facts?.noticeHours
+        ? `That is too soon: this business takes appointments at least ${noticeSpan(facts.noticeHours)} ahead, so it was NOT ${did}. Offer a later time.`
+        : `That is too soon for this business, so it was NOT ${did}. Offer a later time.`;
     case "lead-time":
       return `That order needs more notice than that, so it was NOT ${did}. Offer a later day.`;
     case "past":
@@ -263,6 +275,7 @@ export function approvalFailureOf(reason: string): ApprovalFailure {
   if (
     reason === "past" ||
     reason === "too-far" ||
+    reason === "too-soon" ||
     reason === "outside-open-hours" ||
     reason.startsWith("lead-time") ||
     reason.startsWith("start-is-")

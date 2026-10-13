@@ -66,6 +66,7 @@ import {
   todayInZone,
 } from "./lib/businessHours";
 import { formatAppointmentTime } from "./lib/format";
+import { minNoticeHoursOf, minNoticeMs, noticeSpan } from "./lib/minNotice";
 import { createBooking, getAvailableSlots, releaseHeldBooking } from "./lib/calcomApi";
 import { laneAvailability, laneForReply, loadEvolutionCreds } from "./lib/waLane";
 import { sendWaCloudText } from "./lib/waCloud";
@@ -448,6 +449,8 @@ export const loadTurnContext = internalQuery({
         // Unset means on, resolved here so the prompt reads plain booleans.
         pickup: org.pickupEnabled ?? true,
         delivery: org.deliveryEnabled ?? true,
+        // The business's minimum notice in force, hours (lib/minNotice).
+        minNoticeHours: minNoticeHoursOf(org),
         // A service row with no duration is a GOOD — the schema's own rule.
         // Read off the list already loaded above rather than a second query.
         sellsGoods: services.some(
@@ -1844,6 +1847,9 @@ type TurnContext = {
     // does exactly one of them needs no answer from the customer.
     pickup: boolean;
     delivery: boolean;
+    // The business's minimum notice in force, hours (lib/minNotice), for
+    // check_availability and the too-soon sentence.
+    minNoticeHours: number;
   };
   customer: {
     _id: Id<"customers">;
@@ -1961,6 +1967,9 @@ async function executeTool(
           closures,
           todayIso: today,
         });
+        // The business's minimum notice (lib/minNotice): nothing sooner is
+        // offered, and a time asked for inside it is answered as too soon.
+        const noticeHours = minNoticeHoursOf(org);
         const suggested = suggestFreeSlots({
           dayIso,
           tz: org.timezone,
@@ -1968,6 +1977,7 @@ async function executeTool(
           full: booked.full,
           closures,
           nowMs: Date.now(),
+          noticeMs: minNoticeMs(org),
         });
         // The customer asked for a SPECIFIC time: answer it here, as a fact,
         // instead of hoping the model derives it. Found live on Bella
@@ -1986,6 +1996,7 @@ async function executeTool(
                 full: booked.full,
                 closures,
                 nowMs: Date.now(),
+                noticeMs: minNoticeMs(org),
               })
             : null;
         const requestedTime = asked
@@ -2011,6 +2022,7 @@ async function executeTool(
             ? { example_free_times: suggested.map((at) => spokenOf(at)) }
             : {}),
           ...openness,
+          ...(noticeHours > 0 ? { minimum_notice: noticeSpan(noticeHours) } : {}),
           note:
             "EVERY time inside open_hours is available unless it overlaps booked_slots" +
             (openness.closed_days ? ", falls on closed_days" : "") +
@@ -2021,6 +2033,8 @@ async function executeTool(
             (openness.upcoming_closures
               ? ", or falls on a date in upcoming_closures"
               : "") +
+            // The minimum notice is an exception like the others.
+            (noticeHours > 0 ? ", or is sooner than minimum_notice from now" : "") +
             ". " +
             (requestedTime
               ? "requested_time answers the customer's asked time; trust it." +
@@ -2191,7 +2205,7 @@ async function executeTool(
           };
         }
         const near =
-          code === "slot-taken" || code === "customer-busy"
+          code === "slot-taken" || code === "customer-busy" || code === "too-soon"
             ? await nearestFree({ at: startAt, services: spoken })
             : {};
         return {
@@ -2329,8 +2343,9 @@ async function executeTool(
             : {}),
           ...near,
           note:
-            changeRefusalNote(known, did, "chat") +
-            (near.nearest_free ? ` ${NEAREST_FREE_NOTE}` : ""),
+            changeRefusalNote(known, did, "chat", {
+              noticeHours: minNoticeHoursOf(org),
+            }) + (near.nearest_free ? ` ${NEAREST_FREE_NOTE}` : ""),
         };
       };
       // The daily cap is judged with the change, live (writeOwnChange) and
