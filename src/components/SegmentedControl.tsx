@@ -91,7 +91,11 @@ export function SegmentedControl<T extends string>({
       role={groupRole}
       aria-labelledby={labelledBy}
       aria-label={ariaLabel}
-      className={`${fill ? "flex w-full" : "inline-flex"} ${track} shrink-0 items-center gap-0.5 rounded-lg bg-[var(--segment-track)] p-0.5 ${
+      // w-fit is load-bearing: placed straight in a grid cell (the handover
+      // row in Automations) the track is blockified and stretched to the
+      // column, and a visible track then ran on past its cells. The old
+      // --muted-bg track hid that in dark by being invisible.
+      className={`${fill ? "flex w-full" : "inline-flex w-fit"} ${track} shrink-0 items-center gap-0.5 rounded-lg bg-[var(--segment-track)] p-0.5 ${
         disabled ? "opacity-50" : ""
       }`}
     >
