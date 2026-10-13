@@ -24,7 +24,8 @@ import { SearchInput } from "./DataTable";
 import { CustomerJump } from "./CustomerJump";
 
 // Shell composition ported from Nudge (src/app/page.tsx + AppHeader there):
-// fixed-height pane, recessed sidebar, floating main card that scrolls
+// a fixed-height window holding two FLUSH panes, the sidebar rail and the
+// content plane, with a hairline between them, and a `main` that scrolls
 // internally. Org config (Business, Settings) is a sidebar destination in its
 // own group at the foot; the avatar menu is the PERSON's menu and never routes
 // there.
@@ -1009,8 +1010,8 @@ function UserMenu({
         )}
       </button>
       {/* Through a portal with fixed positioning, never an absolute child: the
-          content card is overflow-hidden, so an in-flow menu gets clipped at
-          the card edge (see AGENTS.md — this recurs). */}
+          sidebar and the content column are overflow-hidden, so an in-flow
+          menu gets clipped at their edge (see AGENTS.md — this recurs). */}
       {pos &&
         createPortal(
           <div
@@ -1527,7 +1528,16 @@ export function AppShell({
     // filtering happens down there, so the query has to sit over the pair.
     <HeaderSearchProvider>
     <HeaderPanesProvider>
-      <div className="flex h-[100dvh] overflow-hidden bg-[var(--pane)] md:p-2 md:gap-2">
+      {/* No padding and no gap: both panes meet the window edge (Nudge
+          607c9708, 2026-10-12; asked for here the next day). The content
+          used to be a rounded sheet inset 8px in a gutter, and every view
+          already puts its content in cards, so the sheet was a card holding
+          cards. The cards are the paper now; don't bring the inset back
+          without taking them out first. data-app-shell gives the document's
+          reserved scrollbar track back (globals.css): this root never
+          scrolls the document, and the track was a 15px strip of page white
+          between the content and the window's right edge. */}
+      <div data-app-shell className="flex h-[100dvh] overflow-hidden bg-[var(--pane)]">
         {/* Fixed overlay, so it costs the layout nothing and renders on every
           screen rather than only the one the operator arrived on. The
           acting-as chip (OperatorBanner) used to float here too; it lives in
@@ -1545,11 +1555,17 @@ export function AppShell({
             mobileOpen ? "opacity-100" : "pointer-events-none opacity-0"
           }`}
         />
-        {/* Sidebar: a recessed pane on desktop, an off-canvas drawer on phones.
+        {/* Sidebar: a flush rail on desktop, an off-canvas drawer on phones.
           Same markup either way, so the phone gets the real navigation instead
           of a cut-down second copy of it. Below md the drawer is the ONLY way
           to reach Business and Settings, now that the avatar menu no longer
-          shortcuts there. */}
+          shortcuts there.
+
+          The rail's md:border-r is the one line between the two panes. With
+          no gutter left, nothing else separates them. Plain --border is what
+          Nudge's 70% mix of its own darker --border lands on, and it is the
+          same weight as the short rule between the nav groups. The drawer
+          keeps its shadow and takes no border: it slides over the page. */}
         {/* Off-canvas is not hidden: translated away, the drawer keeps its place
           in the accessibility tree and every destination inside it stays
           tabbable, so tabbing off the phone menu button walks into an
@@ -1560,7 +1576,7 @@ export function AppShell({
           `md:visible` puts the desktop pane back. */}
         <aside
           aria-label={t("nav.primary")}
-          className={`app-pane fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col overflow-hidden shadow-xl transition-[transform,visibility] duration-[120ms] ease-out motion-reduce:transition-none md:visible md:static md:translate-x-0 md:shadow-none md:transition-[width] ${
+          className={`app-pane fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col overflow-hidden shadow-xl transition-[transform,visibility] duration-[120ms] ease-out motion-reduce:transition-none md:visible md:static md:translate-x-0 md:border-r md:border-[var(--border)] md:shadow-none md:transition-[width] ${
             mobileOpen ? "visible translate-x-0" : "invisible -translate-x-full"
           } ${showCollapsed ? "md:w-14" : "md:w-52"}`}
         >
@@ -1719,16 +1735,15 @@ export function AppShell({
           </nav>
         </aside>
 
-        {/* Floating content card; scrolls internally (min-h-0 is load-bearing).
-          --pane, not --background: this is the plane the view's own cards sit
-          on, not a sheet of its own. White here meant card-raised was white on
-          white and had to buy its separation entirely with shadow.
-
-          The calendar is the exception, and it earns it: it draws a full-bleed
-          grid of hairlines rather than floating cards, so there is nothing for
-          the plane to separate — grey just tints the whole grid and the day
-          columns stop reading as paper. */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[image:var(--content-bg)] md:rounded-xl md:shadow-[var(--card-shadow)]">
+        {/* The content plane, flush to the window like the rail beside it:
+          no radius, no inset, no shadow. It is the ground the view's own
+          cards sit on, not a sheet of its own, so it wears the --content-bg
+          wash over --pane rather than --background. White here meant
+          card-raised was white on white and had to buy its separation
+          entirely with shadow. Every tab gets the plane, the calendar
+          included: its grid is a card like any other (design-language.md).
+          It does not scroll; `main` below does (min-h-0 is load-bearing). */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[image:var(--content-bg)]">
           {/* No ✕ on any tab. Business traded its close button for the search box
             first, and Account followed (2026-08-12) once it had grown enough
             rows to be worth searching. The header holds ONE control on the

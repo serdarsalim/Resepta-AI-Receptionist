@@ -75,9 +75,10 @@
      fourteen units apart, which draws the edge on its own.
 
      Kept as a token set to none rather than deleted, because every card in the
-     app reads it (Card.tsx, .card-raised, the admin sections, the calendar,
-     the shell's own content pane). One line here is how the decision stays
-     reversible and how the two themes stay in step. */
+     app reads it (Card.tsx, .card-raised, the admin sections, the calendar).
+     One line here is how the decision stays reversible and how the two themes
+     stay in step. The shell's content pane read it too until it went flush
+     (2026-10-13) and stopped being a card at all. */
   --card-shadow: none;
   /* A control sitting ON the sidebar pane — today just the workspace switcher.
      It is NOT a --foreground wash: the nav rows hover at 4.5% black and go
@@ -104,7 +105,8 @@
     var(--pane) 48%,
     color-mix(in srgb, var(--brand) 8%, var(--pane)) 100%
   );
-  /* Recessed surface the sidebar + floating content card sit on */
+  /* The ground of the shell. The content plane's --content-bg wash is mixed
+     from it, and the sidebar rail (.app-pane) sits one step lighter. */
   --pane: #f1f1f3;
   /* Primary action accent — soft blue, white text in both modes */
   --accent: #3b82f6;
@@ -195,8 +197,8 @@
      outlining its cards. */
   --card-shadow: none;
   /* Lighter than the pane rather than white, same idea inverted: --card is
-     #171717 against a pane whose top stop is #141414, three units, which is
-     the dark-mode trap where a --card pill on a --muted-bg track vanishes. */
+     #171717 against the rail's #141414, three units, which is the dark-mode
+     trap where a --card pill on a --muted-bg track vanishes. */
   --pane-field: #232323;
   --pane-field-hover: #2c2c2c;
   /* Halved: the same mix that reads as a tint on white reads as a colour cast
@@ -257,12 +259,20 @@ thead {
   color: var(--page-title);
 }
 
-/* Recessed sidebar surface — reads as its own panel, no hard divider. */
+/* The sidebar rail: FLAT, and a shade lighter than the --pane plane the
+   content sits on, so it reads as chrome rather than as more page. It was a
+   180deg gradient (#f8f8f9 → #f1f1f3) while the rail floated inset from the
+   window with a gap around it; a floating pane can afford a graded fill
+   because its edges do the separating. Flush against the content it cannot:
+   a vertical gradient beside a vertical hairline reads as the panel fading
+   out toward its own bottom corner. The top stop is what survived, because it
+   holds the contrast step against --pane (Nudge 29339b0c, the same call).
+   The separating is done by the rail's md:border-r in AppShell. Both modes. */
 .app-pane {
-  background: linear-gradient(180deg, #f8f8f9 0%, #f1f1f3 100%);
+  background: #f8f8f9;
 }
 .dark .app-pane {
-  background: linear-gradient(180deg, #141414 0%, #0c0c0c 100%);
+  background: #141414;
 }
 
 /* Public landing-page entrance motion. It changes opacity and transform only,
@@ -373,6 +383,17 @@ thead {
      touch scrollbars overlay and take no width. */
   html {
     scrollbar-gutter: stable;
+  }
+
+  /* Except under the signed-in app's shell, which never scrolls the
+     document: it is h-[100dvh] overflow-hidden and its `main` scrolls
+     inside. There the reserved track was dead width, a 15px strip at the
+     window's right edge painted --background, so the flush content plane
+     (2026-10-13) stopped short of the edge with white beside it in light
+     mode. Only where scrollbars take room, as they do in Serdar's Chrome;
+     overlay scrollbars never reserved anything. */
+  html:has([data-app-shell]) {
+    scrollbar-gutter: auto;
   }
 }
 

@@ -723,6 +723,20 @@ any new button or field, and never stack a colour utility on a variant: two
 utilities at one specificity are decided by Tailwind's order, not the class
 string.
 
+## The shell is flush; the cards are the paper (2026-10-13)
+
+Nudge's shell (607c9708, 2026-10-12, which Serdar kept there and asked for
+here). The sidebar rail and the content plane both meet the window edge: no
+shell padding, no gap, no rounded sheet, and one hairline where they meet, the
+rail's `md:border-r` in plain `--border` (within a shade of what Nudge's 70%
+mix of its darker `--border` lands on). `.app-pane` is flat, the top stop of
+the gradient it wore while it floated. Every view already puts its content in
+cards, so the inset sheet was a card holding cards: don't bring it back
+without taking the cards out first. The shell root carries `data-app-shell`,
+which hands back the document's reserved scrollbar track (globals.css): the
+shell never scrolls the document, and with classic scrollbars the track was a
+15px strip of `--background` at the right edge.
+
 ## Voice numbers, caller identity, and the variables doctrine (2026-08-18)
 
 A marathon session; the durable rules it produced:
