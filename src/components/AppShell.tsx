@@ -50,16 +50,22 @@ const SIDEBAR_COLLAPSED_KEY = "randevu.sidebar-collapsed";
 
 type IconProps = React.SVGProps<SVGSVGElement>;
 
+// 16px at stroke 1.5, the size and weight every icon set in this class ships
+// (Nudge 451ab041). It was 18 at stroke 2, about a quarter more ink per
+// glyph, which is what made the nav read chunky beside 14px labels: the ink
+// was the problem, not the hues. A glyph borrowed from elsewhere is
+// normalised to this at its call site rather than drawn heavier than the rows
+// around it. The phone tab bar draws the same glyphs at 18px.
 function makeIcon(paths: React.ReactNode) {
   function Icon(props: IconProps) {
     return (
       <svg
         viewBox="0 0 24 24"
-        width="18"
-        height="18"
+        width="16"
+        height="16"
         fill="none"
         stroke="currentColor"
-        strokeWidth="2"
+        strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
         aria-hidden
@@ -114,8 +120,9 @@ const MessagesIcon = makeIcon(
 );
 
 // Each tab keeps ONE hue, carried by its symbol. The active row's wash stays
-// neutral — hue on the symbol plus a bold label is the selected cue, so the
-// sidebar never turns into a stack of coloured blocks.
+// neutral — the wash, the label's darker tier and the symbol at full strength
+// are the selected cue, so the sidebar never turns into a stack of coloured
+// blocks. The label's WEIGHT never changes (see SidebarButton).
 const RevenueIcon = makeIcon(
   <>
     <path d="M12 2v20" />
@@ -156,12 +163,12 @@ const AgentIcon = makeIcon(
 // method is stored"; this tab is about what was charged and what is left, and
 // a note is the plainest drawing of money there is.
 //
-// The $ is drawn at 1.75 while the note stays at the house 2, and that is the
-// one deliberate weight exception in this file. A $ has two counters — the
-// holes in the S — and inside a 14-unit note at full stroke they close up into
-// a blob; every earlier attempt failed there rather than on the shape. A
-// quarter-unit thinner opens them and is invisible at the 18px this is seen
-// at, which is the size the whole thing was judged at.
+// The $ has two counters, the holes in the S, and inside a 14-unit note at
+// the old house stroke of 2 they closed up into a blob; every earlier attempt
+// failed there rather than on the shape. So the $ was drawn at 1.75 while the
+// note stayed at 2, the one weight exception this file had. The house stroke
+// is 1.5 now (2026-10-13), thinner than that exception, so the $ shares it:
+// at 16px its counters open as wide as the judged 18px version's did.
 //
 // It fills nearly the whole 24 box, which for a hollow rectangle is not
 // greedy — it is how it matches its neighbours. Drawn at a note's honest
@@ -172,10 +179,8 @@ const AgentIcon = makeIcon(
 const BillingNoteIcon = makeIcon(
   <>
     <rect x="1" y="3.5" width="22" height="17" rx="3" />
-    <g strokeWidth="1.75">
-      <path d="M14.4 8.4h-3.3a1.9 1.9 0 0 0 0 3.8h1.8a1.9 1.9 0 0 1 0 3.8H9.6" />
-      <path d="M12 6.5v11" />
-    </g>
+    <path d="M14.4 8.4h-3.3a1.9 1.9 0 0 0 0 3.8h1.8a1.9 1.9 0 0 1 0 3.8H9.6" />
+    <path d="M12 6.5v11" />
   </>,
 );
 
@@ -453,7 +458,8 @@ const ChevronsUpDownIcon = makeIcon(
 // lucide panel-left. One definition, used by the desktop collapse toggle and
 // by the phone menu button, and it is the SAME glyph in both states: the icon
 // names the sidebar, it does not point anywhere. Chevrons and hamburgers are
-// both out of the design language here.
+// both out of the design language here. Stroke 1.5 like the nav glyphs it
+// sits above: it is sidebar chrome.
 function PanelLeftIcon({ size = 16 }: { size?: number }) {
   return (
     <svg
@@ -462,7 +468,7 @@ function PanelLeftIcon({ size = 16 }: { size?: number }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
@@ -1224,9 +1230,12 @@ function WorkspaceSwitcher({
             >
               {label}
             </span>
+            {/* 1.75 at 14px, Nudge's account-row chevron: the house 1.5
+                drawn two pixels smaller would go fainter than the rows. */}
             <ChevronsUpDownIcon
               width={14}
               height={14}
+              strokeWidth={1.75}
               className="shrink-0 text-[var(--muted)]"
             />
           </>
@@ -1327,23 +1336,29 @@ function SidebarButton({
       // The tab's hue as a variable so the collapsed active pill can tint with
       // it. Harmless when inactive.
       style={{ "--tab-hue": color } as React.CSSProperties}
-      className={`group relative flex h-9 items-center rounded-lg text-sm transition-colors ${
+      // WEIGHT IS CONSTANT across states, so font-medium lives on the base
+      // class (Nudge 451ab041). Stepping medium to semibold on select made the
+      // row shout and re-flowed its own label under the cursor; the wash, the
+      // darker tier and the hue say "selected" on their own. gap-2.5 with the
+      // 16px glyph, where the 18px one took gap-3.
+      className={`group relative flex h-9 items-center rounded-lg text-sm font-medium transition-colors ${
         collapsed
           ? // A centered rounded square around the symbol, not a full-width
             // squat oval hugging it.
             "mx-auto h-9 w-9 justify-center px-0"
-          : "w-full gap-3 px-3"
+          : "w-full gap-2.5 px-3"
       } ${
         active
           ? // Expanded keeps the neutral wash — hue lives on the symbol and the
-            // bold label finishes the job. Collapsed has no label, so the pill
-            // earns a tint of the tab's own hue as the stronger selected cue.
-            `bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] font-semibold text-[var(--foreground)] ${
+            // label's darker tier finishes the job. Collapsed has no label, so
+            // the pill earns a tint of the tab's own hue as the stronger
+            // selected cue.
+            `bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] text-[var(--foreground)] ${
               collapsed
                 ? "bg-[color-mix(in_srgb,var(--tab-hue)_14%,transparent)]"
                 : ""
             }`
-          : "font-medium text-[var(--muted-strong)] hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
+          : "text-[var(--muted-strong)] hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
       }`}
     >
       {/* Symbol carries the hue. Muted when idle so it accents rather than
@@ -1683,7 +1698,7 @@ export function AppShell({
                   className={`group relative flex h-9 items-center rounded-lg text-sm font-medium text-[var(--muted-strong)] transition-colors hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05] ${
                     showCollapsed
                       ? "mx-auto h-9 w-9 justify-center px-0"
-                      : "w-full gap-3 px-3"
+                      : "w-full gap-2.5 px-3"
                   }`}
                 >
                   <AdminShieldIcon
@@ -1810,13 +1825,21 @@ export function AppShell({
                     key={id}
                     onClick={() => onTab(id)}
                     aria-current={active ? "page" : undefined}
-                    className={`flex flex-1 flex-col items-center gap-0.5 px-2 py-2 text-[11px] ${
+                    // One weight in both states, like the sidebar rows: a
+                    // label that turns semibold under the thumb re-centres
+                    // itself in its cell. Colour and the glyph at full
+                    // strength carry "you are here".
+                    className={`flex flex-1 flex-col items-center gap-0.5 px-2 py-2 text-[11px] font-medium ${
                       active
-                        ? "font-semibold text-[var(--foreground)]"
+                        ? "text-[var(--foreground)]"
                         : "text-[var(--muted)]"
                     }`}
                   >
+                    {/* The sidebar's glyph at 18px, the size this bar has
+                        always drawn: a thumb's target, not a row's. */}
                     <Icon
+                      width={18}
+                      height={18}
                       className="shrink-0"
                       style={{ color, opacity: active ? 1 : 0.8 }}
                     />
