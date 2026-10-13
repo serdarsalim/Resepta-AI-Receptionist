@@ -1608,9 +1608,10 @@ export function AppShell({
           shortcuts there.
 
           The rail's md:border-r is the one line between the two panes. With
-          no gutter left, nothing else separates them. Plain --border is what
-          Nudge's 70% mix of its own darker --border lands on, and it is the
-          same weight as the short rule between the nav groups. The drawer
+          no gutter left, nothing else separates them. Plain --border is
+          within a shade of what Nudge's 70% mix of its own darker --border
+          lands on, and it is the same weight as the short rule between the
+          nav groups. The drawer
           keeps its shadow and takes no border: it slides over the page. */}
         {/* Off-canvas is not hidden: translated away, the drawer keeps its place
           in the accessibility tree and every destination inside it stays
