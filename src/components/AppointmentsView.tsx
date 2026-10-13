@@ -1,7 +1,7 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -202,11 +202,17 @@ export function AppointmentsView({
       draft: {
         date: isoDateOf(p),
         startMinute: p.minutesOfDay,
-        endMinute: Math.min(24 * 60, p.minutesOfDay + lastDraft.durationMinutes),
+        // A goods order has no length, and a block needs one: an empty window
+        // would open the sheet on its own "end before start" error.
+        endMinute: Math.min(
+          24 * 60,
+          p.minutesOfDay + (lastDraft.durationMinutes || DEFAULT_DURATION),
+        ),
       },
       anchor: lastDraft.anchor,
     });
   };
+
 
   // Optimistic positions, keyed by appointment. A drag paints here first and
   // the entry is dropped the moment the server agrees (the query row catches
@@ -220,8 +226,40 @@ export function AppointmentsView({
   // but only when NEITHER sheet has it: the kind tabs close one sheet to open
   // the other, and the band has to stay lit across that swap.
   const [provisional, setProvisional] = useState<SlotBand | null>(null);
+
+  // ONE height for the two kinds of thing a drawn slot can become. Each sheet
+  // reports the height its own content wants, the floor keeps the larger, and
+  // both sheets are drawn at least that tall with the space opening above
+  // their foot. So switching Appointment | Blocked time never moves Save:
+  // the booking sheet is the taller of the two (six rows to four), and the
+  // block sheet pads up to it. It moved by about 70px on every switch (found
+  // in P3). Reset whenever a fresh slot opens a sheet, and when both close,
+  // so one booking's height never leaks into the next.
+  const [sheetFloor, setSheetFloor] = useState(0);
+  const growSheetFloor = useCallback(
+    (px: number) => setSheetFloor((current) => Math.max(current, Math.ceil(px))),
+    [],
+  );
+
+  // The band follows the booking sheet's time: pick another day, start or
+  // end in the sheet and the lit slot on the grid moves with it, instead of
+  // staying where the click landed while the sheet said something else
+  // (Nudge's onTimeChange). The kind switch reads lastDraft, so it carries
+  // the new time across to the block sheet too.
+  const followBand = useCallback((startAt: number, durationMinutes: number) => {
+    const startMinute = minutesInto(startAt);
+    setProvisional((current) =>
+      current
+        ? { day: startOfDay(startAt), startMinute, endMinute: startMinute + durationMinutes }
+        : current,
+    );
+    setLastDraft((current) => (current ? { ...current, startAt, durationMinutes } : current));
+  }, []);
   useEffect(() => {
-    if (!booking.isOpen && !blockSheet) setProvisional(null);
+    if (!booking.isOpen && !blockSheet) {
+      setProvisional(null);
+      setSheetFloor(0);
+    }
   }, [booking.isOpen, blockSheet]);
 
   // D / W / M / Y / L switch views, T jumps to today. Bound because the menu
@@ -420,6 +458,7 @@ export function AppointmentsView({
             // morning is the honest default for a day nobody has named a time
             // in yet.
             const startAt = dayMs + DEFAULT_DAY_START * 3_600_000;
+            setSheetFloor(0);
             setLastDraft({ startAt, durationMinutes: DEFAULT_DURATION });
             booking.open({ startAt, durationMinutes: DEFAULT_DURATION });
           }}
@@ -499,6 +538,7 @@ export function AppointmentsView({
           }}
           onDraft={(startAt, durationMinutes, band, anchor) => {
             setProvisional(band);
+            setSheetFloor(0);
             setLastDraft({ startAt, durationMinutes, anchor });
             booking.open({ startAt, durationMinutes }, anchor);
           }}
@@ -625,11 +665,26 @@ export function AppointmentsView({
             }}
           />
         ) : undefined,
+        {
+          // Only while the kind tabs are up: a floor exists to keep two
+          // sheets in one spot, and a member never sees the second one.
+          heightFloor: isOwner && sheetFloor > 0 ? sheetFloor : undefined,
+          onNaturalHeight: isOwner ? growSheetFloor : undefined,
+          onTimeChange: followBand,
+        },
       )}
       {blockSheet && (
         <BlockSheet
           draft={blockSheet.draft}
           anchor={blockSheet.anchor}
+          // The same floor, on the sheet a grid gesture opened; an existing
+          // block is not half of a choice and keeps its own height.
+          heightFloor={
+            blockSheet.draft.closureId === undefined && sheetFloor > 0 ? sheetFloor : undefined
+          }
+          onNaturalHeight={
+            blockSheet.draft.closureId === undefined ? growSheetFloor : undefined
+          }
           tabs={
             // Tabs only on the sheet a grid gesture opened: an existing block
             // is not half of a choice, so a chip's sheet has none.
