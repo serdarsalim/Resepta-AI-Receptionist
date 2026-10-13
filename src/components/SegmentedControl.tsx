@@ -129,9 +129,10 @@ export function SegmentedControl<T extends string>({
               className={
                 stacked
                   ? // Measured, not guessed (the theme row, 2026-08): German
-                    // "Automatisch" wants 57px; the cell gives it 62, with
-                    // tracking-tight and no side padding. truncate is the
-                    // backstop if a future language beats German.
+                    // "Automatisch" wants 57px at regular weight, about 59 at
+                    // the medium every cell now wears; the cell gives it 62,
+                    // with tracking-tight and no side padding. truncate is
+                    // the backstop if a future language beats German.
                     "w-full truncate text-center text-[10px] leading-none tracking-tight"
                   : "min-w-0 truncate"
               }

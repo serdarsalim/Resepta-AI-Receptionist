@@ -1,6 +1,6 @@
 # Nudge → Resepta port: plan and status
 
-Paused 2026-10-13 at Serdar's request, then P3 finished the same day. Done: P1, P1c, P2, P2b, P2c (commits e0e6083..f1279d2) and P3 (0f1fdcd, then a9c8bdb..e39da7d plus its docs commit); see docs/journal/2026-10.md. Resume at P4, one builder per phase, sequentially. The rules every phase builder followed are in the appendix.
+Paused 2026-10-13 at Serdar's request, then P3 finished the same day. Done: P1, P1c, P2, P2b, P2c (commits e0e6083..f1279d2) and P3 (0f1fdcd, then a9c8bdb..b2780d8 and the commit that records this); see docs/journal/2026-10.md. Resume at P4, one builder per phase, sequentially. The rules every phase builder followed are in the appendix.
 
 P3 was built with Serdar's dev server down: tsc and eslint pass over all of src, every height was worked out from the classes, and nothing was looked at in a browser. Browser checks still owed for P3 (light and dark, desktop and 375px, Serdar's 17px base font; never click Update, Publish, Send or the like):
 - Business: General's inputs and selects, Hours' timezone and time fields, all one height (32px at a 16px base); a closed day's times dim.
