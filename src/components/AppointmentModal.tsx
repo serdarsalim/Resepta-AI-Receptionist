@@ -666,7 +666,10 @@ export function AppointmentModal({
                own height, so clicking to edit moves nothing; on a phone it
                wraps the way the prose does. They replaced WhenPicker's chips,
                which were a second date month and a second time list beside
-               the ones the block sheet had just got. */
+               the ones the block sheet had just got. Below sm every field
+               renders at 16px (the iOS zoom rule in globals.css), where
+               3.75rem clips "15:30", so the times widen there; the row wraps
+               on a phone anyway. */
             <div className="flex flex-wrap items-center gap-1.5">
               <DateField
                 label={t("appointments.when")}
@@ -682,7 +685,7 @@ export function AppointmentModal({
                   tight
                   minutes={whenStart}
                   ariaLabel={t("appointments.startTime")}
-                  className="w-[3.75rem]"
+                  className="w-[3.75rem] max-sm:w-[4.5rem]"
                   // A new start keeps the length, Google's way: the end follows.
                   onChange={(m) => setStartAt(atLocalMinutes(startOfLocalDay(startAt), m))}
                 />
@@ -694,7 +697,7 @@ export function AppointmentModal({
                       minutes={Math.min(whenStart + durationMinutes, 24 * 60)}
                       from={whenStart}
                       ariaLabel={t("appointments.endTime")}
-                      className="w-[3.75rem]"
+                      className="w-[3.75rem] max-sm:w-[4.5rem]"
                       // An end at or before the start is refused, not
                       // reinterpreted: this calendar cannot draw a booking
                       // that crosses midnight, and guessing "tomorrow" would
