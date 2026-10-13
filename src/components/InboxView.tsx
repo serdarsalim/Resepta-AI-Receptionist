@@ -14,6 +14,7 @@ import type { TranslationKey } from "@/lib/i18n";
 import { mediaKindKey } from "@/lib/mediaLabel";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
+import { TWO_PANE_COLUMNS } from "./ContactView";
 import { FeedFilterPills } from "./FeedFilterPills";
 import { FeedIcon, type FeedIconType } from "./FeedIcon";
 import { RowMenu } from "./RowMenu";
@@ -205,9 +206,10 @@ export function InboxView({
     //
     // Now that a row opens the contact record, those two right-hand panes are
     // the same pane one click apart. Matching them means matching the
-    // container, not the ratio, and ContactView is the one to match: it is
-    // where the reading happens. Keep this in step with ContactView's grid if
-    // either moves.
+    // container AND the split, and ContactView is the one to match: it is
+    // where the reading happens. The split is one constant now,
+    // TWO_PANE_COLUMNS, exported from there, so the two cannot drift. The
+    // cap that matters lives in it: the LEFT column stops at 32rem.
     <div
       data-fills-pane
       data-bleeds-right
@@ -223,7 +225,7 @@ export function InboxView({
       {/* gap-2, down from gap-4 (Serdar, 2026-08-28): list and thread are
           one working surface, and a wide gutter read them as two unrelated
           panels. */}
-      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      <div className={`grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-2 ${TWO_PANE_COLUMNS}`}>
         {/* Conversation list. On small screens it swaps with the open
             conversation instead of sharing the row. */}
         <section

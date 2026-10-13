@@ -756,6 +756,12 @@ between it and an `sr-only` label from being un-positioned by accident: with
 the body as the containing block, a label deep in a scrolled list stretches
 the DOCUMENT to reach it, and the shell's overflow cannot clip that.
 
+**The Inbox and the customer record share one split**, `TWO_PANE_COLUMNS` in
+ContactView (Nudge 1a6c46ce): 40/60 from lg, the left column capped at 32rem,
+the conversation taking the rest inside its own 56rem measure. A row in the
+Inbox opens the record, so the two right-hand panes are one pane a click
+apart; change the split there, never in one view.
+
 ## Voice numbers, caller identity, and the variables doctrine (2026-08-18)
 
 A marathon session; the durable rules it produced:

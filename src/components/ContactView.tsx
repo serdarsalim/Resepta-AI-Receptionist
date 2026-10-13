@@ -67,6 +67,18 @@ function CustomFieldRow({
 // A label in the record footer. Its whole job is to stay on one line: it sits
 // in an `auto` grid column, so a label that wraps does not just look wrong, it
 // sets the column width for the pair beside it too.
+// The two-pane split the customer record and the Inbox share: record or list
+// on the left, the conversation on the right (Nudge 1a6c46ce). 40/60 until the
+// left column reaches 32rem, then it stops and the conversation takes the
+// rest. It was 2fr/3fr, which on a wide monitor stretched list rows and record
+// values across ~900px of mostly empty space. The conversation keeps its own
+// 56rem reading measure inside its card (.pane-measure), so it never needed a
+// cap. One constant so the two screens cannot drift: a row in the Inbox opens
+// this record, and the right-hand panes are the same pane one click apart.
+// 18rem is the floor at lg, where 40% of the narrowest pane is about 20rem.
+export const TWO_PANE_COLUMNS =
+  "lg:grid-cols-[clamp(18rem,40%,32rem)_minmax(0,1fr)]";
+
 function MetaLabel({ label, hint }: { label: string; hint?: string }) {
   return (
     <span className="flex items-center gap-1.5 whitespace-nowrap">
@@ -278,12 +290,13 @@ export function ContactView({
           ("Contact fields | Inbox") spent a band under the title to say less
           than the icons say, in a language the pills already taught. */}
 
-      {/* 40/60 split, each column its own scroll region (WhatsApp Web / HubSpot
-          dual-scroll): the record scrolls left, the conversation scrolls right,
-          the page itself never does. */}
+      {/* 40/60 split capped at 32rem on the left (TWO_PANE_COLUMNS), each
+          column its own scroll region (WhatsApp Web / HubSpot dual-scroll):
+          the record scrolls left, the conversation scrolls right, the page
+          itself never does. */}
       {/* gap-2, matching the inbox (Serdar, 2026-08-28): record and
           conversation are one working surface. */}
-      <div className="grid min-h-0 min-w-0 flex-1 gap-2 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      <div className={`grid min-h-0 min-w-0 flex-1 gap-2 ${TWO_PANE_COLUMNS}`}>
         {/* Left: the record, everything ABOUT the customer. */}
         <div
           className={`${mobilePane === "record" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col lg:flex`}
@@ -436,9 +449,11 @@ export function ContactView({
                 other.
 
                 The fallback to one pair per row is a CONTAINER query, not a
-                viewport one. This panel is 2fr of a 2fr/3fr split, so it is
-                narrow on exactly the wide screens a `sm:` breakpoint calls
-                roomy: asking the viewport how much space this grid has is the
+                viewport one. This panel is the left of a 40/60 split capped
+                at 32rem (TWO_PANE_COLUMNS), so it is narrow on exactly the
+                wide screens a `sm:` breakpoint calls roomy, and stops
+                growing at all past the cap: asking the viewport how much
+                space this grid has is the
                 same mistake that made the values wrap in the first place.
                 20rem is measured, not guessed. Re-measured 2026-10-13 with all
                 six pairs, in the container's content box, Geist at text-xs,
