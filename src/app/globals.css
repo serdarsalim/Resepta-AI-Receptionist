@@ -126,13 +126,16 @@
   --event-past: color-mix(in srgb, var(--event) 9%, var(--card));
   --event-past-fg: color-mix(in srgb, var(--event) 45%, var(--muted));
   /* The now-line. Red like every calendar people already read, and red ONLY
-     here — it marks the moment, it is not a danger state. */
-  --now-line: #ef4444;
-  /* Calendar rules. Not --border: that one is tuned for the edge of a card,
-     where it has to be found, and a grid drawn at that weight reads as a
-     spreadsheet. These are the faintest lines that still divide. */
-  --grid-line: color-mix(in srgb, var(--border) 75%, transparent);
-  --grid-line-soft: color-mix(in srgb, var(--border) 38%, transparent);
+     here — it marks the moment, it is not a danger state. Google Calendar's
+     own red, a shade calmer than the #ef4444 it was (Nudge ac76510e). */
+  --now-line: #ea4335;
+  /* Calendar rules: Google Calendar's own, measured off it in Serdar's Chrome
+     (Nudge, 2026-10-12), a cool light grey drawn as 1px BORDERS. Not
+     --border: that one is tuned for the edge of a card, where it has to be
+     found, and a grid drawn at that weight reads as a spreadsheet. The hour
+     lines were a repeating gradient, which has no pixel to snap to: at 110%
+     browser zoom it smeared across two and read dark and rough. */
+  --grid-line: #dde3ea;
   /* Calendar dead space: closed hours, out-of-month cells. Mixed from the
      foreground rather than painted with --muted-bg, because in dark mode
      --muted-bg equals --card and anything wearing it disappears — the shading
@@ -223,9 +226,11 @@
   --event-soft: color-mix(in srgb, var(--event) 24%, var(--card));
   --event-past: color-mix(in srgb, var(--event) 12%, var(--card));
   --event-past-fg: color-mix(in srgb, var(--event) 55%, var(--muted));
-  --now-line: #ef4444;
-  --grid-line: color-mix(in srgb, var(--border) 85%, transparent);
-  --grid-line-soft: color-mix(in srgb, var(--border) 45%, transparent);
+  --now-line: #ea4335;
+  /* The dark table divider's value, at about the light line's contrast on
+     its card (1.27 against 1.25). The old --border mix was the same colour as
+     the closed-hours shading, so every rule vanished across closed time. */
+  --grid-line: #2e2e2e;
   --bubble-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.4);
   --thread-bg: #101010;
   --scrollbar-thumb: rgba(255, 255, 255, 0.16);

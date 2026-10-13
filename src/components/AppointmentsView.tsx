@@ -388,7 +388,11 @@ export function AppointmentsView({
             >
               <ChevronRight />
             </button>
-            <h3 className="ml-1 text-sm font-medium">{heading}</h3>
+            {/* Google's size for the period, 22px at regular weight: the
+                one line on the page that says WHEN you are looking at
+                (Nudge 80837ddd, Serdar 2026-10-12). It was 14px medium, the
+                same voice as a button label beside it. */}
+            <h3 className="ml-1 text-[22px] font-normal leading-7">{heading}</h3>
           </>
         )}
         <div className="ml-auto flex items-center gap-2">
@@ -1512,18 +1516,23 @@ function Calendar({
           : days.map((day) => {
               const isToday = startOfDay(now) === day;
               return (
+                // Google Calendar's day header (Nudge 8fee4481): a small
+                // weekday over a BIG date, today's date in a filled circle
+                // and its weekday in the same blue. The date is the
+                // coordinate, so it carries the size; the weekday only
+                // qualifies it. Sentence case, never Google's capitals: no
+                // uppercase anywhere is Serdar's oldest standing rule.
                 <div key={day} className="min-w-0 flex-1 pb-2 text-center">
-                  {/* Full-strength ink, not the timestamp grey: the dates and
-                      hours are the grid's coordinates, and coordinates you
-                      squint at defeat the grid. */}
-                  <div className="text-xs font-medium text-[var(--foreground)]">
+                  <div
+                    className={`text-[11px] font-medium ${
+                      isToday ? "text-[var(--accent)]" : "text-[var(--muted-strong)]"
+                    }`}
+                  >
                     {new Intl.DateTimeFormat(locale, { weekday: "short" }).format(new Date(day))}
                   </div>
                   <div
-                    className={`mx-auto mt-0.5 flex h-6 w-6 items-center justify-center rounded-full text-sm tabular-nums ${
-                      isToday
-                        ? "bg-[var(--accent)] font-semibold text-white"
-                        : "text-[var(--foreground)]"
+                    className={`mx-auto mt-1 flex h-10 w-10 items-center justify-center rounded-full text-[22px] tabular-nums ${
+                      isToday ? "bg-[var(--accent)] text-white" : "text-[var(--foreground)]"
                     }`}
                   >
                     {new Date(day).getDate()}
@@ -1543,14 +1552,17 @@ function Calendar({
           onPointerCancel={() => setDrag(null)}
         >
           {/* Hour gutter. Labels sit ON their line, so they read as the moment
-              the line marks rather than as a band. */}
+              the line marks rather than as a band. 10px in the strong grey,
+              Google's measure (Nudge 8fee4481): the hour is a coordinate the
+              eye finds by position, and at the old 11px ink it out-shouted
+              the bookings it was there to locate. */}
           <div ref={gutterRef} className="relative w-12 shrink-0">
             {hours.map((hour, i) => (
               <span
                 key={hour}
                 // The first label would be half cut by the top edge, so it
                 // hangs below its line instead of centring on it.
-                className={`absolute right-2 text-[11px] tabular-nums text-[var(--foreground)] ${
+                className={`absolute right-2 text-[10px] tabular-nums text-[var(--muted-strong)] ${
                   i === 0 ? "" : "-translate-y-1/2"
                 }`}
                 style={{ top: i * HOUR_PX }}
@@ -1558,20 +1570,10 @@ function Calendar({
                 {`${String(hour).padStart(2, "0")}:00`}
               </span>
             ))}
-            {/* The clock, level with the now-line. In the GUTTER rather than in
-                today's column, because the gutter is the one strip on the grid
-                with nothing to cover: over the column it would sit on whatever
-                is booked at this minute, which on a busy afternoon is exactly
-                when you are looking. It hides the hour label it lands on, which
-                is correct — the current time is the more useful of the two. */}
-            {columns.some((column) => startOfDay(now) === column.day) && (
-              <span
-                className="absolute right-1 z-30 -translate-y-1/2 rounded bg-[var(--now-line)] px-1 text-[10px] font-medium tabular-nums leading-4 text-white"
-                style={{ top: ((minutesInto(now) - dayStart * 60) / 60) * HOUR_PX }}
-              >
-                {formatTime(now, language)}
-              </span>
-            )}
+            {/* No clock in the gutter beside the now-line (Nudge 50b514f1,
+                Serdar 2026-10-12): Google draws the dot and the line only. The
+                red badge sat on the hour labels for ten minutes either side of
+                every hour, and the screen already has a clock. */}
           </div>
 
           {columns.map((column, columnIndex) => {
@@ -1593,26 +1595,6 @@ function Calendar({
                     ? "border-r border-[var(--grid-line)]"
                     : ""
                 }`}
-                // Hour and half-hour rules as background gradients: two
-                // hairlines per hour without a div per row.
-                //
-                // The half-hour line is the one that makes a 30-minute booking
-                // readable. Without it, judging whether a block starts at the
-                // hour or halfway through it means measuring by eye against a
-                // 56px gap, on a screen where almost every appointment is
-                // exactly half of one. It is drawn much fainter than the hour
-                // so the hour still reads as the structure.
-                //
-                // The half-hour gradient carries its own full-hour period with
-                // the line placed midway, rather than a half-hour period, which
-                // would redraw over every hour line at the wrong weight.
-                style={{
-                  backgroundImage: [
-                    "repeating-linear-gradient(to bottom, var(--grid-line) 0 1px, transparent 1px var(--hour))",
-                    "repeating-linear-gradient(to bottom, transparent 0 calc(var(--hour) / 2), var(--grid-line-soft) calc(var(--hour) / 2) calc(var(--hour) / 2 + 1px), transparent calc(var(--hour) / 2 + 1px) var(--hour))",
-                  ].join(", "),
-                  ["--hour" as string]: `${HOUR_PX}px`,
-                }}
                 // Pointer down on the column ITSELF (never on a block, which
                 // stops propagation) starts drawing a new slot.
                 onPointerDown={(event) => {
@@ -1647,6 +1629,24 @@ function Calendar({
                     aria-hidden
                     className="pointer-events-none absolute inset-x-0 bg-[var(--closed-bg)]"
                     style={{ top: band.top, height: band.height }}
+                  />
+                ))}
+                {/* Hour lines, Google Calendar's way (measured off it in
+                    Nudge, 2026-10-12): one 1px BORDER per hour. They were a
+                    repeating gradient, which has no pixel to snap to, so at
+                    110% browser zoom a line smeared across two and read dark
+                    and rough; a border lands on one. Hours only: the faint
+                    half-hour line went as clutter (Nudge 8fee4481), and a drag
+                    still snaps to 15 minutes. The first hour's line is the
+                    header's own bottom border. Drawn AFTER the closed bands,
+                    so every hour line sits over the shading (the calendar
+                    rule in design-language.md). */}
+                {hours.slice(1).map((hour) => (
+                  <div
+                    key={`line-${hour}`}
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 border-t border-[var(--grid-line)]"
+                    style={{ top: (hour - dayStart) * HOUR_PX }}
                   />
                 ))}
                 {/* Each closure's name tag, pinned to the top of its band.
@@ -1832,38 +1832,40 @@ function Calendar({
                           style={{ height: RESIZE_HANDLE_PX }}
                         />
                       )}
-                      {/* A half-hour block is one line tall, so the time and
-                          the name share it rather than clipping.
-
-                          Too narrow for both: the NAME wins, not the time. The
-                          block's position on the grid already says when it is,
-                          which makes the clock the redundant half here. Two
-                          15:30 blocks both reading "15:30" told you nothing. */}
-                      {narrow && height < 40 ? (
-                        <span className="block truncate font-medium">
-                          {name || formatTime(row.startAt, language)}
-                        </span>
-                      ) : narrow ? (
-                        <>
-                          <span className="block truncate font-medium tabular-nums">
-                            {formatTime(row.startAt, language)}
-                          </span>
-                          <span className="block truncate">{name}</span>
-                        </>
-                      ) : height < 40 ? (
+                      {/* Google Calendar's order: WHO first, then when
+                          (Nudge 8fee4481). The block's position on the grid
+                          already says when it is, so the clock is the
+                          redundant half and the name leads. A half-hour block
+                          is one line tall: "Ayşe Yılmaz, 10:00", the time
+                          dropped when the lane is too narrow for both (two
+                          15:30 blocks both reading "15:30" told you nothing).
+                          Taller blocks put the span under the name, and the
+                          service under that when there is room. A goods order
+                          has a moment, not a span, so it prints its start. */}
+                      {height < 40 ? (
                         <span className="block truncate">
-                          <span className="font-medium tabular-nums">
-                            {formatTime(row.startAt, language)}
-                          </span>{" "}
-                          {name}
+                          <span className="font-medium">
+                            {name || formatTime(row.startAt, language)}
+                          </span>
+                          {!narrow && name && (
+                            <span className="tabular-nums">
+                              , {formatTime(row.startAt, language)}
+                            </span>
+                          )}
                         </span>
                       ) : (
                         <>
-                          <span className="block truncate font-medium tabular-nums">
-                            {formatTime(row.startAt, language)}
+                          <span className="block truncate font-medium">{name}</span>
+                          <span className="block truncate tabular-nums">
+                            {narrow || isGood
+                              ? formatTime(row.startAt, language)
+                              : `${formatTime(row.startAt, language)} – ${formatTime(
+                                  row.startAt +
+                                    (row.durationMinutes ?? DEFAULT_DURATION) * 60_000,
+                                  language,
+                                )}`}
                           </span>
-                          <span className="block truncate">{name}</span>
-                          {height > 60 && row.serviceName && (
+                          {height > 60 && !narrow && row.serviceName && (
                             <span className="block truncate opacity-70">
                               {row.serviceName}
                             </span>
@@ -1876,10 +1878,13 @@ function Calendar({
                 {showNow && (
                   <div
                     aria-hidden
-                    className="pointer-events-none absolute inset-x-0 z-30 border-t-2 border-[var(--now-line)]"
+                    // A 1.5px line and a 10px dot, centred on it (Nudge
+                    // ac76510e, Serdar 2026-10-13: "thinner, a bit subtler").
+                    // At 2px and 12px it was the loudest mark on a dark grid.
+                    className="pointer-events-none absolute inset-x-0 z-30 border-t-[1.5px] border-[var(--now-line)]"
                     style={{ top: ((minutesInto(now) - dayStart * 60) / 60) * HOUR_PX }}
                   >
-                    <span className="absolute -left-[5px] -top-[7px] h-3 w-3 rounded-full bg-[var(--now-line)]" />
+                    <span className="absolute -left-[5px] -top-[5.75px] h-2.5 w-2.5 rounded-full bg-[var(--now-line)]" />
                   </div>
                 )}
               </div>

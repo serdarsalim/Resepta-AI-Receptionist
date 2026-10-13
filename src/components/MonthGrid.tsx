@@ -131,11 +131,13 @@ export function MonthGrid({
   return (
     // Same card as the week grid: white paper on the page gradient.
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-[var(--card)] shadow-[var(--card-shadow)]">
-      <div className="grid grid-cols-7">
+      {/* pt-2, the week grid's reason: a weekday name flush against the
+          card's top edge reads as clipped (Nudge's month carries it too). */}
+      <div className="grid grid-cols-7 pt-2">
         {headers.map((name) => (
           <div
             key={name}
-            className="pb-1 text-center text-[11px] font-medium text-[var(--foreground)]"
+            className="pb-1 text-center text-[11px] font-medium text-[var(--muted-strong)]"
           >
             {name}
           </div>
