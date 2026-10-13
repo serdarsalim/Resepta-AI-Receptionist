@@ -32,7 +32,6 @@ import {
   Errors,
   PercentRow,
   Row,
-  SearchSelect,
   Section,
   SecretRow,
   TabStrip,
@@ -40,6 +39,7 @@ import {
 import { OnboardingTab } from "./onboarding";
 import { TemplatesTab } from "./templates";
 import { InfoTip } from "@/components/InfoTip";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { SearchInput } from "@/components/DataTable";
 import {
   decodeEngine,
@@ -527,7 +527,7 @@ export default function AdminPage() {
                 <InfoTip text="What every agent without its own Engine override runs. Applies to new agents and to existing ones on their next template sync or engine publish; it does not repoint already-published agents by itself. Per-agent pickers on each business page always win." />
               </div>
               <div>
-                <SearchSelect
+                <SearchableSelect
                   value={
                     mail.voiceModel
                       ? encodeEngine(
@@ -549,7 +549,7 @@ export default function AdminPage() {
                     ...voiceEngineChoices().map((choice) => ({
                       value: choice.value,
                       label: choice.label,
-                      hint: formatVoicePrice(choice.usdPerMinute),
+                      note: formatVoicePrice(choice.usdPerMinute),
                     })),
                   ]}
                   onChange={(next) => {

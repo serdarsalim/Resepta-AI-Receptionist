@@ -37,7 +37,6 @@ import {
   Plane,
   PercentRow,
   Row,
-  SearchSelect,
   Section,
   SecretRow,
   TabStrip,
@@ -45,6 +44,7 @@ import {
 } from "../parts";
 import { CheckMark, SearchInput } from "@/components/DataTable";
 import { InfoTip } from "@/components/InfoTip";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { useSearch } from "@/lib/useTableState";
 import { MembersCard } from "./members";
 
@@ -596,7 +596,8 @@ export default function TenantPage() {
                   distinction the row cannot make anyway. */}
                 <td className="py-2 pr-3">
                   <div className="flex items-center gap-2 text-xs">
-                <SearchSelect
+                <SearchableSelect
+                  size="xs"
                   className="w-52"
                   value={
                     agent.llmModel
@@ -624,7 +625,7 @@ export default function TenantPage() {
                     ...voiceEngineChoices().map((choice) => ({
                       value: choice.value,
                       label: choice.label,
-                      hint: formatVoicePrice(choice.usdPerMinute),
+                      note: formatVoicePrice(choice.usdPerMinute),
                     })),
                   ]}
                   onChange={(next) => {
