@@ -55,9 +55,12 @@ export function LegalDocument({
         {doc.sections.map((section) => {
           const body = shown(section.body);
           const bullets = shown(section.bullets);
+          const after = shown(section.after);
           // A section whose every line needed the address says nothing
           // without it, so its heading goes too.
-          if (body.length === 0 && bullets.length === 0) return null;
+          if (body.length === 0 && bullets.length === 0 && after.length === 0) {
+            return null;
+          }
           return (
             <section key={section.heading} className="mt-8">
               <h2 className="text-lg font-semibold">{section.heading}</h2>
@@ -75,6 +78,11 @@ export function LegalDocument({
                   ))}
                 </ul>
               )}
+              {after.map((paragraph) => (
+                <p key={paragraph} className="mt-3 leading-relaxed">
+                  <LegalText text={paragraph} contactEmail={contactEmail} />
+                </p>
+              ))}
             </section>
           );
         })}

@@ -13,9 +13,11 @@
 // owners of duties they actually carry. Turkish law here is KVKK, not GDPR.
 //
 // Accuracy note for whoever edits next: every data category listed below is
-// checked against convex/schema.ts. If you add a field that holds personal
-// data, it belongs in section "What we store" in all three languages, or this
-// document becomes false.
+// checked against convex/schema.ts, and every company against the code that
+// sends data to it (the map is above PRIVACY). If you add a field that holds
+// personal data, it belongs in "What we store" in all three languages; if you
+// send personal data to a new company, it belongs in "Who handles data for
+// us". Otherwise this document becomes false.
 import type { Language } from "./i18n";
 
 // Where a sentence names our contact address. The address itself is NOT in
@@ -32,6 +34,9 @@ export type LegalSection = {
   heading: string;
   body?: string[];
   bullets?: string[];
+  // Paragraphs that qualify the list above them and so read after it, such
+  // as where the listed companies are based.
+  after?: string[];
 };
 
 export type LegalDoc = {
@@ -73,71 +78,109 @@ export const LEGAL_UI: Record<
 // with what the page itself says or the claim is worthless. Six `updated`
 // strings below (three languages, two documents) and this constant move
 // together or not at all.
-export const LEGAL_UPDATED_ISO = "2026-07-30";
+export const LEGAL_UPDATED_ISO = "2026-10-13";
+
+// Every fact below was checked against the code on 2026-10-13, not carried
+// over from the previous text. Where each one lives, for the next check:
+//   - the sub-processor list: every place the backend or the browser sends
+//     personal data out (convex/lib/llm.ts, waCloud.ts, email.ts,
+//     emailInbound.ts, evolution.ts, retellAgent.ts, wallet.ts, the Google
+//     provider in convex/auth.ts, src/lib/detectCountry.ts). A new one goes
+//     on the list in the same change, in all three languages.
+//   - consent: wa.ts sendAppointmentMessage and sendSession require
+//     customers.consentAt, sendAwayReply and the assistant's auto-send do not
+//     (chatAgent.fireAutoSend); bulkRuns.skipReason and campaigns.ts skip
+//     anyone without it; booking.book stamps it for a new customer and
+//     retell.agentBookTx for anyone an assistant books.
+//   - deletion: customers.remove (owners, convex/customerDeletion.ts) and
+//     platform.deleteOrg (the operator, purge starts at once, no restore).
+//   - fees: wallet.ts, lib/foundOrg.ts (trial credit), retell.meterCall,
+//     chatAgent.recordTurn, lib/usage.ts (WhatsApp template sends).
+//   - open tracking: lib/email.withOpenPixel on rule, campaign and bulk mail.
 
 export const PRIVACY: Record<Language, LegalDoc> = {
   tr: {
     title: "Gizlilik politikası",
-    updated: "30 Temmuz 2026",
+    updated: "13 Ekim 2026",
     intro: [
-      "Resepta, küçük işletmelerin randevularını yönetmesini ve müşterilerine WhatsApp üzerinden hatırlatma göndermesini sağlar. Bu politika hangi verileri tuttuğumuzu, neden tuttuğumuzu ve kimlerle paylaştığımızı anlatır.",
-      "Burada iki ayrı rol var ve aradaki fark önemli. İşletme sahibinin kendi hesap bilgileri için veri sorumlusu biziz. İşletmenin müşteri kayıtları için veri sorumlusu işletmenin kendisidir, biz yalnızca onun talimatıyla veri işleyen tarafız.",
+      "Resepta, randevuyla çalışan işletmeler için bir yazılımdır. İşletmenin takvimini ve müşteri kayıtlarını tutar, ona bir randevu sayfası verir, müşterilerine WhatsApp ve e-postayla onay ve hatırlatma gönderir, aramaları ve WhatsApp mesajlarını yapay zekâ asistanlarıyla yanıtlar. Bu sayfa hangi verileri tuttuğumuzu, neden tuttuğumuzu ve başka kimlerin işlediğini anlatır.",
+      "Burada iki ayrı rol var ve aradaki fark önemli. Resepta'yı kullanan kişilerin hesap bilgileri için veri sorumlusu biziz. Bir işletmenin müşteri kayıtları için veri sorumlusu işletmenin kendisidir; biz yalnızca onun talimatıyla veri işleyen tarafız.",
     ],
     sections: [
       {
         heading: "Hesabınız için tuttuğumuz veriler",
         body: [
-          "Google ile giriş yaptığınızda Google bize adınızı, e-posta adresinizi ve profil fotoğrafınızın adresini iletir. Şifrenizi görmüyoruz ve saklamıyoruz.",
-          "Bu verileri hesabınızı oluşturmak, sizi işletmenizle eşleştirmek ve size hizmetle ilgili bildirim göndermek için kullanırız.",
+          "Google ile giriş yaptığınızda Google bize adınızı, e-posta adresinizi ve profil fotoğrafınızın bağlantısını iletir. Şifrenizi hiçbir zaman görmez, saklamayız.",
+          "Hangi işletmelere bağlı olduğunuzu ve her birindeki rolünüzü, dil ve görünüm tercihlerinizi ve hangi bildirim e-postalarını almak istediğinizi de tutarız. Bir işletme sahibi sizi davet ettiğinde e-posta adresinizi davetle birlikte saklar ve size bununla ilgili bir e-posta göndeririz.",
+          "Bir işletme için adını, logosunu, telefon numarasını ve çalışma saatlerini, hizmetlerini ve fiyatlarını, ekip üyelerinin adlarını, asistanlarına kendisi hakkında verdiği bilgileri, bakiye yüklemelerini ve kullanımını, telefon numarası başvurusu için yüklediği belgeleri tutarız.",
+          "Bu verileri hesabı yürütmek, sizi işletmenizle eşleştirmek, kullanımı ücretlendirmek ve size hizmetle ilgili bildirim göndermek için kullanırız.",
         ],
       },
       {
-        heading: "İşletmenin müşterileri adına tuttuğumuz veriler",
+        heading: "İşletme adına tuttuğumuz veriler",
         body: [
-          "İşletme, müşterilerine ait şu kayıtları sisteme girer veya sistem bu kayıtları hizmet sırasında oluşturur:",
+          "İşletme, müşterilerine ait şu kayıtları sisteme girer veya sistem bunları hizmet sırasında oluşturur:",
         ],
         bullets: [
           "Ad, soyad, telefon numarası, varsa e-posta adresi ve tercih edilen dil",
-          "Resepta geçmişi, hizmet türü, personel ve süre bilgisi",
-          "WhatsApp yazışmalarının içeriği ve gönderim durumu",
-          "Telefonla gelen aramaların ses kaydı, dökümü ve özeti",
-          "İşletmenin kendi tanımladığı ek alanlar ve müşteri notları",
-          "WhatsApp mesajı için onayın alındığı tarih",
+          "Randevular ve siparişler: saat, hizmetler, ekip üyesi, durum, notlar ve verilmişse teslimat adresi",
+          "İki yönlü WhatsApp mesajları ve e-postalar; fotoğraflar, sesli mesajlar ve dosyalar dahil, iletim durumlarıyla birlikte",
+          "Randevuyla ilgili bir e-postanın ya da bir kampanya veya toplu e-postanın açılıp açılmadığı ve ne zaman açıldığı. Bu e-postalardaki küçük bir görsel açılmayı bildirir.",
+          "Telefon asistanıyla yapılan gelen ve giden aramalar: kimin kimi ne zaman aradığı, konuşmanın dökümü, özeti ve toplanan yanıtlar. Ses kaydı telefon sağlayıcısında kalır ve oradan dinletilir.",
+          "WhatsApp asistanının taslakları ve yanıtları, yaptığı ya da önerdiği değişiklikler",
+          "İşletmenin tanımladığı ek alanlar, serbest notlar ve müşterilerin online randevu alırken bıraktığı notlar",
+          "Mesaj izninin kaydedildiği tarih; müşterinin yapay zekâ araması istemediği ya da pazarlama e-postalarından çıktığı bilgisi",
+          "Müşterilerde ve randevularda yapılan değişikliklerin ve bunları kimin yaptığının kaydı",
         ],
       },
       {
-        heading: "Onay olmadan mesaj gitmez",
+        heading: "İşletmenin başlattığı mesajlar izin ister",
         body: [
-          "Bir müşteri kaydında onay tarihi yoksa sistem o numaraya WhatsApp mesajı göndermez. Bu bir tercih değil, kodun içindeki bir kilit. Onayı toplamak ve kaydetmek işletmenin sorumluluğundadır.",
+          "Resepta onayları, hatırlatmaları, iptal bildirimlerini, takip ve geri kazanım mesajlarını, kampanyaları, toplu mesajları ve toplu aramaları yalnızca kaydında izin tarihi olan müşterilere gönderir. İşletme çalışanlarının yazdığı WhatsApp mesajları için de bu tarih gerekir. Bu bir ayar değil, kodun içindeki bir kontroldür.",
+          "Yanıtlar farklıdır. İşletme kapalıyken giden otomatik yanıt ve WhatsApp asistanının cevapları, müşterinin az önce gönderdiği bir mesaja karşılık verir; bu yüzden izin tarihi aranmadan gider.",
+          "Yeni bir müşteri randevu sayfasından randevu aldığında ve herhangi bir müşteri telefon asistanından ya da WhatsApp asistanından randevu aldığında izin tarihini Resepta kendisi kaydeder. Bunun dışında izni almak ve kaydetmek işletmenin sorumluluğundadır.",
+          "Yapay zekâ araması istemeyen müşteri otomatik aramalara alınmaz. Pazarlama e-postalarından çıkan müşteriye artık kampanya, toplu ve geri kazanım e-postası gitmez. İkisi de onay ve hatırlatmaları durdurmaz.",
         ],
       },
       {
-        heading: "Verileri kimlerle paylaşıyoruz",
+        heading: "Verileri bizim için kimler işliyor",
         body: [
-          "Hizmeti çalıştırmak için aşağıdaki sağlayıcıları kullanıyoruz. Her biri yalnızca kendi işi için gereken veriyi görür.",
+          "Hizmeti çalıştırmak için aşağıdaki şirketlerle çalışıyoruz. Her biri yalnızca kendi işi için gerekeni alır.",
         ],
         bullets: [
-          "Convex: veritabanı ve uygulama altyapısı",
-          "Vercel: web arayüzünün barındırılması",
-          "Google: hesap girişi",
-          "Meta WhatsApp Cloud API: WhatsApp mesajlarının gönderilmesi ve alınması",
-          "cal.com: takvim ve randevu kayıtları",
-          "Retell: telefon çağrılarının yanıtlanması ve dökümü",
-          "Resend: e-posta gönderimi",
+          "Convex: veritabanı, uygulama altyapısı ve dosya depolama",
+          "Vercel: web uygulamasının barındırılması, e-postalardaki bağlantılar dahil",
+          "Google: giriş",
+          "Meta (WhatsApp Business Platform): WhatsApp mesajlarının gönderilmesi ve alınması",
+          "Retell AI: telefon asistanının aramaları yanıtlaması ve yapması, aramaların kaydı ve dökümü",
+          "Resend: e-posta gönderimi ve alımı",
+          "OpenAI ve Anthropic: WhatsApp asistanının yanıtlarını yazan yapay zekâ modelleri. Kullanılan model konuşmayı, müşterinin adını ve randevularını ve yanıt için gereken işletme bilgilerini alır.",
+          "Stripe: bakiye yüklemelerinde kartla ödeme. Kart bilgileri doğrudan Stripe'a gider, bize hiç ulaşmaz.",
+          "GeoJS: randevu sayfasındaki ve uygulamadaki telefon alanları, alan kodunu doldurmak için ziyaretçinin hangi ülkede olduğunu IP adresinden sorar.",
+        ],
+        after: [
+          "Bir işletme WhatsApp Business numarası yerine kendi WhatsApp telefonunu bağladığında mesajları, bu bağlantı için çalıştırdığımız bir mesajlaşma sunucusundan geçer. Mesajları yine WhatsApp taşır.",
+          "Bu şirketler Türkiye dışındadır, çoğu ABD'dedir; işledikleri veriler yurt dışında işlenir.",
+          "Bir işletme kendi yapay zekâ asistanını, örneğin Claude veya ChatGPT'yi, Resepta hesabına bağlayabilir. Bu asistan, işletme istediğinde işletmenin kayıtlarını okuyabilir ve değiştirebilir. Bu bağlantı işletmenin tercihidir ve işletmenin o asistanın sağlayıcısındaki kendi hesabıyla çalışır.",
         ],
       },
       {
         heading: "Verileri ne kadar süre tutuyoruz",
         body: [
-          "Hesabınız açık olduğu sürece işletmenizin kayıtlarını tutarız. Hesabınızı kapattığınızda kayıtlar en fazla otuz gün içinde silinir. Bu süre, yanlışlıkla silinen bir hesabın geri getirilebilmesi içindir.",
-          "Yasal olarak saklamak zorunda olduğumuz kayıtlar bu sürenin dışındadır.",
+          "Bir işletmenin kayıtlarını, işletme daha önce silmedikçe hesabı açık kaldığı sürece tutarız.",
+          "İşletme sahibi bir müşteriyi müşterinin kaydından silebilir. Müşteri hemen her listeden kalkar, hakkında tutulan her şey de hemen ardından silinir: randevular, mesajlar, aramalar, notlar ve asistanın yanıtları. Bu geri alınamaz. Değişiklik kaydında bir müşterinin silindiğini ve kimin sildiğini gösteren bir satır kalır; müşterinin kim olduğu kalmaz.",
+          "Bir hesabı, sahibi istediğinde kapatırız. Kapatmak işletmeyi ve onun için tutulan her şeyi siler. Silme hemen başlar ve geri alınamaz; kapatılan bir hesabın geri getirilebileceği bir süre yoktur.",
+          "Bir hesabı kapatmak ya da kendi giriş bilgilerinizi sildirmek için {contact} adresine yazın.",
+          "Yukarıdaki şirketler kendi kopyalarını kendi kurallarına göre saklar; örneğin telefon sağlayıcısındaki bir arama kaydı ya da WhatsApp'taki bir mesaj. Bir müşteriyi silmek veya bir hesabı kapatmak bu kopyaları kaldırmaz.",
         ],
       },
       {
         heading: "Haklarınız",
         body: [
-          "KVKK kapsamında verilerinize erişme, düzeltilmesini isteme, silinmesini isteme ve işlenmesine itiraz etme hakkınız var. Talebinizi bize iletirseniz otuz gün içinde yanıtlarız.",
-          "Bir işletmenin müşterisiyseniz ve kaydınızın silinmesini istiyorsanız, doğrudan randevu aldığınız işletmeye başvurmanız gerekir. Kayıt onlara ait, biz yalnızca onların adına tutuyoruz. Bize ulaşırsanız talebinizi ilgili işletmeye yönlendiririz.",
+          "KVKK kapsamında verilerinize erişme, bunların düzeltilmesini veya silinmesini isteme ve işlenmesine itiraz etme hakkınız var.",
+          "{contact} adresine yazın, otuz gün içinde yanıtlarız.",
+          "Resepta kullanan bir işletmenin müşterisiyseniz kaydınız o işletmeye aittir; talebinizi doğrudan işletmeye iletin. İşletme bilgilerinizi düzeltebilir, size yapılan yapay zekâ aramalarını ya da gönderilen pazarlama e-postalarını durdurabilir veya kaydınızı silebilir. Talebiniz bize ulaşırsa ilgili işletmeye iletiriz.",
+          "Pazarlama e-postalarını kendiniz durdurmak için herhangi birinin altındaki abonelikten çıkma bağlantısını kullanın.",
         ],
       },
       {
@@ -150,73 +193,93 @@ export const PRIVACY: Record<Language, LegalDoc> = {
       {
         heading: "Değişiklikler",
         body: [
-          "Bu politikayı güncellediğimizde sayfadaki tarihi değiştiririz. Önemli bir değişiklik olursa uygulama içinde bildiririz.",
+          "Bu politikayı değiştirdiğimizde sayfanın başındaki tarihi de değiştiririz.",
         ],
       },
     ],
   },
   en: {
     title: "Privacy policy",
-    updated: "30 July 2026",
+    updated: "13 October 2026",
     intro: [
-      "Resepta helps small businesses manage appointments and send WhatsApp reminders to their customers. This page explains what we store, why, and who else sees it.",
-      "There are two roles here and the difference matters. For a business owner's own account details, we are the data controller. For the records of that business's customers, the business is the controller and we are a processor acting on its instructions.",
+      "Resepta is software for businesses that work by appointment. It keeps a business's calendar and customer records, gives it a booking page, sends its customers confirmations and reminders by WhatsApp and email, and answers calls and WhatsApp messages with AI assistants. This page explains what we store, why, and who else handles it.",
+      "There are two roles here, and the difference matters. For the account details of the people who use Resepta, we are the data controller. For a business's customer records, the business is the controller and we are a processor acting on its instructions.",
     ],
     sections: [
       {
         heading: "What we store for your account",
         body: [
-          "When you sign in with Google, Google passes us your name, email address, and a link to your profile picture. We never see or store your password.",
-          "We use this to create your account, connect you to your business, and send you notices about the service.",
+          "When you sign in with Google, Google passes us your name, email address and a link to your profile picture. We never see or store a password.",
+          "We also keep which businesses you belong to and your role in each, your language and display settings, and which notification emails you want. When an owner invites you, we keep your email address with the invitation and email you about it.",
+          "For a business we keep its name, logo, phone number and opening hours, its services and prices, the names of its team members, what it tells its assistants about itself, its balance top-ups and usage, and any document it uploads to apply for a phone number.",
+          "We use this to run the account, connect you to your business, charge for use and send you notices about the service.",
         ],
       },
       {
         heading: "What we store on behalf of a business",
         body: [
-          "A business enters the following records about its customers, or the service creates them while doing its job:",
+          "A business enters the following about its customers, or the service creates it while doing its job:",
         ],
         bullets: [
           "Name, phone number, email address where given, and preferred language",
-          "Appointment history, service type, staff member, and duration",
-          "The content and delivery status of WhatsApp conversations",
-          "Recordings, transcripts, and summaries of inbound phone calls",
-          "Custom fields the business defines, and free-text notes",
-          "The date consent to receive WhatsApp messages was recorded",
+          "Appointments and orders: time, services, team member, status, notes, and a delivery address where one is given",
+          "WhatsApp messages and emails in both directions, including photos, voice messages and files, with their delivery status",
+          "Whether and when an email about an appointment, or a campaign or bulk email, was opened. These emails contain a small image that reports the open.",
+          "Calls with the phone agent in both directions: who called whom and when, a transcript, a summary and the answers collected. The recording stays with the voice provider and plays from there.",
+          "The WhatsApp assistant's drafts and replies, and the changes it made or proposed",
+          "Fields the business defines, free-text notes, and notes customers leave when they book online",
+          "The date consent to messages was recorded, and whether the customer asked for no AI calls or unsubscribed from marketing email",
+          "A record of changes to customers and appointments, and who made them",
         ],
       },
       {
-        heading: "No consent, no message",
+        heading: "Messages a business starts need consent",
         body: [
-          "If a customer record carries no consent date, the system will not send a WhatsApp message to that number. That is a lock in the code, not a setting. Collecting and recording consent is the business's responsibility.",
+          "Resepta sends confirmations, reminders, cancellation notices, follow-ups, win-back messages, campaigns, bulk messages and bulk calls only to customers whose record carries a consent date. WhatsApp messages the business's staff write need it too. This is a check in the code, not a setting.",
+          "Replies are different. The automatic reply sent while the business is closed, and the WhatsApp assistant's answers, respond to a message the customer has just sent, so they go out without a consent date.",
+          "Resepta records the consent date itself when a new customer books on the booking page, and when any customer books with the phone agent or the WhatsApp assistant. Beyond that, collecting and recording consent is the business's responsibility.",
+          "A customer who asked for no AI calls is left out of automated calls. One who unsubscribed from marketing email gets no more campaign, bulk or win-back emails. Neither stops their confirmations or reminders.",
         ],
       },
       {
-        heading: "Who we share data with",
+        heading: "Who handles data for us",
         body: [
-          "We use these providers to run the service. Each sees only the data its own job requires.",
+          "We use these companies to run the service. Each gets only what its own job needs.",
         ],
         bullets: [
-          "Convex: database and application backend",
-          "Vercel: hosting for the web interface",
-          "Google: account sign-in",
-          "Meta WhatsApp Cloud API: sending and receiving WhatsApp messages",
-          "cal.com: calendar and booking records",
-          "Retell: answering and transcribing phone calls",
-          "Resend: outbound email",
+          "Convex: database, application backend and file storage",
+          "Vercel: hosting for the web app, including the links in emails",
+          "Google: sign-in",
+          "Meta (WhatsApp Business Platform): sending and receiving WhatsApp messages",
+          "Retell AI: answering and placing the phone agent's calls, and recording and transcribing them",
+          "Resend: sending and receiving email",
+          "OpenAI and Anthropic: the AI models that write the WhatsApp assistant's replies. The one in use receives the conversation, the customer's name and appointments, and the business details the assistant needs to answer.",
+          "Stripe: card payments for balance top-ups. Card details go to Stripe directly and never reach us.",
+          "GeoJS: phone number fields on the booking page and in the app ask it which country the visitor is in, from their IP address, to fill in the dialling code.",
+        ],
+        after: [
+          "When a business links its own WhatsApp phone instead of a WhatsApp Business number, its messages pass through a messaging server we run for that connection. WhatsApp still carries them.",
+          "These companies are based outside Türkiye, most of them in the United States, so the data they handle is processed abroad.",
+          "A business can also connect an AI assistant of its own, such as Claude or ChatGPT, to its Resepta account. That assistant can then read and change the business's records when the business asks it to. The connection is the business's choice and runs under its own account with that assistant's provider.",
         ],
       },
       {
         heading: "How long we keep it",
         body: [
-          "We keep a business's records for as long as its account is open. When an account is closed, records are deleted within thirty days. That window exists so an account closed by mistake can be recovered.",
-          "Records we are legally required to retain sit outside that window.",
+          "We keep a business's records while its account is open, unless the business deletes them sooner.",
+          "An owner can delete a customer from the customer's record. The customer leaves every list at once, and everything held on them is erased right after: appointments, messages, calls, notes and the assistant's replies. This cannot be undone. The record of changes keeps a line saying that a customer was deleted and by whom, never who the customer was.",
+          "We close an account when its owner asks us to. Closing it deletes the business and everything stored for it. Deletion starts at once and cannot be undone: there is no period in which a closed account can be brought back.",
+          "To close an account, or to have your own sign-in details deleted, write to us at {contact}.",
+          "The companies listed above keep their own copies under their own rules, such as a call recording at the voice provider or a message at WhatsApp. Deleting a customer or closing an account does not remove those copies.",
         ],
       },
       {
         heading: "Your rights",
         body: [
-          "You can ask to see your data, correct it, delete it, or object to how it is processed. Send us a request and we will answer within thirty days.",
-          "If you are a customer of a business using Resepta and you want your record deleted, ask that business directly. The record belongs to them and we hold it on their behalf. If you contact us, we will pass your request to them.",
+          "Under KVKK, Türkiye's data protection law, you can ask to see your data, have it corrected or deleted, and object to how it is processed.",
+          "Write to us at {contact} and we will answer within thirty days.",
+          "If you are a customer of a business that uses Resepta, your record belongs to that business, so ask the business directly. It can correct your details, stop AI calls or marketing email to you, or delete your record. If your request reaches us, we pass it on to the business.",
+          "To stop marketing emails yourself, use the unsubscribe link at the bottom of any of them.",
         ],
       },
       {
@@ -228,74 +291,92 @@ export const PRIVACY: Record<Language, LegalDoc> = {
       },
       {
         heading: "Changes",
-        body: [
-          "When we update this policy we change the date on this page. If a change is significant, we will say so inside the app.",
-        ],
+        body: ["When we change this policy, we change the date at the top of this page."],
       },
     ],
   },
   de: {
     title: "Datenschutzerklärung",
-    updated: "30. Juli 2026",
+    updated: "13. Oktober 2026",
     intro: [
-      "Resepta hilft kleinen Betrieben, Termine zu verwalten und Erinnerungen per WhatsApp zu verschicken. Diese Seite erklärt, welche Daten wir speichern, warum, und wer sie noch sieht.",
-      "Es gibt hier zwei Rollen, und der Unterschied ist wichtig. Für die Kontodaten eines Inhabers sind wir Verantwortlicher. Für die Kundendaten des Betriebs ist der Betrieb der Verantwortliche und wir sind Auftragsverarbeiter nach seinen Weisungen.",
+      "Resepta ist eine Software für Betriebe, die mit Terminen arbeiten. Sie führt den Kalender und die Kundendaten eines Betriebs, stellt ihm eine Buchungsseite bereit, schickt seinen Kunden Bestätigungen und Erinnerungen per WhatsApp und E-Mail und beantwortet Anrufe und WhatsApp-Nachrichten mit KI-Assistenten. Diese Seite erklärt, welche Daten wir speichern, warum, und wer sie noch verarbeitet.",
+      "Es gibt hier zwei Rollen, und der Unterschied ist wichtig. Für die Kontodaten der Menschen, die Resepta nutzen, sind wir Verantwortlicher. Für die Kundendaten eines Betriebs ist der Betrieb der Verantwortliche, und wir sind Auftragsverarbeiter nach seinen Weisungen.",
     ],
     sections: [
       {
         heading: "Was wir für Ihr Konto speichern",
         body: [
-          "Wenn Sie sich mit Google anmelden, übermittelt Google uns Ihren Namen, Ihre E-Mail-Adresse und einen Link zu Ihrem Profilbild. Ihr Passwort sehen und speichern wir nicht.",
-          "Wir nutzen diese Daten, um Ihr Konto anzulegen, Sie Ihrem Betrieb zuzuordnen und Ihnen Mitteilungen zum Dienst zu senden.",
+          "Wenn Sie sich mit Google anmelden, übermittelt Google uns Ihren Namen, Ihre E-Mail-Adresse und einen Link zu Ihrem Profilbild. Ein Passwort sehen und speichern wir nie.",
+          "Außerdem speichern wir, zu welchen Betrieben Sie gehören und mit welcher Rolle, Ihre Sprach- und Anzeigeeinstellungen und welche Benachrichtigungen per E-Mail Sie erhalten möchten. Lädt ein Inhaber Sie ein, speichern wir Ihre E-Mail-Adresse mit der Einladung und schreiben Ihnen dazu eine E-Mail.",
+          "Für einen Betrieb speichern wir Name, Logo, Telefonnummer und Öffnungszeiten, seine Leistungen und Preise, die Namen der Teammitglieder, was er seinen Assistenten über sich mitteilt, Guthabenaufladungen und Nutzung sowie Unterlagen, die er für die Beantragung einer Telefonnummer hochlädt.",
+          "Wir nutzen diese Daten, um das Konto zu führen, Sie Ihrem Betrieb zuzuordnen, die Nutzung abzurechnen und Ihnen Mitteilungen zum Dienst zu senden.",
         ],
       },
       {
         heading: "Was wir im Auftrag eines Betriebs speichern",
         body: [
-          "Ein Betrieb erfasst die folgenden Daten über seine Kunden, oder der Dienst erzeugt sie im laufenden Betrieb:",
+          "Ein Betrieb erfasst die folgenden Daten über seine Kunden, oder der Dienst erzeugt sie bei seiner Arbeit:",
         ],
         bullets: [
           "Name, Telefonnummer, E-Mail-Adresse sofern angegeben, und bevorzugte Sprache",
-          "Terminverlauf, Leistungsart, Mitarbeiter und Dauer",
-          "Inhalt und Versandstatus der WhatsApp-Konversationen",
-          "Aufzeichnungen, Transkripte und Zusammenfassungen eingehender Anrufe",
-          "Eigene Felder, die der Betrieb definiert, sowie freie Notizen",
-          "Das Datum, an dem die Einwilligung für WhatsApp-Nachrichten erfasst wurde",
+          "Termine und Bestellungen: Uhrzeit, Leistungen, Teammitglied, Status, Notizen und, falls angegeben, eine Lieferadresse",
+          "WhatsApp-Nachrichten und E-Mails in beide Richtungen, auch Fotos, Sprachnachrichten und Dateien, samt Zustellstatus",
+          "Ob und wann eine E-Mail zu einem Termin oder eine Kampagnen- oder Sammel-E-Mail geöffnet wurde. Diese E-Mails enthalten ein kleines Bild, das das Öffnen meldet.",
+          "Anrufe mit dem Telefonassistenten in beide Richtungen: wer wen wann angerufen hat, ein Transkript, eine Zusammenfassung und die erfassten Antworten. Die Aufnahme bleibt beim Telefonie-Anbieter und wird von dort abgespielt.",
+          "Entwürfe und Antworten des WhatsApp-Assistenten und die Änderungen, die er vorgenommen oder vorgeschlagen hat",
+          "Eigene Felder des Betriebs, freie Notizen und Notizen, die Kunden bei der Online-Buchung hinterlassen",
+          "Das Datum, an dem die Einwilligung in Nachrichten erfasst wurde, und ob der Kunde keine KI-Anrufe möchte oder Werbe-E-Mails abbestellt hat",
+          "Ein Protokoll der Änderungen an Kunden und Terminen und wer sie vorgenommen hat",
         ],
       },
       {
-        heading: "Ohne Einwilligung keine Nachricht",
+        heading: "Nachrichten, die ein Betrieb beginnt, brauchen eine Einwilligung",
         body: [
-          "Fehlt in einem Kundendatensatz das Einwilligungsdatum, sendet das System keine WhatsApp-Nachricht an diese Nummer. Das ist im Code verankert, keine Einstellung. Das Einholen und Festhalten der Einwilligung liegt beim Betrieb.",
+          "Resepta schickt Bestätigungen, Erinnerungen, Stornohinweise, Nachfass- und Rückgewinnungsnachrichten, Kampagnen, Sammelnachrichten und Sammelanrufe nur an Kunden, in deren Datensatz ein Einwilligungsdatum steht. Auch WhatsApp-Nachrichten, die das Personal des Betriebs schreibt, brauchen dieses Datum. Das ist eine Prüfung im Code, keine Einstellung.",
+          "Bei Antworten ist es anders. Die automatische Antwort, während der Betrieb geschlossen ist, und die Antworten des WhatsApp-Assistenten reagieren auf eine Nachricht, die der Kunde gerade geschickt hat. Sie gehen deshalb ohne Einwilligungsdatum hinaus.",
+          "Das Einwilligungsdatum trägt Resepta selbst ein, wenn ein neuer Kunde über die Buchungsseite bucht und wenn ein Kunde beim Telefonassistenten oder beim WhatsApp-Assistenten bucht. Darüber hinaus ist es Sache des Betriebs, die Einwilligung einzuholen und festzuhalten.",
+          "Wer keine KI-Anrufe möchte, wird bei automatischen Anrufen übersprungen. Wer Werbe-E-Mails abbestellt hat, bekommt keine Kampagnen-, Sammel- oder Rückgewinnungs-E-Mails mehr. Bestätigungen und Erinnerungen laufen in beiden Fällen weiter.",
         ],
       },
       {
-        heading: "Mit wem wir Daten teilen",
+        heading: "Wer Daten für uns verarbeitet",
         body: [
-          "Wir nutzen die folgenden Dienstleister für den Betrieb. Jeder sieht nur die Daten, die seine Aufgabe erfordert.",
+          "Für den Betrieb des Dienstes arbeiten wir mit diesen Unternehmen. Jedes erhält nur, was seine Aufgabe erfordert.",
         ],
         bullets: [
-          "Convex: Datenbank und Anwendungsbackend",
-          "Vercel: Hosting der Weboberfläche",
-          "Google: Kontoanmeldung",
-          "Meta WhatsApp Cloud API: Senden und Empfangen von WhatsApp-Nachrichten",
-          "cal.com: Kalender und Buchungen",
-          "Retell: Annahme und Transkription von Anrufen",
-          "Resend: E-Mail-Versand",
+          "Convex: Datenbank, Anwendungsbackend und Dateispeicher",
+          "Vercel: Hosting der Web-App, einschließlich der Links in E-Mails",
+          "Google: Anmeldung",
+          "Meta (WhatsApp Business Platform): Senden und Empfangen von WhatsApp-Nachrichten",
+          "Retell AI: Annehmen und Tätigen der Anrufe des Telefonassistenten, Aufnahme und Transkription",
+          "Resend: Senden und Empfangen von E-Mails",
+          "OpenAI und Anthropic: die KI-Modelle, die die Antworten des WhatsApp-Assistenten schreiben. Das jeweils genutzte Modell erhält das Gespräch, Name und Termine des Kunden und die Angaben zum Betrieb, die es für die Antwort braucht.",
+          "Stripe: Kartenzahlung beim Aufladen des Guthabens. Kartendaten gehen direkt an Stripe und erreichen uns nie.",
+          "GeoJS: Telefonnummernfelder auf der Buchungsseite und in der App fragen dort anhand der IP-Adresse ab, in welchem Land sich jemand befindet, und füllen damit die Vorwahl aus.",
+        ],
+        after: [
+          "Verbindet ein Betrieb statt einer WhatsApp-Business-Nummer sein eigenes WhatsApp-Telefon, laufen seine Nachrichten über einen Nachrichtenserver, den wir für diese Verbindung betreiben. Zugestellt werden sie weiterhin über WhatsApp.",
+          "Diese Unternehmen haben ihren Sitz außerhalb der Türkei, die meisten in den USA; die Daten, die sie verarbeiten, werden also im Ausland verarbeitet.",
+          "Ein Betrieb kann auch einen eigenen KI-Assistenten, etwa Claude oder ChatGPT, mit seinem Resepta-Konto verbinden. Dieser Assistent kann dann die Daten des Betriebs lesen und ändern, wenn der Betrieb ihn darum bittet. Die Verbindung ist die Entscheidung des Betriebs und läuft über sein eigenes Konto beim Anbieter des Assistenten.",
         ],
       },
       {
         heading: "Wie lange wir Daten aufbewahren",
         body: [
-          "Wir bewahren die Daten eines Betriebs auf, solange sein Konto besteht. Nach Schließung des Kontos werden sie innerhalb von dreißig Tagen gelöscht. Diese Frist gibt es, damit ein versehentlich geschlossenes Konto wiederhergestellt werden kann.",
-          "Daten, die wir gesetzlich aufbewahren müssen, fallen nicht unter diese Frist.",
+          "Wir bewahren die Daten eines Betriebs auf, solange sein Konto besteht, sofern der Betrieb sie nicht vorher löscht.",
+          "Ein Inhaber kann einen Kunden in dessen Datensatz löschen. Der Kunde verschwindet sofort aus allen Listen, und alles, was über ihn gespeichert ist, wird gleich danach gelöscht: Termine, Nachrichten, Anrufe, Notizen und die Antworten des Assistenten. Das lässt sich nicht rückgängig machen. Im Änderungsprotokoll bleibt eine Zeile, dass und von wem ein Kunde gelöscht wurde, aber nie, wer der Kunde war.",
+          "Ein Konto schließen wir, wenn sein Inhaber uns darum bittet. Dabei werden der Betrieb und alles, was für ihn gespeichert ist, gelöscht. Die Löschung beginnt sofort und lässt sich nicht rückgängig machen; eine Frist, in der ein geschlossenes Konto wiederhergestellt werden könnte, gibt es nicht.",
+          "Um ein Konto zu schließen oder Ihre eigenen Anmeldedaten löschen zu lassen, schreiben Sie uns an {contact}.",
+          "Die oben genannten Unternehmen bewahren eigene Kopien nach ihren eigenen Regeln auf, etwa eine Anrufaufnahme beim Telefonie-Anbieter oder eine Nachricht bei WhatsApp. Das Löschen eines Kunden oder das Schließen eines Kontos entfernt diese Kopien nicht.",
         ],
       },
       {
         heading: "Ihre Rechte",
         body: [
-          "Sie können Auskunft, Berichtigung oder Löschung Ihrer Daten verlangen und der Verarbeitung widersprechen. Wir antworten innerhalb von dreißig Tagen.",
-          "Wenn Sie Kunde eines Betriebs sind, der Resepta nutzt, und Ihren Datensatz löschen lassen möchten, wenden Sie sich direkt an diesen Betrieb. Die Daten gehören ihm, wir halten sie nur in seinem Auftrag. Erreicht uns Ihre Anfrage, leiten wir sie weiter.",
+          "Nach dem KVKK, dem türkischen Datenschutzgesetz, können Sie Auskunft über Ihre Daten verlangen, sie berichtigen oder löschen lassen und der Verarbeitung widersprechen.",
+          "Schreiben Sie uns an {contact}; wir antworten innerhalb von dreißig Tagen.",
+          "Wenn Sie Kunde eines Betriebs sind, der Resepta nutzt, gehört Ihr Datensatz diesem Betrieb; wenden Sie sich direkt an ihn. Er kann Ihre Angaben berichtigen, KI-Anrufe oder Werbe-E-Mails an Sie stoppen oder Ihren Datensatz löschen. Erreicht uns Ihre Anfrage, leiten wir sie an den Betrieb weiter.",
+          "Werbe-E-Mails können Sie selbst über den Abmeldelink am Ende jeder dieser E-Mails abbestellen.",
         ],
       },
       {
@@ -308,7 +389,7 @@ export const PRIVACY: Record<Language, LegalDoc> = {
       {
         heading: "Änderungen",
         body: [
-          "Wenn wir diese Erklärung aktualisieren, ändern wir das Datum auf dieser Seite. Bei wesentlichen Änderungen weisen wir in der Anwendung darauf hin.",
+          "Wenn wir diese Erklärung ändern, ändern wir auch das Datum oben auf dieser Seite.",
         ],
       },
     ],
@@ -318,7 +399,7 @@ export const PRIVACY: Record<Language, LegalDoc> = {
 export const TERMS: Record<Language, LegalDoc> = {
   tr: {
     title: "Kullanım koşulları",
-    updated: "30 Temmuz 2026",
+    updated: "13 Ekim 2026",
     intro: [
       "Resepta'yı kullanarak bu koşulları kabul etmiş olursunuz. Kısa tutmaya çalıştık.",
     ],
@@ -326,23 +407,23 @@ export const TERMS: Record<Language, LegalDoc> = {
       {
         heading: "Hizmet ne yapar",
         body: [
-          "Resepta, işletmenizin randevularını tek yerde toplar, müşterilerinize WhatsApp üzerinden onay ve hatırlatma gönderir ve gelen telefon çağrılarını yanıtlayabilir. Takvim tarafında cal.com kullanılır.",
+          "Resepta, işletmenizin randevularını ve müşteri kayıtlarını tek yerde toplar ve müşterilerinizin kendi kullanabileceği bir randevu sayfası verir. Müşterilerinize WhatsApp ve e-postayla onay, hatırlatma ve başka mesajlar gönderir; yapay zekâ asistanları sizin adınıza aramaları yanıtlayabilir, arama yapabilir ve WhatsApp mesajlarına cevap verebilir.",
         ],
       },
       {
         heading: "Hesap",
         body: [
-          "Hesap açmak için Google hesabınızla giriş yaparsınız. İlk girişte işletmeniz otomatik oluşturulur. Hesabınızla yapılan her işlemden siz sorumlusunuz.",
+          "Google hesabınızla giriş yaparsınız; ilk işletmeniz ilk girişinizde oluşturulur. Ekibinizi e-postayla davet edebilirsiniz. Hesabınızla yapılan her işlemden siz sorumlusunuz.",
           "On sekiz yaşından küçükseniz veya bir işletme adına sözleşme yapma yetkiniz yoksa bu hizmeti kullanamazsınız.",
         ],
       },
       {
         heading: "Müşteri verileriyle ilgili sorumluluğunuz",
         body: [
-          "Sisteme girdiğiniz müşteri kayıtlarının sorumlusu sizsiniz. Şunları taahhüt edersiniz:",
+          "Sisteme girdiğiniz müşteri kayıtlarından ve Resepta'nın sizin talimatınızla müşterilerinize gönderdiklerinden ve söylediklerinden siz sorumlusunuz. Şunları taahhüt edersiniz:",
         ],
         bullets: [
-          "Mesaj göndereceğiniz her numara için gerekli onayı almış olmak",
+          "Mesaj gönderdiğiniz veya aradığınız her müşteri için gerekli izni almış olmak",
           "KVKK ve tabi olduğunuz diğer veri koruma kurallarına uymak",
           "Meta'nın WhatsApp Business politikalarına uymak",
           "İstenmeyen mesaj göndermemek",
@@ -358,15 +439,17 @@ export const TERMS: Record<Language, LegalDoc> = {
         ],
       },
       {
-        heading: "Üçüncü taraf hizmetler",
+        heading: "Diğer şirketlerin hizmetleri",
         body: [
-          "Resepta, WhatsApp için Meta, takvim için cal.com, telefon için Retell ve e-posta için Resend kullanır. Bu sağlayıcıların kendi koşulları da sizin için geçerlidir. Biri hizmetini değiştirdiğinde veya kestiğinde ilgili özellik etkilenebilir.",
+          "Resepta hizmetin bazı bölümleri için başka şirketlere dayanır; WhatsApp, telefon aramaları, e-posta, yapay zekâ modelleri ve kartla ödeme bunlardan bazılarıdır. Gizlilik politikası bu şirketlerin adlarını verir. Biri hizmetini değiştirir veya keserse ona bağlı özellik etkilenebilir.",
         ],
       },
       {
         heading: "Ücretler",
         body: [
-          "Şu anda ücret alınmamaktadır. Ücretli bir plana geçtiğimizde fiyatı ve koşulları önceden gösterir, onayınızı almadan hiçbir tahsilat yapmayız.",
+          "Resepta kullanıma göre ücretlendirilir. Telefon asistanıyla yapılan aramalar dakika başına fiyatlanır ve saniye bazında faturalanır, WhatsApp asistanının gönderdiği her yanıtın belirli bir fiyatı vardır, WhatsApp Business numarasından gönderilen şablon mesajlar ise alıcının ülkesine göre mesaj başına ücretlendirilir. Kullanımınızı ve dakika ile yanıt başına ödediğiniz tutarı Faturalama sayfası gösterir.",
+          "Ödeme iki şekilde olur. Ön ödemeli bakiyede kullanım bakiyeden düşer: yeni bir hesabın ilk işletmesi deneme kredisiyle başlayabilir, sonrasında bakiyeyi kartla yüklersiniz. Kartınızdan yalnızca sizin başlattığınız bir yüklemede ödeme alınır. Bakiye bittiğinde siz yükleme yapana kadar telefon asistanı yeni aramaları yanıtlamaz ve toplu gönderim başlatılamaz.",
+          "Sizinle faturayla çalışmayı kararlaştırdıysak kullanımınız bunun yerine faturayla ücretlendirilir.",
         ],
       },
       {
@@ -385,7 +468,9 @@ export const TERMS: Record<Language, LegalDoc> = {
       {
         heading: "Hesabın kapatılması",
         body: [
-          "Hesabınızı istediğiniz zaman kapatabilirsiniz. Bu koşulları ihlal ederseniz hesabınızı askıya alabilir veya kapatabiliriz. Kapanıştan sonra veri silme süresi gizlilik politikasında yazılıdır.",
+          "Bir hesabı, sahibi istediğinde kapatırız. Kapatmak, gizlilik politikasında anlatıldığı gibi işletmeyi ve onun için tutulan her şeyi siler. Silme hemen başlar ve geri alınamaz.",
+          "Bunun için {contact} adresine yazın.",
+          "Bu koşulları ihlal eden bir hesabı askıya alabilir veya kapatabiliriz.",
         ],
       },
       {
@@ -398,29 +483,29 @@ export const TERMS: Record<Language, LegalDoc> = {
   },
   en: {
     title: "Terms of service",
-    updated: "30 July 2026",
+    updated: "13 October 2026",
     intro: ["By using Resepta you agree to these terms. We have kept them short."],
     sections: [
       {
         heading: "What the service does",
         body: [
-          "Resepta keeps your appointments in one place, sends confirmations and reminders to your customers over WhatsApp, and can answer your inbound phone calls. cal.com handles the calendar side.",
+          "Resepta keeps your appointments and customer records in one place and gives you a booking page your customers can use themselves. It sends your customers confirmations, reminders and other messages by WhatsApp and email, and its AI assistants can answer and place phone calls and answer WhatsApp messages for you.",
         ],
       },
       {
         heading: "Your account",
         body: [
-          "You sign in with a Google account, and your business is created on first sign-in. You are responsible for everything done through your account.",
+          "You sign in with a Google account, and your first business is created when you first sign in. You can invite your team by email. You are responsible for everything done through your account.",
           "You may not use the service if you are under eighteen or lack authority to enter an agreement for the business you are signing up.",
         ],
       },
       {
         heading: "Your responsibility for customer data",
         body: [
-          "You are responsible for the customer records you put into the system. You confirm that you will:",
+          "You are responsible for the customer records you put into the system, and for what Resepta sends and says to your customers on your instructions. You confirm that you will:",
         ],
         bullets: [
-          "Have the consent you need for every number you message",
+          "Have the consent you need for every customer you message or call",
           "Follow KVKK and any other data protection rules that apply to you",
           "Follow Meta's WhatsApp Business policies",
           "Not send unsolicited messages",
@@ -436,15 +521,17 @@ export const TERMS: Record<Language, LegalDoc> = {
         ],
       },
       {
-        heading: "Third-party services",
+        heading: "Other companies' services",
         body: [
-          "Resepta uses Meta for WhatsApp, cal.com for calendars, Retell for phone calls, and Resend for email. Those providers' own terms apply to you as well. If one of them changes or withdraws its service, the matching feature can be affected.",
+          "Resepta relies on other companies for parts of the service, among them WhatsApp, phone calls, email, AI models and card payments. The privacy policy names them. If one of them changes or withdraws its service, the feature that depends on it can be affected.",
         ],
       },
       {
         heading: "Fees",
         body: [
-          "There is no charge at present. If we introduce a paid plan we will show the price and terms first, and we will not bill you without your agreement.",
+          "Resepta charges for use. Calls with the phone agent are priced per minute and billed by the second, each reply the WhatsApp assistant sends has a set price, and WhatsApp template messages sent from a WhatsApp Business number are charged per message, at a rate that depends on the recipient's country. The Billing page shows your usage and what you pay per minute and per reply.",
+          "You pay in one of two ways. With a prepaid balance, use is taken from the balance: the first business on a new account can start with a trial credit, and after that you top up by card. Your card is charged only when you start a top-up yourself. When the balance runs out, the phone agent stops answering new calls and bulk sends cannot be started until you top up.",
+          "If we have agreed to invoice your business, your use is billed by invoice instead.",
         ],
       },
       {
@@ -463,7 +550,9 @@ export const TERMS: Record<Language, LegalDoc> = {
       {
         heading: "Closing an account",
         body: [
-          "You can close your account whenever you like. We may suspend or close an account that breaks these terms. The deletion window after closure is set out in the privacy policy.",
+          "We close an account when its owner asks us to. Closing it deletes the business and everything stored for it, as the privacy policy describes. Deletion starts at once and cannot be undone.",
+          "To ask, write to us at {contact}.",
+          "We may suspend or close an account that breaks these terms.",
         ],
       },
       {
@@ -476,7 +565,7 @@ export const TERMS: Record<Language, LegalDoc> = {
   },
   de: {
     title: "Nutzungsbedingungen",
-    updated: "30. Juli 2026",
+    updated: "13. Oktober 2026",
     intro: [
       "Mit der Nutzung von Resepta stimmen Sie diesen Bedingungen zu. Wir haben sie kurz gehalten.",
     ],
@@ -484,23 +573,23 @@ export const TERMS: Record<Language, LegalDoc> = {
       {
         heading: "Was der Dienst leistet",
         body: [
-          "Resepta bündelt Ihre Termine an einer Stelle, verschickt Bestätigungen und Erinnerungen per WhatsApp und kann eingehende Anrufe annehmen. Den Kalender übernimmt cal.com.",
+          "Resepta bündelt die Termine und Kundendaten Ihres Betriebs an einer Stelle und stellt eine Buchungsseite bereit, über die Ihre Kunden selbst buchen können. Der Dienst schickt Ihren Kunden Bestätigungen, Erinnerungen und andere Nachrichten per WhatsApp und E-Mail, und seine KI-Assistenten können für Sie Anrufe annehmen und tätigen und WhatsApp-Nachrichten beantworten.",
         ],
       },
       {
         heading: "Ihr Konto",
         body: [
-          "Sie melden sich mit einem Google-Konto an, und Ihr Betrieb wird bei der ersten Anmeldung angelegt. Für alles, was über Ihr Konto geschieht, sind Sie verantwortlich.",
+          "Sie melden sich mit einem Google-Konto an, und Ihr erster Betrieb wird bei der ersten Anmeldung angelegt. Ihr Team können Sie per E-Mail einladen. Für alles, was über Ihr Konto geschieht, sind Sie verantwortlich.",
           "Sie dürfen den Dienst nicht nutzen, wenn Sie unter achtzehn sind oder nicht berechtigt sind, für den angemeldeten Betrieb einen Vertrag zu schließen.",
         ],
       },
       {
         heading: "Ihre Verantwortung für Kundendaten",
         body: [
-          "Für die Kundendaten, die Sie erfassen, sind Sie verantwortlich. Sie bestätigen, dass Sie:",
+          "Für die Kundendaten, die Sie erfassen, und für das, was Resepta in Ihrem Auftrag an Ihre Kunden schickt und ihnen sagt, sind Sie verantwortlich. Sie bestätigen, dass Sie:",
         ],
         bullets: [
-          "für jede Nummer, die Sie anschreiben, die nötige Einwilligung haben",
+          "für jeden Kunden, dem Sie schreiben oder den Sie anrufen, die nötige Einwilligung haben",
           "die DSGVO, KVKK und weitere für Sie geltende Datenschutzregeln einhalten",
           "die WhatsApp-Business-Richtlinien von Meta einhalten",
           "keine unerwünschten Nachrichten senden",
@@ -516,15 +605,17 @@ export const TERMS: Record<Language, LegalDoc> = {
         ],
       },
       {
-        heading: "Dienste Dritter",
+        heading: "Dienste anderer Unternehmen",
         body: [
-          "Resepta nutzt Meta für WhatsApp, cal.com für Kalender, Retell für Anrufe und Resend für E-Mail. Deren Bedingungen gelten auch für Sie. Ändert oder beendet einer dieser Anbieter seinen Dienst, kann die zugehörige Funktion betroffen sein.",
+          "Resepta stützt sich für Teile des Dienstes auf andere Unternehmen, unter anderem für WhatsApp, Anrufe, E-Mail, KI-Modelle und Kartenzahlung. Die Datenschutzerklärung nennt sie. Ändert oder beendet eines davon seinen Dienst, kann die Funktion betroffen sein, die darauf beruht.",
         ],
       },
       {
         heading: "Gebühren",
         body: [
-          "Derzeit fallen keine Gebühren an. Wenn wir einen bezahlten Tarif einführen, zeigen wir Preis und Bedingungen vorher und rechnen nichts ohne Ihre Zustimmung ab.",
+          "Resepta wird nach Nutzung berechnet. Anrufe mit dem Telefonassistenten kosten pro Minute und werden sekundengenau abgerechnet, jede Antwort, die der WhatsApp-Assistent schickt, hat einen festen Preis, und WhatsApp-Vorlagennachrichten von einer WhatsApp-Business-Nummer kosten pro Nachricht, je nach Land des Empfängers. Ihre Nutzung und die Preise pro Minute und pro Antwort zeigt die Seite Abrechnung.",
+          "Bezahlt wird auf eine von zwei Arten. Bei einem Guthaben wird die Nutzung davon abgezogen: Der erste Betrieb eines neuen Kontos kann mit einem Startguthaben beginnen, danach laden Sie per Karte auf. Ihre Karte wird nur belastet, wenn Sie selbst eine Aufladung starten. Ist das Guthaben aufgebraucht, nimmt der Telefonassistent keine neuen Anrufe an, und Sammelversände lassen sich erst nach einer Aufladung wieder starten.",
+          "Haben wir mit Ihnen eine Abrechnung per Rechnung vereinbart, wird Ihre Nutzung stattdessen in Rechnung gestellt.",
         ],
       },
       {
@@ -543,7 +634,9 @@ export const TERMS: Record<Language, LegalDoc> = {
       {
         heading: "Konto schließen",
         body: [
-          "Sie können Ihr Konto jederzeit schließen. Wir können ein Konto sperren oder schließen, das gegen diese Bedingungen verstößt. Die Löschfrist nach Schließung steht in der Datenschutzerklärung.",
+          "Ein Konto schließen wir, wenn sein Inhaber uns darum bittet. Dabei werden der Betrieb und alles, was für ihn gespeichert ist, gelöscht, wie in der Datenschutzerklärung beschrieben. Die Löschung beginnt sofort und lässt sich nicht rückgängig machen.",
+          "Schreiben Sie uns dazu an {contact}.",
+          "Wir können ein Konto sperren oder schließen, das gegen diese Bedingungen verstößt.",
         ],
       },
       {
