@@ -46,7 +46,7 @@ means "read that commit".
 | P9 | 7b. Browser-test UI (test card, preview card) + (+) chat simulator | E.flip.4 |
 | P10 | 4. WhatsApp thread + formatter (+ 0772ac98) + (+) failed sends say why + Meta template category/rejection webhooks (a720be3b) | E.3, E.found |
 | P11 | 5a. Call cards + (+) who placed a call | |
-| P12 | 5b. Notes, property editors, tab title + (+) channel pills not greyed, copy phone, customer deep link + cmd-click | |
+| P12 | 5b. Notes, property editors, tab title + read-only cards for members show plain values with a ViewOnlyPill instead of dimmed controls (Serdar chose this 2026-10-14, Nudge's way) + + (+) channel pills not greyed, copy phone, customer deep link + cmd-click | |
 | P13 | 9. Inbox paging + customer search index + (+) customers list paging + pins persist + inbox row + find customer from any tab + HTML-only email previews | E.4, E.7 |
 | P13b | (+) Bulk run outcomes + follow-up selection | E.flip.6 |
 | P14 | 11. Media library | |
