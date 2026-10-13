@@ -766,7 +766,8 @@ apart; change the split there, never in one view.
 and the account row at the foot wear `--pane-field` at rest with the up/down
 chevron, so each reads as a button rather than a caption (Nudge's account row
 took a 4% ink tint for this; ink on this pane read as a pressed row here). The
-account row is always titled name · address.
+account row is always titled name · address, and shows the person's Google
+photo with the initials as the fallback.
 
 ## Voice numbers, caller identity, and the variables doctrine (2026-08-18)
 

@@ -914,6 +914,7 @@ const USER_MENU_MIN_ROOM = 280;
 function UserMenu({
   name,
   email,
+  image,
   remoteTheme,
   onOpenAccount,
   // "avatar" is the bare circle the phone header wears. "row" is the sidebar
@@ -924,6 +925,8 @@ function UserMenu({
 }: {
   name?: string;
   email?: string;
+  // The Google photo from sign-in; the circle falls back to initials.
+  image?: string;
   remoteTheme?: Theme;
   variant?: "avatar" | "row";
   collapsed?: boolean;
@@ -1008,7 +1011,7 @@ function UserMenu({
       >
         {variant === "row" && !collapsed ? (
           <>
-            <Avatar size="sm" name={name} email={email} />
+            <Avatar size="sm" name={name} email={email} image={image} />
             {/* Name over address, both truncating: the rail is 13rem wide and
                 an email is however long somebody's employer made it. The end
                 truncates, so the domain gives way before the name does. */}
@@ -1037,6 +1040,7 @@ function UserMenu({
             size="md"
             name={name}
             email={email}
+            image={image}
             className="transition-shadow group-hover:ring-[var(--muted)]"
           />
         )}
@@ -1781,6 +1785,7 @@ export function AppShell({
                 collapsed={showCollapsed}
                 name={settings?.me.name}
                 email={settings?.me.email}
+                image={settings?.me.image}
                 remoteTheme={settings?.me.themePreference}
                 onOpenAccount={() => goTo("account")}
               />

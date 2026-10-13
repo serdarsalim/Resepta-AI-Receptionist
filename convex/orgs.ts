@@ -134,6 +134,9 @@ export const current = query({
     me: v.object({
       name: v.optional(v.string()),
       email: v.optional(v.string()),
+      // The Google profile picture stored at sign-in (auth.ts), for the
+      // sidebar's account row. A URL on Google's photo host, the reader's own.
+      image: v.optional(v.string()),
       role: v.optional(v.union(v.literal("owner"), v.literal("staff"))),
       themePreference: v.optional(
         v.union(v.literal("light"), v.literal("dark"), v.literal("auto")),
@@ -273,6 +276,7 @@ export const current = query({
       me: {
         name: user.name,
         email: user.email,
+        image: user.image,
         role,
         themePreference: user.themePreference,
         language: user.language,
