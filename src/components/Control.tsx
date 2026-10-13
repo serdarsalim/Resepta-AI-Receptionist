@@ -140,10 +140,17 @@ export function iconButtonClass(
 //
 // No width: callers set their own, and baking one in here meant every inline
 // select had to fight it back off.
+//
+// `tight` takes the side padding down a step (px-2) for a field whose value
+// is five characters and always will be: the booking sheet's start and end
+// times, which have to share one line with a date in a 19rem column. An
+// option rather than a px-2 composed on top, which would be a bet on the
+// order Tailwind emits the two in.
 export function fieldClass(
   size: ControlSize = "sm",
-  opts: { multiline?: boolean } = {},
+  opts: { multiline?: boolean; tight?: boolean } = {},
 ): string {
   const vertical = opts.multiline ? PAD_Y[size] : `${HEIGHT[size]} py-0`;
-  return `${vertical} rounded-md border border-[var(--border)] bg-[var(--background)] ${PAD_X[size]} text-sm font-normal text-[var(--foreground)] placeholder:text-[var(--muted)] disabled:opacity-50`;
+  const horizontal = opts.tight ? "px-2" : PAD_X[size];
+  return `${vertical} rounded-md border border-[var(--border)] bg-[var(--background)] ${horizontal} text-sm font-normal text-[var(--foreground)] placeholder:text-[var(--muted)] disabled:opacity-50`;
 }

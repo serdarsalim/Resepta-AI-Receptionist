@@ -130,7 +130,16 @@ export function useBookingSheet({
   // the contact record simply calls render() bare — it has no grid to draw
   // blocks on. An argument rather than a hook input so the caller can build it
   // from things (the block sheet's open/close) that live beside this hook.
-  const render = (tabs?: React.ReactNode) =>
+  // `grid` is the rest of what only the calendar has: the height floor the
+  // two kinds share, and the band that follows the sheet's time.
+  const render = (
+    tabs?: React.ReactNode,
+    grid?: {
+      heightFloor?: number;
+      onNaturalHeight?: (px: number) => void;
+      onTimeChange?: (startAt: number, durationMinutes: number) => void;
+    },
+  ) =>
     sheet ? (
       <AppointmentModal
         draft={sheet}
@@ -163,6 +172,9 @@ export function useBookingSheet({
         }
         anchor={anchor}
         tabs={sheet.appointmentId ? undefined : tabs}
+        heightFloor={sheet.appointmentId ? undefined : grid?.heightFloor}
+        onNaturalHeight={sheet.appointmentId ? undefined : grid?.onNaturalHeight}
+        onTimeChange={sheet.appointmentId ? undefined : grid?.onTimeChange}
         onSubmit={(values) => void submit(values, false)}
         onForce={() => void submit(lastSubmit.current, true)}
       />

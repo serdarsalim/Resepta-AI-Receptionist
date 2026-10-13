@@ -594,6 +594,10 @@ const dictionary = {
     de: "Verlauf ausblenden",
   },
   "appointments.when": { tr: "Tarih", en: "When", de: "Datum" },
+  // The booking sheet's two time fields, for a screen reader: the row's
+  // label already says When.
+  "appointments.startTime": { tr: "Başlangıç saati", en: "Start time", de: "Beginn" },
+  "appointments.endTime": { tr: "Bitiş saati", en: "End time", de: "Ende" },
   "appointments.service": { tr: "Hizmet", en: "Service", de: "Leistung" },
   // What a bookable person is called, everywhere. Was overridable per org; the
   // override is gone because it set this one string and cost a form field on

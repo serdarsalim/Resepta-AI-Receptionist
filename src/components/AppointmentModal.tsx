@@ -11,10 +11,16 @@ import {
   moneyInputValue,
   parseMoney,
 } from "@/lib/money";
-import { formatDayHeading, formatTime } from "@/lib/datetime";
+import {
+  atLocalMinutes,
+  formatDayHeading,
+  formatTime,
+  startOfLocalDay,
+} from "@/lib/datetime";
 import { fieldClass, iconButtonClass } from "./Control";
 import { PhoneInput } from "./PhoneField";
-import { WhenPicker } from "./WhenPicker";
+import { DateField } from "./DateRangeField";
+import { TimeSelect } from "./TimeSelect";
 import {
   AnchoredSheet,
   SHEET_PILL_DANGER,
@@ -87,6 +93,7 @@ export function AppointmentModal({
   tabs,
   heightFloor,
   onNaturalHeight,
+  onTimeChange,
 }: {
   draft: ModalDraft;
   services: {
@@ -130,6 +137,10 @@ export function AppointmentModal({
   // tabs are up, and where it reports its own height (AnchoredSheet).
   heightFloor?: number;
   onNaturalHeight?: (px: number) => void;
+  // Where the booking now lands, whenever its date, time or length changes,
+  // so the calendar can keep the drawn band under it (Nudge's onTimeChange):
+  // the band stayed on the slot first clicked while the sheet said 10:00.
+  onTimeChange?: (startAt: number, durationMinutes: number) => void;
 }) {
   const { t, language } = useLanguage();
   const formRef = useRef<HTMLFormElement>(null);
@@ -289,6 +300,9 @@ export function AppointmentModal({
   // nothing.
   const chosen = lines.filter((line) => line.serviceId);
   const goodsOnly = chosen.length > 0 && chosen.every(isGoodLine);
+  // The start as minutes past the viewer's local midnight: the grid's frame,
+  // and the one the time fields speak.
+  const whenStart = Math.round((startAt - startOfLocalDay(startAt)) / 60_000);
 
   const lineQuantity = (line: { quantity: string }) =>
     Math.min(99, Math.max(1, Math.round(Number(line.quantity) || 1)));
@@ -304,6 +318,17 @@ export function AppointmentModal({
   useEffect(() => {
     searchRef.current?.focus();
   }, []);
+
+  // The caller's closure changes every render; a ref keeps the effect below
+  // keyed on the time alone.
+  const onTimeChangeRef = useRef(onTimeChange);
+  useEffect(() => {
+    onTimeChangeRef.current = onTimeChange;
+  }, [onTimeChange]);
+  const bookedMinutes = goodsOnly ? 0 : durationMinutes;
+  useEffect(() => {
+    onTimeChangeRef.current?.(startAt, bookedMinutes);
+  }, [startAt, bookedMinutes]);
 
   // The new-customer fields are uncontrolled and read on submit, because
   // PhoneInput composes the dial code and the number itself — the same
@@ -613,21 +638,58 @@ export function AppointmentModal({
             labels on every row the glyphs were decoration. Two columns, every
             row. The "When" label sits in the shared label column in BOTH
             states, so clicking to edit swaps only the value. */}
-        <SheetRow label={t("appointments.when")} alignTop={timeEditing}>
+        <SheetRow label={t("appointments.when")}>
           {timeEditing ? (
-            /* Google's editor: a date chip that opens a mini month, and
-               start–end time chips that type OR pick. Duration is what the
-               booking machinery speaks, so WhenPicker reports one — but the
-               owner only ever handles times. */
-            <WhenPicker
-              startAt={startAt}
-              durationMinutes={durationMinutes}
-              showEnd={!goodsOnly}
-              onChange={(nextStart, nextDuration) => {
-                setStartAt(nextStart);
-                setDurationMinutes(nextDuration);
-              }}
-            />
+            /* A date and a start–end, the blocked-time sheet's own fields
+               (Nudge's WhenFields, 2026-10-12): DateField opens the same
+               small month, and the times type ("930", "9:30") or pick from a
+               15-minute list whose end choices name their length. Duration is
+               what the booking machinery speaks, so the sheet keeps minutes,
+               but the owner only ever handles times. One line, the prose's
+               own height, so clicking to edit moves nothing; on a phone it
+               wraps the way the prose does. They replaced WhenPicker's chips,
+               which were a second date month and a second time list beside
+               the ones the block sheet had just got. */
+            <div className="flex flex-wrap items-center gap-1.5">
+              <DateField
+                label={t("appointments.when")}
+                value={localIso(startAt)}
+                // A new day keeps the time and the length.
+                onChange={(iso) => {
+                  const startMinute = Math.round((startAt - startOfLocalDay(startAt)) / 60_000);
+                  setStartAt(atLocalMinutes(fromLocalIso(iso), startMinute));
+                }}
+              />
+              <span className="flex items-center gap-1.5">
+                <TimeSelect
+                  tight
+                  minutes={whenStart}
+                  ariaLabel={t("appointments.startTime")}
+                  className="w-[3.75rem]"
+                  // A new start keeps the length, Google's way: the end follows.
+                  onChange={(m) => setStartAt(atLocalMinutes(startOfLocalDay(startAt), m))}
+                />
+                {!goodsOnly && (
+                  <>
+                    <span className="text-[var(--muted)]">–</span>
+                    <TimeSelect
+                      tight
+                      minutes={Math.min(whenStart + durationMinutes, 24 * 60)}
+                      from={whenStart}
+                      ariaLabel={t("appointments.endTime")}
+                      className="w-[3.75rem]"
+                      // An end at or before the start is refused, not
+                      // reinterpreted: this calendar cannot draw a booking
+                      // that crosses midnight, and guessing "tomorrow" would
+                      // book twenty hours of chair.
+                      onChange={(m) => {
+                        if (m > whenStart) setDurationMinutes(m - whenStart);
+                      }}
+                    />
+                  </>
+                )}
+              </span>
+            </div>
           ) : (
             /* Google's time row: the value is prose — the day, then the span
                as start – end, the duration only implied. py-1.5: one line of
@@ -813,4 +875,17 @@ export function AppointmentModal({
       )}
     </AnchoredSheet>
   );
+}
+
+// The viewer's civil date of an instant, and back to its local midnight: the
+// frame the calendar is drawn in, which is what the booking sheet's date
+// field picks in.
+function localIso(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function fromLocalIso(iso: string): number {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).getTime();
 }

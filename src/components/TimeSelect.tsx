@@ -59,6 +59,7 @@ export function TimeSelect({
   ariaLabel,
   from,
   className = "",
+  tight = false,
 }: {
   minutes: number;
   onChange: (minutes: number) => void;
@@ -67,6 +68,8 @@ export function TimeSelect({
   // and names each choice's length, and the end of the day is 24:00.
   from?: number;
   className?: string;
+  // fieldClass's tight padding, for a time sharing one line with a date.
+  tight?: boolean;
 }) {
   const { t, language } = useLanguage();
   const locale = localeFor(language);
@@ -93,11 +96,15 @@ export function TimeSelect({
     choices.sort((a, b) => a - b);
   }
 
+  // "45 dk", "1 sa", "1 sa 15 dk": hours and minutes, Google's way. A decimal
+  // ("1.25 hr") made the owner do the arithmetic the list exists to save.
   const length = (m: number) => {
     const d = m - (from ?? 0);
-    return d < 60
-      ? `${d} ${t("services.minutes")}`
-      : `${(d / 60).toLocaleString(locale, { maximumFractionDigits: 2 })} ${t("services.hours")}`;
+    const h = Math.floor(d / 60);
+    const rest = d % 60;
+    if (h === 0) return `${rest} ${t("services.minutes")}`;
+    const hours = `${h.toLocaleString(locale)} ${t("services.hours")}`;
+    return rest === 0 ? hours : `${hours} ${rest} ${t("services.minutes")}`;
   };
 
   // Opening lands on the chosen time, Google's way, not at midnight.
@@ -177,7 +184,7 @@ export function TimeSelect({
             close();
           }
         }}
-        className={`${fieldClass("sm")} tabular-nums ${className}`}
+        className={`${fieldClass("sm", { tight })} tabular-nums ${className}`}
       />
       {open &&
         pos &&
