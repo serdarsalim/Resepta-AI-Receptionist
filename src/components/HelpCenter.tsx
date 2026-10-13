@@ -106,7 +106,7 @@ const CATEGORIES: Category[] = [
           "Mark each team member who takes appointments as Available on the Team card under Business. Resepta counts them: with two people available, two appointments can overlap, and a third at the same time is refused.",
           "Every booking made on your booking page, by the phone agent or by the WhatsApp assistant is checked against your opening hours, your blocked times, how many team members are available, and the customer's other appointments. Moves made by the assistants, or by the customer from their appointment link, are checked the same way.",
           "When a time is taken, the phone agent and the WhatsApp assistant offer the nearest free times instead.",
-          "Appointments your team adds in the calendar are not checked yet. Look at the day before you add one by hand.",
+          "Appointments your team adds or moves in the calendar are checked the same way, and against the team member picked. The booking sheet says whether the time is free as you pick it. If it is not, Resepta asks before booking it anyway, and dragging a booking onto a taken time asks too.",
         ],
         note: "Bookings from your booking page and the assistants are not given to a named team member. Decide who takes each one when you plan the day.",
         keywords: [
@@ -400,7 +400,7 @@ const CATEGORIES: Category[] = [
         title: "Common problems and first checks",
         summary: "A compact checklist for availability, calls, messages, and sign-in.",
         steps: [
-          "Double booking: check your opening hours and who is marked Available on the Team card. Appointments added by hand in the calendar are not checked yet, so look at the day first.",
+          "Double booking: check your opening hours and who is marked Available on the Team card. A booking someone chose to make anyway, after the calendar asked, is the other way it happens.",
           "No call result: open the voice agent, check its result health, choose Fix if offered, and place a fresh test call.",
           "WhatsApp failed: open the customer conversation and check that the exact language template is approved.",
           "Email failed: confirm the customer has an email address and ask your operator to verify the workspace email connection.",

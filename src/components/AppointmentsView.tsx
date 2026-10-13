@@ -42,6 +42,8 @@ import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { STAFF_TINT, staffSwatch, staffSwatchInk, staffTint } from "@/lib/staffTint";
 import { CalendarPanel, FilterPicker, UNASSIGNED, shownIds } from "./CalendarPanel";
 import { useBookingSheet } from "./useBookingSheet";
+import { useConfirm } from "./ConfirmDialog";
+import { conflictText } from "@/lib/slotVerdict";
 import type { Rect } from "@/lib/anchoredSheet";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
@@ -332,6 +334,9 @@ export function AppointmentsView({
   // own row moves. See convex/schedule.ts. Held here as well as in the booking
   // sheet because a DRAG moves a block without ever opening the sheet.
   const moveBooking = useAction(api.schedule.move);
+  // A drag the calendar's verdict refused asks "Move it anyway?" here, the
+  // sheet's question in the app's own dialog (P6, Nudge's drag confirm).
+  const [confirm, confirmDialog] = useConfirm();
 
   // The slot last drawn on the grid, kept so the kind tabs can hand the SAME
   // slot to whichever sheet is chosen: switching to "blocked time" must not
@@ -857,7 +862,40 @@ export function AppointmentsView({
               // Snap back. The server never moved, so dropping the optimistic
               // entry is the whole rollback.
               clearOptimistic(row._id);
-              setMoveError(result.reason ?? t("appointments.moveFailed"));
+              if (!result.canForce) {
+                setMoveError(result.reason ?? t("appointments.moveFailed"));
+                return;
+              }
+              // A conflict a person may overrule (the calendar's verdict, or
+              // cal.com): ask, then move it with force.
+              const ok = await confirm({
+                title: t("appointments.anywayMoveTitle"),
+                body:
+                  conflictText(t, result.verdict, {
+                    customer: row.customer
+                      ? `${row.customer.firstName} ${row.customer.lastName ?? ""}`.trim()
+                      : undefined,
+                    staff: row.staffName,
+                  }) ??
+                  result.reason ??
+                  undefined,
+                confirmLabel: t("appointments.moveAnyway"),
+                destructive: false,
+              });
+              if (!ok) return;
+              setOptimistic((current) =>
+                new Map(current).set(row._id, { startAt, durationMinutes }),
+              );
+              const forced = await moveBooking({
+                appointmentId: row._id,
+                startAt,
+                durationMinutes,
+                force: true,
+              });
+              if (!forced.ok) {
+                clearOptimistic(row._id);
+                setMoveError(forced.reason ?? t("appointments.moveFailed"));
+              }
             }
           }}
         />
@@ -933,6 +971,7 @@ export function AppointmentsView({
       </div>
       </div>
 
+      {confirmDialog}
       {/* A failed drag already snapped back; this says why, once, without a
           modal in the way of the calendar the owner is looking at. */}
       {moveError && (

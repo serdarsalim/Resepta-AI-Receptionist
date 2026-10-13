@@ -505,6 +505,83 @@ const dictionary = {
     en: "Book anyway",
     de: "Trotzdem buchen",
   },
+  // The calendar's verdict on a slot (schedule.slotVerdict, P6), the line
+  // under the booking sheet's Team member row. Free and the two facts that
+  // never need a confirm first, then each conflict, most fundamental first.
+  "appointments.slotFree": { tr: "Boş", en: "Free", de: "Frei" },
+  "appointments.slotPast": {
+    tr: "Saati geçmiş: müşteriye onay gitmez",
+    en: "Already started: the customer gets no confirmation",
+    de: "Schon begonnen: der Kunde bekommt keine Bestätigung",
+  },
+  "appointments.slotInsideNotice": {
+    tr: "Boş, ama en az önceden haber süresinin içinde",
+    en: "Free, but inside your minimum notice",
+    de: "Frei, aber innerhalb Ihres Mindestvorlaufs",
+  },
+  "appointments.slotOutsideHours": {
+    tr: "Çalışma saatleri dışında",
+    en: "Outside your opening hours",
+    de: "Außerhalb Ihrer Öffnungszeiten",
+  },
+  "appointments.slotClosed": { tr: "Kapalı saat", en: "Blocked time", de: "Schließzeit" },
+  "appointments.slotClosedReason": {
+    tr: "Kapalı saat: {reason}",
+    en: "Blocked time: {reason}",
+    de: "Schließzeit: {reason}",
+  },
+  "appointments.slotCustomerBusy": {
+    tr: "{name} bu saatte zaten randevulu",
+    en: "{name} already has an appointment then",
+    de: "{name} hat da schon einen Termin",
+  },
+  "appointments.slotCustomerBusyAnon": {
+    tr: "Müşterinin bu saatte zaten randevusu var",
+    en: "The customer already has an appointment then",
+    de: "Der Kunde hat da schon einen Termin",
+  },
+  "appointments.slotStaffBusy": {
+    tr: "{name} bu saatte dolu",
+    en: "{name} is already booked then",
+    de: "{name} ist da schon gebucht",
+  },
+  "appointments.slotStaffBusyAnon": {
+    tr: "Bu ekip üyesi bu saatte dolu",
+    en: "This team member is already booked then",
+    de: "Dieses Teammitglied ist da schon gebucht",
+  },
+  "appointments.slotFull": {
+    tr: "Bu saatte tüm ekip dolu",
+    en: "Every team member is booked then",
+    de: "Da ist das ganze Team gebucht",
+  },
+  // The question a conflict asks before the booking is made anyway, in the
+  // sheet's foot like the bin's (and in a dialog after a drag).
+  "appointments.anywayBookTitle": {
+    tr: "Yine de kaydedilsin mi?",
+    en: "Book it anyway?",
+    de: "Trotzdem buchen?",
+  },
+  "appointments.anywayMoveTitle": {
+    tr: "Yine de taşınsın mı?",
+    en: "Move it anyway?",
+    de: "Trotzdem verschieben?",
+  },
+  "appointments.anywaySaveTitle": {
+    tr: "Yine de kaydedilsin mi?",
+    en: "Save it anyway?",
+    de: "Trotzdem speichern?",
+  },
+  "appointments.moveAnyway": {
+    tr: "Yine de taşı",
+    en: "Move anyway",
+    de: "Trotzdem verschieben",
+  },
+  "appointments.saveAnyway": {
+    tr: "Yine de kaydet",
+    en: "Save anyway",
+    de: "Trotzdem speichern",
+  },
   "appointments.cancelAppointment": {
     tr: "Randevuyu iptal et",
     en: "Cancel appointment",

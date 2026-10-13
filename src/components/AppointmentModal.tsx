@@ -34,6 +34,8 @@ import {
 } from "./AnchoredSheet";
 import type { Rect } from "@/lib/anchoredSheet";
 import { staffSwatch } from "@/lib/staffTint";
+import { conflictText, type SlotVerdict } from "@/lib/slotVerdict";
+import { insideNotice } from "../../convex/lib/minNotice";
 import type { Id } from "../../convex/_generated/dataModel";
 
 // The appointment sheet, opened by clicking a slot or a block on the grid,
@@ -75,6 +77,12 @@ export type ModalSubmit = {
   notes?: string;
 };
 
+// What a save hears back when the calendar's verdict (or cal.com, the parked
+// lane) refused it for a reason a person may overrule: the verdict, or
+// cal.com's own words. The sheet then asks "Book it anyway?" and saves again
+// with force. Anything else the caller shows as an error.
+export type SubmitRefusal = { verdict?: SlotVerdict; reason?: string };
+
 export function AppointmentModal({
   draft,
   services,
@@ -84,9 +92,8 @@ export function AppointmentModal({
   staffLabel,
   pending,
   error,
-  canForce,
+  minNoticeHours,
   onSubmit,
-  onForce,
   onDelete,
   onClose,
   onOpenCustomer,
@@ -113,9 +120,12 @@ export function AppointmentModal({
   staffLabel: string;
   pending: boolean;
   error?: string;
-  canForce?: boolean;
-  onSubmit: (values: ModalSubmit) => void;
-  onForce: () => void;
+  // The business's minimum notice in force, hours (lib/minNotice). Never
+  // binds this sheet; its verdict line says when a time is inside it.
+  minNoticeHours: number;
+  // Resolves with a refusal the person may overrule, undefined otherwise
+  // (saved and closed, or an error the caller shows).
+  onSubmit: (values: ModalSubmit, force: boolean) => Promise<SubmitRefusal | undefined>;
   onDelete?: () => void;
   onClose: () => void;
   // Opening the record replaces this sheet rather than stacking on it: the
@@ -224,26 +234,6 @@ export function AppointmentModal({
     };
   }, [listOpen]);
 
-  // EVERY entry here is something that changes the sheet's HEIGHT, which is
-  // what decides whether it has to slide up to stay on screen (AnchoredSheet
-  // re-measures when this changes). `picked` drops the phone row; adding a
-  // service line grew the sheet without re-placing it once, so the bottom ran
-  // off the screen; an error or a conflict banner appears mid-edit and pushes
-  // Save down; the cancel question swaps the footer. A ResizeObserver would
-  // cover all of these and anything added later, and is the better design,
-  // but its callbacks are never delivered in this app: a fresh observer on
-  // this panel did not fire even the initial notification observe()
-  // guarantees, while offsetHeight demonstrably changed. Until that is
-  // understood, this list must grow when anything new changes the height.
-  const measureKey = [
-    picked ?? "",
-    timeEditing,
-    lines.length,
-    error ?? "",
-    canForce ?? false,
-    confirmingCancel,
-  ].join("|");
-
   // Only fetched once there is something to match. A booking whose customer
   // is already fixed, or where nothing has been typed yet, never loads the
   // org's contact list at all.
@@ -341,10 +331,103 @@ export function AppointmentModal({
     onSlotChangeRef.current?.(startAt, bookedMinutes, staffId || undefined);
   }, [startAt, bookedMinutes, staffId]);
 
+  // ── The calendar's verdict (schedule.slotVerdict, P6) ────────────────────
+  // Asked as the time, the customer and the team member are picked. A new
+  // booking is always judged; an existing one only once its time or its
+  // person changes, because those are the saves the server judges (a move, or
+  // a change of person alone, which is judged on that person alone). Live: a
+  // booking landing on the hour while the sheet is open changes the answer.
+  const timeChanged =
+    editing && (startAt !== draft.startAt || bookedMinutes !== draft.durationMinutes);
+  const staffChanged = editing && (staffId || null) !== (draft.staffId ?? null);
+  const judged = !editing || timeChanged || staffChanged;
+  const staffOnly = editing && !timeChanged;
+  const verdictCustomer = draft.customerId ?? picked;
+  const verdictArgs = judged
+    ? {
+        startAt,
+        durationMinutes: bookedMinutes,
+        ...(verdictCustomer && !staffOnly ? { customerId: verdictCustomer } : {}),
+        ...(staffId ? { staffId: staffId as Id<"staff"> } : {}),
+        ...(draft.appointmentId ? { appointmentId: draft.appointmentId } : {}),
+        ...(staffOnly ? { staffOnly: true } : {}),
+      }
+    : null;
+  const liveVerdict = useQuery(api.schedule.slotVerdict, verdictArgs ?? "skip");
+  // The last answer stays up while the next one loads, so the line does not
+  // blink empty every time a time is typed. Adjusted while rendering (React's
+  // pattern for state derived from the last answer), compared by content so
+  // a fresh object with the same answer settles at once.
+  const [shownVerdict, setShownVerdict] = useState<SlotVerdict | undefined>();
+  const verdictKey = (verdict?: SlotVerdict) =>
+    verdict ? `${verdict.conflict ?? ""}|${verdict.closedReason ?? ""}` : "";
+  if (liveVerdict !== undefined && verdictKey(liveVerdict) !== verdictKey(shownVerdict)) {
+    setShownVerdict(liveVerdict);
+  }
+  const verdictNames = {
+    customer: draft.customerName ?? (picked ? customerQuery.trim() : undefined),
+    staff: staff.find((person) => person._id === staffId)?.name,
+  };
+  // Two facts that never need a confirm, judged on the sheet's own clock: a
+  // start already passed is logged quietly (no confirmation), and a time
+  // inside the minimum notice is one only the team can book. An ASAP order's
+  // start is when it was placed, so neither applies to it.
+  const asap = Boolean(draft.fulfillment?.asap);
+  const pastSlot = !asap && startAt <= openedAt;
+  const noticeSlot =
+    !asap && !pastSlot && insideNotice(startAt, openedAt, minNoticeHours * 60 * 60_000);
+  const conflictLine = conflictText(t, shownVerdict, verdictNames);
+  const verdictLine = !shownVerdict
+    ? { text: "", tone: "" }
+    : conflictLine
+      ? { text: conflictLine, tone: "text-amber-700 dark:text-amber-400" }
+      : pastSlot
+        ? { text: t("appointments.slotPast"), tone: "text-[var(--muted-strong)]" }
+        : noticeSlot
+          ? { text: t("appointments.slotInsideNotice"), tone: "text-[var(--muted-strong)]" }
+          : { text: t("appointments.slotFree"), tone: "text-emerald-700 dark:text-emerald-400" };
+
+  // "Book it anyway?", asked in the sheet's foot like the bin's question.
+  // It stands only while the slot it was asked about is the one on screen:
+  // changing the time, the customer or the person under it withdraws it.
+  const askKey = verdictArgs ? JSON.stringify(verdictArgs) : "";
+  const [askingState, setAsking] = useState<(SubmitRefusal & { key: string }) | null>(
+    null,
+  );
+  const asking = askingState && askingState.key === askKey ? askingState : null;
+  const anyway = !editing ? "book" : timeChanged ? "move" : "save";
+  const askingText = asking
+    ? (asking.verdict ? conflictText(t, asking.verdict, verdictNames) : null) ??
+      asking.reason ??
+      ""
+    : "";
+
+  // EVERY entry here is something that changes the sheet's HEIGHT, which is
+  // what decides whether it has to slide up to stay on screen (AnchoredSheet
+  // re-measures when this changes). `picked` drops the phone row; adding a
+  // service line grew the sheet without re-placing it once, so the bottom ran
+  // off the screen; an error appears mid-edit and pushes Save down; the
+  // cancel and book-anyway questions swap the footer; the verdict line
+  // appears under an existing booking once its time or person changes. A
+  // ResizeObserver would cover all of these and anything added later, and is
+  // the better design, but its callbacks are never delivered in this app: a
+  // fresh observer on this panel did not fire even the initial notification
+  // observe() guarantees, while offsetHeight demonstrably changed. Until that
+  // is understood, this list must grow when anything new changes the height.
+  const measureKey = [
+    picked ?? "",
+    timeEditing,
+    lines.length,
+    error ?? "",
+    confirmingCancel,
+    asking ? askingText : "",
+    judged,
+  ].join("|");
+
   // The new-customer fields are uncontrolled and read on submit, because
   // PhoneInput composes the dial code and the number itself — the same
   // component and the same contract the old inline form used.
-  const submit = () => {
+  const collect = (): ModalSubmit | null => {
     const values: ModalSubmit = {
       startAt,
       durationMinutes: goodsOnly ? 0 : durationMinutes,
@@ -368,11 +451,11 @@ export function AppointmentModal({
     else if (picked) values.customerId = picked;
     else {
       const form = formRef.current;
-      if (!form) return;
+      if (!form) return null;
       // Save is a plain button, so native validation never fires on its own;
       // this surfaces "phone is required" as a browser bubble instead of a
       // click that silently does nothing.
-      if (!form.reportValidity()) return;
+      if (!form.reportValidity()) return null;
       const data = new FormData(form);
       // One title box, two columns in the record: first word is the first
       // name, everything after it the last. "Ayşe Nur Yılmaz" files under
@@ -387,9 +470,24 @@ export function AppointmentModal({
         // trip over mid-booking. The contact record is where it is revoked.
         consent: true,
       };
-      if (!values.newCustomer.firstName || !values.newCustomer.phone) return;
+      if (!values.newCustomer.firstName || !values.newCustomer.phone) return null;
     }
-    onSubmit(values);
+    return values;
+  };
+
+  // Save, or "Book anyway" with force. A conflict the sheet already knows is
+  // asked about before anything is sent; one only the server saw (a booking
+  // that took the hour a moment ago, or cal.com) comes back and is asked
+  // about the same way. The server refuses either without force.
+  const save = async (force: boolean) => {
+    const values = collect();
+    if (!values) return;
+    if (!force && judged && liveVerdict?.conflict) {
+      setAsking({ key: askKey, verdict: liveVerdict });
+      return;
+    }
+    const refused = await onSubmit(values, force);
+    if (refused) setAsking({ key: askKey, ...refused });
   };
 
   // The foot of the sheet. Normally Cancel and Save; while the bin's question
@@ -425,6 +523,45 @@ export function AppointmentModal({
         </button>
       </div>
     </div>
+  ) : asking ? (
+    // The calendar said no; a person may say yes. Same pills as the bin's
+    // question, the confirm exactly where Save was, and blue: booking over a
+    // conflict is the sheet's action, not a deletion.
+    <div className="mt-4 space-y-3">
+      <div className="text-sm">
+        <p className="font-medium">
+          {t(
+            anyway === "book"
+              ? "appointments.anywayBookTitle"
+              : anyway === "move"
+                ? "appointments.anywayMoveTitle"
+                : "appointments.anywaySaveTitle",
+          )}
+        </p>
+        {askingText && <p className="text-[var(--muted-strong)]">{askingText}</p>}
+      </div>
+      <div className="flex items-center justify-end gap-2">
+        <button type="button" onClick={() => setAsking(null)} className={SHEET_PILL_QUIET}>
+          {t("common.back")}
+        </button>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => void save(true)}
+          className={SHEET_PILL_PRIMARY}
+        >
+          {pending
+            ? t("common.loading")
+            : t(
+                anyway === "book"
+                  ? "appointments.bookAnyway"
+                  : anyway === "move"
+                    ? "appointments.moveAnyway"
+                    : "appointments.saveAnyway",
+              )}
+        </button>
+      </div>
+    </div>
   ) : (
     <div className="mt-4 flex items-center justify-end gap-2">
       <button type="button" onClick={onClose} className={SHEET_PILL_QUIET}>
@@ -435,7 +572,7 @@ export function AppointmentModal({
           everywhere else in this app. */}
       <button
         type="button"
-        onClick={submit}
+        onClick={() => void save(false)}
         disabled={pending || customerIncomplete}
         className={SHEET_PILL_PRIMARY}
       >
@@ -484,7 +621,7 @@ export function AppointmentModal({
         className={SHEET_ROWS}
         onSubmit={(e) => {
           e.preventDefault();
-          submit();
+          void save(false);
         }}
       >
         {draft.customerId ? (
@@ -873,6 +1010,25 @@ export function AppointmentModal({
           </select>
         </SheetRow>
 
+        {/* The calendar's verdict on this time and this person (P6), under
+            the last field that changes it, so it appears below whatever was
+            just picked and nothing above the pointer moves. A new booking
+            always has the line, its height held while the first answer
+            loads; an existing one gains it when its time or person changes.
+            Pulled up to sit with the Team member row it answers. */}
+        {judged && (
+          <>
+            <span aria-hidden />
+            <p
+              aria-live="polite"
+              title={verdictLine.text || undefined}
+              className={`-mt-2.5 min-h-4 truncate text-xs leading-4 ${verdictLine.tone}`}
+            >
+              {verdictLine.text}
+            </p>
+          </>
+        )}
+
         <SheetRow label={t("appointments.notes")} htmlFor="modal-notes" alignTop>
           {/* One row, and it grows as you type rather than reserving space
               for words nobody has written. Multiline sm: one row of it is
@@ -889,22 +1045,11 @@ export function AppointmentModal({
         <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
       </form>
 
+      {/* A refusal nobody may overrule (a bad key, a network failure). One a
+          person may overrule is the footer's question instead. */}
       {error && (
         <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
           <p>{error}</p>
-          {/* cal.com refused for a reason the owner is entitled to overrule —
-              the chair is double-booked, or it is outside the hours cal.com
-              knows about. Offered only when that is what happened. */}
-          {canForce && (
-            <button
-              type="button"
-              onClick={onForce}
-              disabled={pending}
-              className="mt-2 rounded-lg px-2 py-1 font-medium text-amber-900 underline underline-offset-2 dark:text-amber-200"
-            >
-              {t("appointments.bookAnyway")}
-            </button>
-          )}
         </div>
       )}
     </AnchoredSheet>
