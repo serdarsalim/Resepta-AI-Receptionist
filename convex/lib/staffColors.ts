@@ -17,10 +17,18 @@
 // people must not share one, so an unset colour is RESOLVED, not defaulted:
 // people without one take, in the order their rows were made, the first
 // colour nobody in THIS business has yet, so adding someone never repaints
-// anyone already there. Deactivated people keep theirs (their past bookings
-// still draw), which is also why switching someone off repaints nobody. Only
-// a person deleted outright frees a colour, and only the unchosen colours of
-// people added after them move. Past ten people a colour repeats.
+// anyone already there. Deactivated people stay in that order and keep their
+// colour (their past bookings still draw), which is why switching someone off
+// repaints nobody. A choice or a deletion would free a colour for the next
+// person in line, so staff.setColor and staff.remove first write every unset
+// colour as it stands (freezeStaffColors): each touches only the one person it
+// names. Past ten people a colour repeats.
+//
+// What a person may PICK is narrower than what resolution hands out: only an
+// ACTIVE colleague's colour is taken (staff.setColor, StaffColorPicker). A
+// salon that has seen six people leave must not find six of ten colours
+// locked by people who no longer work there. Choosing one of theirs shares it
+// with a person who no longer works here, whose history keeps its colour.
 //
 // Resolved among one business's staff rows and nothing wider: one deployment
 // serves every business, and another salon's choices are none of this one's

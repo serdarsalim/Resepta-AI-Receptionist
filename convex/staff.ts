@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { isStaffColorKey, loadStaffColors } from "./lib/staffColors";
 
@@ -81,12 +82,32 @@ export const rename = mutation({
   },
 });
 
+// Writes every unset colour as it resolves RIGHT NOW, before a change that
+// would move it. Resolution hands out "the first colour nobody has", so a
+// choice frees the chooser's old colour and a deletion frees the deleted
+// person's, and the next unset person in line would take it: one owner
+// picking a colour for Ayşe would repaint Mehmet. Freezing first makes a
+// choice or a deletion touch exactly the one person it names. Adding someone
+// needs no freeze: the newest row takes what is left and moves nobody.
+async function freezeStaffColors(ctx: MutationCtx, orgId: Id<"orgs">) {
+  const colors = await loadStaffColors(ctx, orgId);
+  const rows = await ctx.db
+    .query("staff")
+    .withIndex("by_org", (q) => q.eq("orgId", orgId))
+    .take(500);
+  for (const row of rows) {
+    const key = colors.get(row._id);
+    if (row.color === undefined && key) await ctx.db.patch(row._id, { color: key });
+  }
+}
+
 // A person's calendar colour, from the dot before their name on the Team card
 // or the calendar's side panel. Owner-only, like every other edit to a person.
-// A colour somebody else in this business holds, chosen or resolved, is
+// A colour an ACTIVE colleague in this business holds, chosen or resolved, is
 // refused: telling two people's bookings apart is the colour's only job, and
 // the picker already greys those out, so this is the backstop for a stale
-// screen. A refusal is returned, not thrown, so the picker can say which.
+// screen. A deactivated person's colour may be taken (lib/staffColors.ts says
+// why). A refusal is returned, not thrown, so the picker can say which.
 export const setColor = mutation({
   args: { staffId: v.id("staff"), color: v.string() },
   returns: v.union(
@@ -100,10 +121,11 @@ export const setColor = mutation({
     if (!isStaffColorKey(args.color)) return { ok: false as const, code: "bad-color" as const };
     const colors = await loadStaffColors(ctx, orgId);
     for (const [other, key] of colors) {
-      if (other !== args.staffId && key === args.color) {
-        return { ok: false as const, code: "color-taken" as const };
-      }
+      if (other === args.staffId || key !== args.color) continue;
+      const holder = await ctx.db.get(other as Id<"staff">);
+      if (holder?.active) return { ok: false as const, code: "color-taken" as const };
     }
+    await freezeStaffColors(ctx, orgId);
     await ctx.db.patch(args.staffId, { color: args.color });
     return { ok: true as const };
   },
@@ -119,6 +141,20 @@ export const setActive = mutation({
     // Deactivate rather than delete: somebody who left still did the work on
     // last month's appointments, and those rows must keep pointing at a name.
     await ctx.db.patch(args.staffId, { active: args.active });
+    // Back on the team with a CHOSEN colour that an active colleague picked
+    // while they were away: theirs is dropped and resolves afresh, so two
+    // people at work never share a colour.
+    if (args.active && !row.active && row.color) {
+      const colors = await loadStaffColors(ctx, orgId);
+      for (const [other, key] of colors) {
+        if (other === args.staffId || key !== row.color) continue;
+        const holder = await ctx.db.get(other as Id<"staff">);
+        if (holder?.active) {
+          await ctx.db.patch(args.staffId, { color: undefined });
+          break;
+        }
+      }
+    }
     return null;
   },
 });
@@ -164,6 +200,8 @@ export const remove = mutation({
     const row = await ctx.db.get(args.staffId);
     if (!row || row.orgId !== orgId) throw new Error("not-found");
     if (row.active) throw new Error("staff-still-active");
+    // Before the row goes, so its colour is not handed down the line.
+    await freezeStaffColors(ctx, orgId);
     await ctx.db.delete(args.staffId);
     return null;
   },

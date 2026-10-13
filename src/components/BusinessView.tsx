@@ -23,6 +23,7 @@ import { Sheet } from "./Sheet";
 import { SegmentedControl } from "./SegmentedControl";
 import { ViewOnlyPill } from "./ViewOnlyPill";
 import { CheckSwitch } from "./CheckSwitch";
+import { StaffColorPicker } from "./StaffColorPicker";
 import { FIELD, ROW_GRID, RowLabel } from "./RowLabel";
 import { presetLanguage } from "../../convex/lib/industryPresets";
 import { InlineEditValue } from "./RecordField";
@@ -2093,6 +2094,22 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
     setDragId(null);
     void guard(() => reorderStaff({ orderedIds: next }));
   };
+  // Who holds which calendar colour, for the picker's greyed swatches: every
+  // ACTIVE bookable person's resolved colour, so a colour nobody chose but
+  // somebody was given still counts as taken. A deactivated person's does
+  // not (lib/staffColors.ts).
+  const colorHolders = new Map<string, { staffId: string; name: string }>();
+  for (const row of roster) {
+    if (row.staffId && row.color && row.active) {
+      colorHolders.set(row.color, { staffId: row.staffId, name: row.name });
+    }
+  }
+  const takenFor = (staffId: string) =>
+    new Map(
+      [...colorHolders.entries()]
+        .filter(([, holder]) => holder.staffId !== staffId)
+        .map(([key, holder]) => [key, holder.name]),
+    );
   const accessLabel = (value: string) =>
     value === "owner"
       ? t("role.owner")
@@ -2184,6 +2201,24 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                 <span className="hidden sm:block" />
               )}
 
+              {/* The person's calendar colour before their name, the dot the
+                  calendar's bookings wear (Nudge picks a host's colour from
+                  the same spot; a colour COLUMN was tried there first and
+                  squeezed the name onto two lines). Only a bookable person
+                  has one: a login with no staff row never appears on the
+                  calendar, and gets the dot's width blank so names align. */}
+              <span className="flex min-w-0 items-center gap-1.5">
+              {row.staffId && row.color ? (
+                <StaffColorPicker
+                  staffId={row.staffId}
+                  name={row.name}
+                  color={row.color}
+                  taken={takenFor(row.staffId)}
+                  readOnly={!isOwner}
+                />
+              ) : (
+                <span aria-hidden className="h-6 w-6 shrink-0" />
+              )}
               <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                 {/* Every row is renameable, whichever half of a person it is.
                     A staff row's name is the org's own; a login-only member
@@ -2219,6 +2254,7 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                 {row.isMe && (
                   <span className="text-xs text-[var(--muted)]">({t("team.you")})</span>
                 )}
+              </span>
               </span>
 
               {/* Deactivated, never deleted: whoever left still did last
@@ -2345,7 +2381,9 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
               {/* Leading cell for the drag column. An invite has no row to
                   order — it is not a member yet. */}
               <span className="hidden sm:block" />
-              <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+              {/* Indented by the colour dot's width and gap, so an invite's
+                  address starts where the names above it do. */}
+              <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 pl-[1.875rem]">
                 <span className="truncate text-[var(--muted)]">{pendingInvite.email}</span>
                 <span className="text-xs text-[var(--muted)]">
                   {t("team.pending")} ·{" "}

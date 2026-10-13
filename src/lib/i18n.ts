@@ -530,6 +530,44 @@ const dictionary = {
     de: "Der Kalender hat diese Änderung abgelehnt, der Termin blieb unverändert.",
   },
   "staff.title": { tr: "Ekip", en: "Team", de: "Team" },
+  // A team member's calendar colour (StaffColorPicker): Google Calendar's
+  // event palette with Resepta's lavender first, named as Google names them
+  // in each language.
+  "staffColor.lavender": { tr: "Lavanta", en: "Lavender", de: "Lavendel" },
+  "staffColor.peacock": { tr: "Tavus kuşu", en: "Peacock", de: "Pfau" },
+  "staffColor.sage": { tr: "Adaçayı", en: "Sage", de: "Salbei" },
+  "staffColor.tangerine": { tr: "Mandalina", en: "Tangerine", de: "Mandarine" },
+  "staffColor.grape": { tr: "Üzüm", en: "Grape", de: "Weintraube" },
+  "staffColor.banana": { tr: "Muz", en: "Banana", de: "Banane" },
+  "staffColor.blueberry": { tr: "Yaban mersini", en: "Blueberry", de: "Heidelbeere" },
+  "staffColor.flamingo": { tr: "Flamingo", en: "Flamingo", de: "Flamingo" },
+  "staffColor.basil": { tr: "Fesleğen", en: "Basil", de: "Basilikum" },
+  "staffColor.graphite": { tr: "Grafit", en: "Graphite", de: "Graphit" },
+  "staffColor.of": {
+    tr: "{name}: {color}",
+    en: "{name}: {color}",
+    de: "{name}: {color}",
+  },
+  "staffColor.change": {
+    tr: "{name}: {color}. Rengi değiştir",
+    en: "{name}: {color}. Change color",
+    de: "{name}: {color}. Farbe ändern",
+  },
+  "staffColor.title": {
+    tr: "{name} için takvim rengi",
+    en: "Calendar color for {name}",
+    de: "Kalenderfarbe für {name}",
+  },
+  "staffColor.takenBy": {
+    tr: "{name} bu rengi kullanıyor",
+    en: "{name} has this one",
+    de: "{name} hat diese Farbe",
+  },
+  "staffColor.takenError": {
+    tr: "Bu rengi ekipte başka biri kullanıyor.",
+    en: "Someone else on the team has that color.",
+    de: "Diese Farbe hat schon jemand anderes im Team.",
+  },
   "staff.hint": {
     tr: "Randevuyu kim veriyor. Gün görünümü herkese bir sütun açar. Ayrılan birini önce pasife alın; sonra tamamen kaldırabilirsiniz, ama geçmiş randevuları artık bir isim göstermez.",
     en: "Who delivers the appointment. Day view gives each person a column. Switch somebody off before removing them — once removed, their past appointments no longer show who did them.",
