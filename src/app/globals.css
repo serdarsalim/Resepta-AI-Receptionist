@@ -122,6 +122,10 @@
      the solid; past ones the pale wash, so a glance separates what is coming
      from what is already done. */
   --event: #7c5cf0;
+  /* Text on the solid chip. White on every palette colour but Banana, whose
+     chips set their own (lib/staffColors.ts); a team member's colour arrives
+     on the chip with both values, see .staff-tint below. */
+  --event-fg: #ffffff;
   --event-soft: color-mix(in srgb, var(--event) 18%, var(--card));
   --event-past: color-mix(in srgb, var(--event) 9%, var(--card));
   --event-past-fg: color-mix(in srgb, var(--event) 45%, var(--muted));
@@ -227,6 +231,7 @@
      muddy on near-black; the washes mix a little stronger for the same
      reason. */
   --event: #8b6ef5;
+  --event-fg: #ffffff;
   --event-soft: color-mix(in srgb, var(--event) 24%, var(--card));
   --event-past: color-mix(in srgb, var(--event) 12%, var(--card));
   --event-past-fg: color-mix(in srgb, var(--event) 55%, var(--muted));
@@ -282,6 +287,24 @@ thead {
    out toward its own bottom corner. The top stop is what survived, because it
    holds the contrast step against --pane (Nudge 29339b0c, the same call).
    The separating is done by the rail's md:border-r in AppShell. Both modes. */
+/* A booking in its TEAM MEMBER's colour (Nudge's .host-tint): the chip sets
+   --event and --event-fg inline (lib/staffTint.ts), and the washes are
+   re-derived HERE, on the chip, because a custom property inherits its
+   COMPUTED value: the :root washes were already mixed from lavender and would
+   not follow a chip's own --event. The default, lavender, sets nothing inline
+   and re-derives exactly what :root has. The dark pair wins on specificity
+   (0-2-0), not on source order. */
+.staff-tint {
+  --event-soft: color-mix(in srgb, var(--event) 18%, var(--card));
+  --event-past: color-mix(in srgb, var(--event) 9%, var(--card));
+  --event-past-fg: color-mix(in srgb, var(--event) 45%, var(--muted));
+}
+.dark .staff-tint {
+  --event-soft: color-mix(in srgb, var(--event) 24%, var(--card));
+  --event-past: color-mix(in srgb, var(--event) 12%, var(--card));
+  --event-past-fg: color-mix(in srgb, var(--event) 55%, var(--muted));
+}
+
 .app-pane {
   background: #f8f8f9;
 }

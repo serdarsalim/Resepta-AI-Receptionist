@@ -38,6 +38,7 @@ import { YearGrid, addYears, startOfYear } from "./YearGrid";
 import { BlockSheet, SheetKindTabs, type BlockDraft } from "./BlockSheet";
 import { RowMenu } from "./RowMenu";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
+import { STAFF_TINT, staffSwatch, staffTint } from "@/lib/staffTint";
 import { useBookingSheet } from "./useBookingSheet";
 import type { Rect } from "@/lib/anchoredSheet";
 
@@ -62,7 +63,9 @@ type ViewMode = "day" | "week" | "month" | "year" | "list";
 // A slot the sheet is currently open against: which day, and the minutes it
 // spans. Kept in calendar terms rather than pixels so it survives a scroll or
 // a resize, and the band is redrawn from it rather than frozen where it was.
-type SlotBand = { day: number; startMinute: number; endMinute: number };
+// `staffId`: whose booking the open sheet says it is, so the band wears their
+// colour before Save does.
+type SlotBand = { day: number; startMinute: number; endMinute: number; staffId?: string };
 
 // A closure as the CALENDAR needs it: the businessHours shape plus the row id,
 // because the grid pins an editable label chip on every closure band and
@@ -167,6 +170,14 @@ export function AppointmentsView({
   // hour on purpose is the whole reason the shading is a wash rather than a
   // wall (docs/wwsd.md: the rule governs the offer, not the owner).
   const closures = useQuery(api.closures.list, {});
+  // Every team member with their RESOLVED colour (lib/staffColors.ts): what
+  // their bookings wear on every view. The booking sheet subscribes to the
+  // same query, so this costs no second read.
+  const staffRows = useQuery(api.staff.list, {});
+  const colorOf = useMemo(() => {
+    const byId = new Map((staffRows ?? []).map((row) => [row._id as string, row.color]));
+    return (staffId?: string) => (staffId ? byId.get(staffId) : undefined);
+  }, [staffRows]);
   const setStatus = useMutation(api.appointments.setStatus);
   // An action, not a mutation: a move has to hear back from cal.com before our
   // own row moves. See convex/schedule.ts. Held here as well as in the booking
@@ -246,11 +257,16 @@ export function AppointmentsView({
   // staying where the click landed while the sheet said something else
   // (Nudge's onTimeChange). The kind switch reads lastDraft, so it carries
   // the new time across to the block sheet too.
-  const followBand = useCallback((startAt: number, durationMinutes: number) => {
+  const followBand = useCallback((startAt: number, durationMinutes: number, staffId?: string) => {
     const startMinute = minutesInto(startAt);
     setProvisional((current) =>
       current
-        ? { day: startOfDay(startAt), startMinute, endMinute: startMinute + durationMinutes }
+        ? {
+            day: startOfDay(startAt),
+            startMinute,
+            endMinute: startMinute + durationMinutes,
+            staffId,
+          }
         : current,
     );
     setLastDraft((current) => (current ? { ...current, startAt, durationMinutes } : current));
@@ -446,6 +462,7 @@ export function AppointmentsView({
         <MonthGrid
           anchor={anchor}
           rows={withOptimistic}
+          colorOf={colorOf}
           businessHours={settings?.org.businessHours}
           closures={closures}
           onOpenDay={(dayMs) => {
@@ -508,6 +525,7 @@ export function AppointmentsView({
       {view !== "list" && view !== "month" && view !== "year" && appointments !== undefined && (
         <Calendar
           appointments={withOptimistic}
+          colorOf={colorOf}
           view={view}
           anchor={anchor}
           businessHours={settings?.org.businessHours}
@@ -597,6 +615,15 @@ export function AppointmentsView({
                 key={appointment._id}
                 className="group flex flex-wrap items-center gap-3 rounded-md px-2 py-3 text-sm hover:bg-[var(--row-hover-bg)]"
               >
+                {/* The team member's colour, as on the grid: who has it, at a
+                    glance (Nudge's list does the same). */}
+                <span
+                  aria-hidden
+                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                    appointment.status === "cancelled" ? "opacity-40" : ""
+                  }`}
+                  style={{ backgroundColor: staffSwatch(colorOf(appointment.staffId)) }}
+                />
                 <span className="w-12 font-medium tabular-nums">
                   {formatTime(appointment.startAt, language)}
                 </span>
@@ -670,7 +697,7 @@ export function AppointmentsView({
           // sheets in one spot, and a member never sees the second one.
           heightFloor: isOwner && sheetFloor > 0 ? sheetFloor : undefined,
           onNaturalHeight: isOwner ? growSheetFloor : undefined,
-          onTimeChange: followBand,
+          onSlotChange: followBand,
         },
       )}
       {blockSheet && (
@@ -803,8 +830,8 @@ function blockStyle(status: string, isPast: boolean): string {
   // Booked but unconfirmed reads a shade lighter than confirmed, so a glance
   // down the week still shows who has answered — but both are unmistakably
   // "still to come" next to the washed-out past.
-  if (status === "confirmed") return "bg-[var(--event)] text-white";
-  return "bg-[color-mix(in_srgb,var(--event)_72%,var(--card))] text-white";
+  if (status === "confirmed") return "bg-[var(--event)] text-[var(--event-fg)]";
+  return "bg-[color-mix(in_srgb,var(--event)_72%,var(--card))] text-[var(--event-fg)]";
 }
 
 // Body in lib/datetime, alongside addLocalDays — the two have to agree about
@@ -1082,6 +1109,7 @@ function Calendar({
   closures,
   timezone,
   onOpenClosure,
+  colorOf,
 }: {
   appointments: CalendarAppointment[];
   view: "day" | "week";
@@ -1118,6 +1146,9 @@ function Calendar({
   // owner-only, and a chip that opens a sheet whose Save throws is a door
   // painted on a wall.
   onOpenClosure?: (row: ClosureRow, date: string, anchor: Rect) => void;
+  // A team member's resolved colour key, so a booking wears it
+  // (lib/staffTint.ts). Undefined means the default lavender.
+  colorOf: (staffId?: string) => string | undefined;
 }) {
   const { t, language } = useLanguage();
   const locale = localeFor(language);
@@ -1768,12 +1799,18 @@ function Calendar({
                     <div
                       aria-hidden
                       data-slot-band
-                      className={`pointer-events-none absolute z-20 overflow-hidden rounded-md px-1.5 py-0.5 text-[11px] leading-tight opacity-90 shadow-md ${
+                      // A booking being moved keeps its person's colour; a
+                      // fresh slot wears whoever the open sheet has picked,
+                      // and the default until somebody is.
+                      className={`${STAFF_TINT} pointer-events-none absolute z-20 overflow-hidden rounded-md px-1.5 py-0.5 text-[11px] leading-tight opacity-90 shadow-md ${
                         band.day + band.endMinute * 60_000 < now
                           ? "bg-[var(--event-past)] text-[var(--event-past-fg)]"
-                          : "bg-[var(--event)] text-white"
+                          : "bg-[var(--event)] text-[var(--event-fg)]"
                       }`}
                       style={{
+                        ...staffTint(
+                          colorOf(drag ? drag.row?.staffId : provisional?.staffId),
+                        ),
                         top: ((band.startMinute - dayStart * 60) / 60) * HOUR_PX,
                         height: bandHeight,
                         // Same asymmetry as the saved chips, so the draft sits
@@ -1862,6 +1899,9 @@ function Calendar({
                       // grid to press for the NEXT booking, instead of every
                       // pixel of a busy hour opening something already there.
                       style={{
+                        // The team member's colour (lib/staffTint.ts); the
+                        // washes follow it through the class below.
+                        ...staffTint(colorOf(row.staffId)),
                         top,
                         height,
                         left: `calc((100% - ${BLOCK_RIGHT_GUTTER_PX}px) * ${lane / lanes} + 1px)`,
@@ -1872,7 +1912,7 @@ function Calendar({
                       // same-coloured chips sharing a slot readable as two —
                       // Google's white seam. Invisible against the card when a
                       // block stands alone.
-                      className={`absolute cursor-grab overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight ring-1 ring-[var(--card)] transition-opacity hover:opacity-80 active:cursor-grabbing ${blockStyle(
+                      className={`${STAFF_TINT} absolute cursor-grab overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight ring-1 ring-[var(--card)] transition-opacity hover:opacity-80 active:cursor-grabbing ${blockStyle(
                         row.status,
                         row.startAt +
                           (row.durationMinutes ?? DEFAULT_DURATION) * 60_000 <

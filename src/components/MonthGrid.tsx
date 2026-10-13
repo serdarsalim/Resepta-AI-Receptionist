@@ -16,6 +16,7 @@ import {
   weekdayNames,
 } from "@/lib/datetime";
 import type { Rect } from "@/lib/anchoredSheet";
+import { STAFF_TINT, staffTint } from "@/lib/staffTint";
 
 // The month, as a month reads: whether days are full, not what happens at
 // 14:15. The time grid answers "when exactly"; this answers "which day has
@@ -30,6 +31,8 @@ export type MonthRow = {
   _id: string;
   startAt: number;
   status: string;
+  // Whose booking it is: the chip wears their colour.
+  staffId?: string;
   customer: { firstName: string; lastName?: string } | null;
   serviceName?: string;
 };
@@ -74,9 +77,12 @@ export function MonthGrid({
   onDraftDay,
   businessHours,
   closures,
+  colorOf,
 }: {
   anchor: number;
   rows: MonthRow[];
+  // A team member's resolved colour key (lib/staffTint.ts).
+  colorOf?: (staffId?: string) => string | undefined;
   onOpenDay: (dayMs: number) => void;
   onOpenBlock: (id: string, anchorRect?: Rect) => void;
   // Empty space in a cell books that day. No time was chosen, so the caller
@@ -230,7 +236,8 @@ export function MonthGrid({
                       });
                     }}
                     title={`${formatTime(row.startAt, language)} ${nameOf(row)}`}
-                    className={`block w-full truncate rounded px-1 text-left text-[11px] leading-4 transition-opacity hover:opacity-80 ${
+                    style={staffTint(colorOf?.(row.staffId))}
+                    className={`${STAFF_TINT} block w-full truncate rounded px-1 text-left text-[11px] leading-4 transition-opacity hover:opacity-80 ${
                       row.status === "cancelled"
                         ? "text-[var(--muted)] line-through"
                         : // Same tense split as the week grid: what already

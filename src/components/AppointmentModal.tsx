@@ -33,6 +33,7 @@ import {
   TrashIcon,
 } from "./AnchoredSheet";
 import type { Rect } from "@/lib/anchoredSheet";
+import { staffSwatch } from "@/lib/staffTint";
 import type { Id } from "../../convex/_generated/dataModel";
 
 // The appointment sheet, opened by clicking a slot or a block on the grid,
@@ -93,7 +94,7 @@ export function AppointmentModal({
   tabs,
   heightFloor,
   onNaturalHeight,
-  onTimeChange,
+  onSlotChange,
 }: {
   draft: ModalDraft;
   services: {
@@ -107,7 +108,8 @@ export function AppointmentModal({
   // orgs.priceDecimals — see lib/money. Threaded rather than queried so the
   // modal keeps taking its whole money format from one caller.
   priceDecimals?: boolean;
-  staff: { _id: Id<"staff">; name: string; active: boolean }[];
+  // `color` is the person's resolved calendar colour (staff.list).
+  staff: { _id: Id<"staff">; name: string; active: boolean; color?: string }[];
   staffLabel: string;
   pending: boolean;
   error?: string;
@@ -137,10 +139,11 @@ export function AppointmentModal({
   // tabs are up, and where it reports its own height (AnchoredSheet).
   heightFloor?: number;
   onNaturalHeight?: (px: number) => void;
-  // Where the booking now lands, whenever its date, time or length changes,
-  // so the calendar can keep the drawn band under it (Nudge's onTimeChange):
-  // the band stayed on the slot first clicked while the sheet said 10:00.
-  onTimeChange?: (startAt: number, durationMinutes: number) => void;
+  // Where the booking now lands and whose it is, whenever its date, time,
+  // length or team member changes, so the calendar can keep the drawn band
+  // under it in the right colour (Nudge's onTimeChange): the band stayed on
+  // the slot first clicked while the sheet said 10:00.
+  onSlotChange?: (startAt: number, durationMinutes: number, staffId?: string) => void;
 }) {
   const { t, language } = useLanguage();
   const formRef = useRef<HTMLFormElement>(null);
@@ -320,15 +323,15 @@ export function AppointmentModal({
   }, []);
 
   // The caller's closure changes every render; a ref keeps the effect below
-  // keyed on the time alone.
-  const onTimeChangeRef = useRef(onTimeChange);
+  // keyed on the slot alone.
+  const onSlotChangeRef = useRef(onSlotChange);
   useEffect(() => {
-    onTimeChangeRef.current = onTimeChange;
-  }, [onTimeChange]);
+    onSlotChangeRef.current = onSlotChange;
+  }, [onSlotChange]);
   const bookedMinutes = goodsOnly ? 0 : durationMinutes;
   useEffect(() => {
-    onTimeChangeRef.current?.(startAt, bookedMinutes);
-  }, [startAt, bookedMinutes]);
+    onSlotChangeRef.current?.(startAt, bookedMinutes, staffId || undefined);
+  }, [startAt, bookedMinutes, staffId]);
 
   // The new-customer fields are uncontrolled and read on submit, because
   // PhoneInput composes the dial code and the number itself — the same
@@ -473,18 +476,32 @@ export function AppointmentModal({
         {draft.customerId ? (
           // The name is a fact here, printed where the input would be, and
           // still the way to the record.
+          // The square before it is the booking's colour on the grid, its
+          // team member's (Google's square before an event's title, Nudge
+          // c49864af); it follows the Team member select below.
           <SheetRow label={t("customers.name")}>
-            {onOpenCustomer ? (
-              <button
-                type="button"
-                onClick={() => onOpenCustomer(draft.customerId!)}
-                className="block max-w-full truncate text-left underline-offset-2 transition-colors hover:text-[var(--accent)] hover:underline"
-              >
-                {draft.customerName}
-              </button>
-            ) : (
-              <span className="block truncate">{draft.customerName}</span>
-            )}
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                aria-hidden
+                className="h-3 w-3 shrink-0 rounded-[3px]"
+                style={{
+                  backgroundColor: staffSwatch(
+                    staff.find((person) => person._id === staffId)?.color,
+                  ),
+                }}
+              />
+              {onOpenCustomer ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenCustomer(draft.customerId!)}
+                  className="min-w-0 truncate text-left underline-offset-2 transition-colors hover:text-[var(--accent)] hover:underline"
+                >
+                  {draft.customerName}
+                </button>
+              ) : (
+                <span className="min-w-0 truncate">{draft.customerName}</span>
+              )}
+            </span>
           </SheetRow>
         ) : (
           <>

@@ -137,7 +137,7 @@ export function useBookingSheet({
     grid?: {
       heightFloor?: number;
       onNaturalHeight?: (px: number) => void;
-      onTimeChange?: (startAt: number, durationMinutes: number) => void;
+      onSlotChange?: (startAt: number, durationMinutes: number, staffId?: string) => void;
     },
   ) =>
     sheet ? (
@@ -174,7 +174,7 @@ export function useBookingSheet({
         tabs={sheet.appointmentId ? undefined : tabs}
         heightFloor={sheet.appointmentId ? undefined : grid?.heightFloor}
         onNaturalHeight={sheet.appointmentId ? undefined : grid?.onNaturalHeight}
-        onTimeChange={sheet.appointmentId ? undefined : grid?.onTimeChange}
+        onSlotChange={sheet.appointmentId ? undefined : grid?.onSlotChange}
         onSubmit={(values) => void submit(values, false)}
         onForce={() => void submit(lastSubmit.current, true)}
       />
