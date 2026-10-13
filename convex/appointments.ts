@@ -10,6 +10,7 @@ import { loadOrgRules, syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordActivity, statusChange } from "./lib/activity";
 import { formatAppointmentTime } from "./lib/format";
 import { queueOrgAlert } from "./lib/alerts";
+import { slotVerdictValidator, type SlotVerdict } from "./lib/slotVerdict";
 
 // A line as the client asks for it: which service, and optionally what it
 // actually cost this time. Everything else on the stored line — the name, the
@@ -572,8 +573,6 @@ export const stampConfirmationSent = internalMutation({
   },
 });
 
-// Webhook-side transition (button tap / EVET / İPTAL). Not org-authed — the
-// caller (webhook.ts) already resolved the org and passes the row it loaded.
 // ---- Writes that follow a cal.com confirmation ----
 //
 // Both lanes (voice via http.ts, WhatsApp via the pushCancelToCalcom action)
@@ -642,30 +641,16 @@ export async function cancelAppointment(
   return scheduled;
 }
 
+// The move write itself, shared by the calendar's move (schedule.finishMove,
+// which also took over markRescheduled's cal.com echo) and the assistants'
+// own move (agentAppointments.moveOwn). It checks nothing: every caller
+// decided the new time is allowed before it got here, and each decides
+// differently (the calendar's verdict or a person's "move it anyway",
+// cal.com's word, the booking page's rules at the moment of the change).
 // externalUid moves because cal.com's reschedule mints a new booking and
-// retires the uid we were holding.
-export const markRescheduled = internalMutation({
-  args: {
-    appointmentId: v.id("appointments"),
-    startAt: v.number(),
-    durationMinutes: v.optional(v.number()),
-    externalUid: v.optional(v.string()),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const appointment = await ctx.db.get(args.appointmentId);
-    if (!appointment) return null;
-    await rescheduleAppointment(ctx, appointment, args);
-    return null;
-  },
-});
-
-// The move write itself, shared by markRescheduled and the assistants' own
-// move (agentAppointments.moveOwn). It checks nothing: every caller decided
-// the new time is allowed before it got here, and each decides differently
-// (cal.com's word, the booking page's rules at the moment of the change).
-// Returns how many messages to the customer it scheduled (the confirmation
-// again, at the new time).
+// retires the uid we were holding. Returns how many messages to the customer
+// it scheduled (the confirmation again, at the new time; none when that time
+// has already passed).
 export async function rescheduleAppointment(
   ctx: MutationCtx,
   appointment: Doc<"appointments">,
@@ -714,7 +699,9 @@ export function nextUpcomingOf(
 
 // Everything the appointment modal edits that cal.com has no opinion about.
 // Time and duration are NOT here — those go through schedule.move, because
-// cal.com owns them and has to agree first.
+// cal.com owns them and has to agree first. So does a new team member when
+// the time moves in the same save: the move judges the person at the new
+// time and writes both.
 export const updateDetails = mutation({
   args: {
     appointmentId: v.id("appointments"),
@@ -725,8 +712,14 @@ export const updateDetails = mutation({
     staffId: v.optional(v.union(v.id("staff"), v.null())),
     notes: v.optional(v.string()),
     status: v.optional(appointmentStatus),
+    // The person confirmed "Save it anyway?" over the new team member's own
+    // clash (the calendar's verdict, P6).
+    force: v.optional(v.boolean()),
   },
-  returns: v.null(),
+  returns: v.union(
+    v.object({ ok: v.literal(true) }),
+    v.object({ ok: v.literal(false), reason: v.string(), verdict: slotVerdictValidator }),
+  ),
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
     const appointment = await ctx.db.get(args.appointmentId);
@@ -744,6 +737,29 @@ export const updateDetails = mutation({
       else {
         const staff = await ctx.db.get(args.staffId);
         if (!staff || staff.orgId !== orgId) throw new Error("not-found");
+        // Giving an open booking to someone who already has one then
+        // double-books a person: the calendar's verdict judges it, and only
+        // that (the time is not moving, so the slot's other facts are not
+        // news). Through a query, because schedule.ts imports this module.
+        const open = appointment.status === "scheduled" || appointment.status === "confirmed";
+        if (open && args.staffId !== appointment.staffId && !args.force) {
+          // Annotated: schedule.ts imports this module, and the inferred type
+          // would chase itself round the generated api.
+          const verdict: SlotVerdict = await ctx.runQuery(internal.schedule.judge, {
+            orgId,
+            startAt: appointment.startAt,
+            durationMinutes:
+              appointment.durationMinutes ??
+              appointment.items?.reduce((sum, item) => sum + item.durationMinutes, 0) ??
+              30,
+            staffId: args.staffId,
+            ignoreId: appointment._id,
+            staffOnly: true,
+          });
+          if (verdict.conflict) {
+            return { ok: false as const, reason: verdict.conflict, verdict };
+          }
+        }
         patch.staffId = args.staffId;
       }
     }
@@ -760,7 +776,7 @@ export const updateDetails = mutation({
         detail: statusChange(appointment.status, args.status),
       });
     }
-    return null;
+    return { ok: true as const };
   },
 });
 

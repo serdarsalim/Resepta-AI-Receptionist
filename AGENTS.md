@@ -101,11 +101,22 @@ style issue.
   token-authed read-only ICS feed route the owner subscribes to once.
 
   With no key configured, `schedule.create` takes its documented no-key path
-  and the appointment is Resepta's alone. **Consequence: today nothing checks
-  for conflicts in the salon-facing calendar.** Double-booking a slot is
-  possible and is caught only by a human looking at the grid; the `force` /
-  `canForce` "book anyway" flow only ever fires when a key exists. Do not
-  assume the guardrail is there.
+  and the appointment is Resepta's alone. **The salon-facing calendar judges
+  every create and move itself, for every business** (2026-10-13, P6 of the
+  Nudge port; `schedule.judgeSlot`, built on the booking page's own helpers):
+  outside that day's opening hours, blocked time, the customer already booked
+  then, the team member picked already booked then, or every active team
+  member busy. Any of those comes back `canForce` with the verdict; the sheet
+  asks "Book it anyway?" (a drag asks "Move it anyway?") and the same call
+  with `force` books it. The server refuses without `force`, not the UI:
+  `prepareCreate` before a new customer is written, `finishCreate` and
+  `finishMove` again in the transaction that writes, `updateDetails` for a
+  change of person alone. Only these signed-in staff writes take `force`; the
+  booking page and the assistants never can, and cal.com's own refusals ride
+  the same `canForce`. A start in the past and a time inside the minimum
+  notice are never refused here; the sheet only says so. Not judged: the
+  office MCP's `create_appointments` (an import of a book that already
+  exists) and reopening a cancelled booking from the list.
 
   Manual entry in the app stays for walk-ins; `appointments.source`
   distinguishes them and `externalUid` is cal.com's booking uid.
@@ -115,7 +126,8 @@ style issue.
   an optional last day; a window or all day), drawn on the calendar where an
   appointment would be (the Blocked time half of the sheet a drawn slot opens,
   `BlockSheet`) and refused by the booking page and both agents. The owner's
-  own grid shades it and never refuses a drop on it. It is BUSINESS-wide: a
+  own grid shades it, and booking or dropping onto it asks first (the
+  calendar verdict's `closed`). It is BUSINESS-wide: a
   block drawn in one person's day-view column still shuts the whole business.
   Per-person blocks (Nudge's `hostBlocks`) are an open call for Serdar; do not
   add a staff field to closures without it. `appointments.customerId` stays

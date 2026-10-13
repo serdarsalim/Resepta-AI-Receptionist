@@ -50,3 +50,32 @@ export function customerConflict(
     ) ?? null
   );
 }
+
+// The same question about a TEAM MEMBER, for the team's own calendar (P6,
+// 2026-10-13): a booking given to Gez at 10:00 while Gez already has one at
+// 10:00 double-books a person even in a shop with chairs to spare. Only the
+// calendar ever names a person on a booking (the booking page and the
+// assistants book capacity), so only its verdict asks this
+// (schedule.judgeSlot). Same exemptions as the customer's: goods hold nobody,
+// and only open bookings count.
+export function staffConflict(
+  rows: Doc<"appointments">[],
+  staffId: Id<"staff">,
+  startMs: number,
+  durationMinutes: number,
+  ignoreId?: Id<"appointments">,
+): Doc<"appointments"> | null {
+  if (durationMinutes === 0) return null;
+  const endMs = startMs + durationMinutes * 60_000;
+  return (
+    rows.find(
+      (row) =>
+        row.staffId === staffId &&
+        row._id !== ignoreId &&
+        (row.status === "scheduled" || row.status === "confirmed") &&
+        row.durationMinutes !== 0 &&
+        row.startAt < endMs &&
+        startMs < row.startAt + (row.durationMinutes ?? 30) * 60_000,
+    ) ?? null
+  );
+}

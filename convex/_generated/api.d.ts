@@ -88,6 +88,7 @@ import type * as lib_reminderSchedule from "../lib/reminderSchedule.js";
 import type * as lib_renderTokens from "../lib/renderTokens.js";
 import type * as lib_richText from "../lib/richText.js";
 import type * as lib_sendFailure from "../lib/sendFailure.js";
+import type * as lib_slotVerdict from "../lib/slotVerdict.js";
 import type * as lib_speech from "../lib/speech.js";
 import type * as lib_staffColors from "../lib/staffColors.js";
 import type * as lib_templateTexts from "../lib/templateTexts.js";
@@ -224,6 +225,7 @@ declare const fullApi: ApiFromModules<{
   "lib/renderTokens": typeof lib_renderTokens;
   "lib/richText": typeof lib_richText;
   "lib/sendFailure": typeof lib_sendFailure;
+  "lib/slotVerdict": typeof lib_slotVerdict;
   "lib/speech": typeof lib_speech;
   "lib/staffColors": typeof lib_staffColors;
   "lib/templateTexts": typeof lib_templateTexts;
