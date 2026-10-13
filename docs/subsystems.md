@@ -1321,9 +1321,12 @@ step by step, over one long session. What holds now:
   `BLOCK_RIGHT_GUTTER_PX` (14) bare on the right, so a fully booked slot
   still has grid to press for the NEXT booking. The draft band uses the
   same insets so it lands exactly where the saved chip will.
-- **The gutter corner prints the GMT offset** (`gmtLabel`), computed from
-  the BUSINESS's timezone — the same zone the closed shading uses, so the
-  two can never disagree.
+- **The gutter corner prints the VIEWER's GMT offset** (`gmtLabel`), because
+  the grid is drawn in the viewer's clock: every column is a local day and
+  every hour label a local hour. It printed the business's zone until
+  2026-10-13 (P5), so an owner checking an Istanbul salon from Kuala Lumpur
+  read "GMT+03" over Malaysian hours. The closed shading is still computed in
+  the business's zone and projected onto the viewer's day.
 - **Header order is Google's**: Today as an always-visible outlined pill on
   the left (`periodHasToday` is deleted — a pill that vanished made the row
   twitch), arrows + heading next, the view picker as a matching outlined

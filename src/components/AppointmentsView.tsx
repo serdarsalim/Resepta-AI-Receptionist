@@ -854,15 +854,16 @@ function formatMinutes(minute: number): string {
   ).padStart(2, "0")}`;
 }
 
-// The gutter-corner offset chip. Ink, not the timestamp grey — it is a grid
-// coordinate like the hour labels beside it. Hovering (or focusing) it names
-// the zone in full, instantly: "GMT+03" is ambiguous the two weeks a year
-// when DST makes Istanbul and Vienna disagree about it. Portal + fixed for
-// the tip, the InfoTip rule — the header sits over a scroll container.
-function GmtBadge({ timezone, at }: { timezone?: string; at: number }) {
+// The gutter-corner offset chip, in the viewer's zone (the one the grid is
+// drawn in). Ink, not the timestamp grey — it is a grid coordinate like the
+// hour labels beside it. Hovering (or focusing) it names the zone in full,
+// instantly: "GMT+03" is ambiguous the two weeks a year when DST makes
+// Istanbul and Vienna disagree about it. Portal + fixed for the tip, the
+// InfoTip rule — the header sits over a scroll container.
+function GmtBadge({ at }: { at: number }) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const ref = useRef<HTMLSpanElement>(null);
-  const zoneName = timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const zoneName = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const show = () => {
     const r = ref.current?.getBoundingClientRect();
     if (!r) return;
@@ -880,7 +881,7 @@ function GmtBadge({ timezone, at }: { timezone?: string; at: number }) {
         onBlur={hide}
         className="cursor-default text-[10px] text-[var(--foreground)]"
       >
-        {gmtLabel(timezone, at)}
+        {gmtLabel(zoneName, at)}
       </span>
       {pos &&
         createPortal(
@@ -897,10 +898,9 @@ function GmtBadge({ timezone, at }: { timezone?: string; at: number }) {
   );
 }
 
-// "GMT+03" for the gutter corner, computed from the BUSINESS's zone — the
-// same zone the closed shading uses, so the two can never disagree. Google
-// prints the viewer's offset there; ours is a business tool, and the offset
-// that explains the grid is the salon's.
+// "GMT+03" for the gutter corner. Given the viewer's zone: the offset that
+// explains a grid is the one its hour labels are in, which is Google's
+// choice too.
 function gmtLabel(timezone: string | undefined, at: number): string {
   try {
     const parts = new Intl.DateTimeFormat("en-US", {
@@ -1500,9 +1500,15 @@ function Calendar({
           looked like it stopped short of the GMT corner. */}
       <div className="flex border-b border-[var(--grid-line)] pr-[10px] pt-3">
         {/* The gutter's slice of the header carries the UTC offset, exactly
-            where Google puts it: it labels the hour column under it. */}
+            where Google puts it: it labels the hour column under it. The
+            VIEWER's offset, because the hours under it are the viewer's clock
+            (every column is a local day, every label a local hour). It printed
+            the business's zone, so an owner checking an Istanbul salon from
+            Kuala Lumpur read "GMT+03" over a column of Malaysian hours. Nudge
+            caught this porting the grid. The closed shading still comes from
+            the business's hours, projected onto these local hours. */}
         <div className="flex w-12 shrink-0 items-end justify-end pb-2 pr-2">
-          <GmtBadge timezone={timezone} at={days[0]} />
+          <GmtBadge at={days[0]} />
         </div>
         {staffColumns
           ? columns.map((column) => (
