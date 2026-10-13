@@ -1,7 +1,7 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -37,8 +37,10 @@ import { MonthGrid, addMonths, startOfMonth } from "./MonthGrid";
 import { YearGrid, addYears, startOfYear } from "./YearGrid";
 import { BlockSheet, SheetKindTabs, type BlockDraft } from "./BlockSheet";
 import { RowMenu } from "./RowMenu";
+import { iconButtonClass } from "./Control";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
-import { STAFF_TINT, staffSwatch, staffTint } from "@/lib/staffTint";
+import { STAFF_TINT, staffSwatch, staffSwatchInk, staffTint } from "@/lib/staffTint";
+import { CalendarPanel, FilterPicker, UNASSIGNED, shownIds } from "./CalendarPanel";
 import { useBookingSheet } from "./useBookingSheet";
 import type { Rect } from "@/lib/anchoredSheet";
 
@@ -64,8 +66,16 @@ type ViewMode = "day" | "week" | "month" | "year" | "list";
 // spans. Kept in calendar terms rather than pixels so it survives a scroll or
 // a resize, and the band is redrawn from it rather than frozen where it was.
 // `staffId`: whose booking the open sheet says it is, so the band wears their
-// colour before Save does.
-type SlotBand = { day: number; startMinute: number; endMinute: number; staffId?: string };
+// colour before Save does (and, in day view, sits in their column).
+// `columnKey`: the column it was drawn in, where it stays when nobody's
+// column matches.
+type SlotBand = {
+  day: number;
+  startMinute: number;
+  endMinute: number;
+  staffId?: string;
+  columnKey?: string;
+};
 
 // A closure as the CALENDAR needs it: the businessHours shape plus the row id,
 // because the grid pins an editable label chip on every closure band and
@@ -75,6 +85,33 @@ type ClosureRow = Closure & { _id: Id<"closures"> };
 function rectOf(el: Element): Rect {
   const r = el.getBoundingClientRect();
   return { top: r.top, left: r.left, width: r.width, height: r.height };
+}
+
+// Per viewer, in this browser: whether the side panel is open (open unless
+// closed), and per business what its lists filter. Not on the server: a
+// filter is a working context of one person at one desk, and two owners of
+// one salon looking at different chairs is the point of it.
+const PANEL_STORAGE_KEY = "resepta.calendar.panel";
+const FILTER_STORAGE_PREFIX = "resepta.calendar.filters.";
+
+type CalendarFilters = { staff: string[]; services: string[] };
+const NO_FILTERS: CalendarFilters = { staff: [], services: [] };
+
+// Anything can be in localStorage: a half-written entry, a shape from another
+// build. Whatever does not read as a list of strings reads as no filter.
+function readFilters(raw: string | null): CalendarFilters {
+  try {
+    const parsed: unknown = JSON.parse(raw ?? "null");
+    const list = (value: unknown) =>
+      Array.isArray(value) ? value.filter((x): x is string => typeof x === "string") : [];
+    if (parsed && typeof parsed === "object") {
+      const record = parsed as Record<string, unknown>;
+      return { staff: list(record.staff), services: list(record.services) };
+    }
+  } catch {
+    // Unreadable: no filter.
+  }
+  return NO_FILTERS;
 }
 
 const VIEW_MODES: { id: ViewMode; key: TranslationKey }[] = [
@@ -147,19 +184,11 @@ export function AppointmentsView({
     return { fromMs: from - pad, toMs: from + span + pad };
   }, [anchor, view]);
   const appointments = useQuery(api.appointments.listRange, range);
-  // Start times for the whole year, only while the year is being looked at.
-  const yearStarts = useQuery(
-    api.appointments.startsInRange,
-    view === "year"
-      ? { fromMs: startOfYear(anchor), toMs: addYears(startOfYear(anchor), 1) }
-      : "skip",
-  );
-  // Bucketed to local midnight here rather than on the server, because "which
-  // day" is a question about the reader's clock.
-  const bookedDays = useMemo(
-    () => new Set((yearStarts ?? []).map((ms) => startOfDay(ms))),
-    [yearStarts],
-  );
+  // The days the day and week grids show, banded on the side panel's month.
+  const visiblePeriod = useMemo(() => {
+    const from = view === "week" ? startOfWeek(anchor) : startOfDay(anchor);
+    return { from, to: addLocalDays(from, view === "week" ? 7 : 1) };
+  }, [anchor, view]);
   const settings = useQuery(api.orgs.current, {});
   // Closure writes are owner-only end to end (convex/closures.ts requires it),
   // so for staff the chips are facts rather than doors and the kind tabs never
@@ -178,6 +207,126 @@ export function AppointmentsView({
     const byId = new Map((staffRows ?? []).map((row) => [row._id as string, row.color]));
     return (staffId?: string) => (staffId ? byId.get(staffId) : undefined);
   }, [staffRows]);
+  // The services, for the side panel's list. The booking sheet subscribes to
+  // the same query.
+  const services = useQuery(api.services.list, {});
+
+  // ── The side panel and its filters (CalendarPanel) ─────────────────────
+  //
+  // Read on mount, not during render: the server has no localStorage, and a
+  // render-time read is a hydration mismatch (AppShell's sidebar does the
+  // same). One frame with the panel open is cheaper than that error.
+  const [panelOpen, setPanelOpen] = useState(true);
+  useEffect(() => {
+    try {
+      setPanelOpen(window.localStorage.getItem(PANEL_STORAGE_KEY) !== "0");
+    } catch {
+      // Storage disabled: the panel stays open, it just is not remembered.
+    }
+  }, []);
+  const togglePanel = () =>
+    setPanelOpen((open) => {
+      const next = !open;
+      try {
+        window.localStorage.setItem(PANEL_STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        // Not remembered, still toggled.
+      }
+      return next;
+    });
+
+  // Per business: staff and service ids mean nothing in the next one.
+  const orgId = settings?.org._id;
+  const [filters, setFilters] = useState<CalendarFilters>(NO_FILTERS);
+  useEffect(() => {
+    if (!orgId) return;
+    try {
+      setFilters(readFilters(window.localStorage.getItem(FILTER_STORAGE_PREFIX + orgId)));
+    } catch {
+      setFilters(NO_FILTERS);
+    }
+  }, [orgId]);
+  const changeFilters = (patch: Partial<CalendarFilters>) =>
+    setFilters((current) => {
+      const next = { ...current, ...patch };
+      try {
+        if (orgId) window.localStorage.setItem(FILTER_STORAGE_PREFIX + orgId, JSON.stringify(next));
+      } catch {
+        // Not remembered, still applied.
+      }
+      return next;
+    });
+
+  // Who the team list offers: everyone on the team, then anyone deactivated
+  // whom a booking in the loaded range still names (so their bookings can be
+  // picked out too), then Unassigned whenever there is a team at all.
+  const panelStaff = useMemo(() => {
+    const named = new Set((appointments ?? []).flatMap((row) => (row.staffId ? [row.staffId] : [])));
+    const rows = staffRows ?? [];
+    return [
+      ...rows.filter((row) => row.active),
+      ...rows.filter((row) => !row.active && named.has(row._id)),
+    ];
+  }, [staffRows, appointments]);
+  const withUnassigned = (staffRows ?? []).length > 0;
+  // The same for services: every active one, then an inactive one a booking
+  // in range still carries.
+  const panelServices = useMemo(() => {
+    const carried = new Set(
+      (appointments ?? []).flatMap((row) =>
+        (row.items ?? []).flatMap((item) => (item.serviceId ? [item.serviceId] : [])),
+      ),
+    );
+    return (services ?? [])
+      .filter((service) => service.active || carried.has(service._id))
+      .map((service) => ({ _id: service._id as string, name: service.name }));
+  }, [services, appointments]);
+
+  const staffKeys = useMemo(
+    () => [...panelStaff.map((row) => row._id as string), ...(withUnassigned ? [UNASSIGNED] : [])],
+    [panelStaff, withUnassigned],
+  );
+  const serviceKeys = useMemo(() => panelServices.map((row) => row._id), [panelServices]);
+  const shownStaff = useMemo(() => shownIds(filters.staff, staffKeys), [filters.staff, staffKeys]);
+  const shownServices = useMemo(
+    () => shownIds(filters.services, serviceKeys),
+    [filters.services, serviceKeys],
+  );
+  const staffFiltered = shownStaff.length < staffKeys.length;
+  const servicesFiltered = shownServices.length < serviceKeys.length;
+  // Whether a booking survives the panel's ticks. A booking passes the team
+  // list when its person (or Unassigned) is ticked, and the services list when
+  // ANY of its lines is a ticked service: a cut and a beard trim is shown
+  // under either. A booking with no service lines shows only while every
+  // service is.
+  const passesFilters = useCallback(
+    (row: { staffId?: string; items?: { serviceId?: string }[] }) =>
+      (!staffFiltered || shownStaff.includes(row.staffId ?? UNASSIGNED)) &&
+      (!servicesFiltered ||
+        (row.items ?? []).some((item) => item.serviceId && shownServices.includes(item.serviceId))),
+    [staffFiltered, shownStaff, servicesFiltered, shownServices],
+  );
+
+  // Start times for the whole year, only while the year is being looked at,
+  // filtered on the server by the same ticks (appointments.startsInRange).
+  const yearStarts = useQuery(
+    api.appointments.startsInRange,
+    view === "year"
+      ? {
+          fromMs: startOfYear(anchor),
+          toMs: addYears(startOfYear(anchor), 1),
+          ...(staffFiltered ? { staffIds: shownStaff } : {}),
+          ...(servicesFiltered ? { serviceIds: shownServices } : {}),
+        }
+      : "skip",
+  );
+  // Bucketed to local midnight here rather than on the server, because "which
+  // day" is a question about the reader's clock.
+  const bookedDays = useMemo(
+    () => new Set((yearStarts ?? []).map((ms) => startOfDay(ms))),
+    [yearStarts],
+  );
+
   const setStatus = useMutation(api.appointments.setStatus);
   // An action, not a mutation: a move has to hear back from cal.com before our
   // own row moves. See convex/schedule.ts. Held here as well as in the booking
@@ -191,6 +340,8 @@ export function AppointmentsView({
     startAt: number;
     durationMinutes: number;
     anchor?: Rect;
+    // The person picked for it, from a day-view column or the sheet.
+    staffId?: string;
   } | null>(null);
   // The block sheet's subject — a fresh draft from the grid, or a chip's row.
   const [blockSheet, setBlockSheet] = useState<{
@@ -262,6 +413,7 @@ export function AppointmentsView({
     setProvisional((current) =>
       current
         ? {
+            ...current,
             day: startOfDay(startAt),
             startMinute,
             endMinute: startMinute + durationMinutes,
@@ -269,7 +421,9 @@ export function AppointmentsView({
           }
         : current,
     );
-    setLastDraft((current) => (current ? { ...current, startAt, durationMinutes } : current));
+    setLastDraft((current) =>
+      current ? { ...current, startAt, durationMinutes, staffId } : current,
+    );
   }, []);
   useEffect(() => {
     if (!booking.isOpen && !blockSheet) {
@@ -361,17 +515,22 @@ export function AppointmentsView({
 
   // One place where the pending drag is layered over the server's answer, so
   // the grid and the list can never disagree about where a block is.
+  // ...and the side panel's ticks applied after it, so every view (the grids,
+  // the month, the list) draws the same filtered set.
   const withOptimistic = useMemo(
     () =>
-      (appointments ?? []).map((appointment) => {
-        const pendingMove = optimistic.get(appointment._id);
-        return pendingMove ? { ...appointment, ...pendingMove } : appointment;
-      }),
-    [appointments, optimistic],
+      (appointments ?? [])
+        .filter(passesFilters)
+        .map((appointment) => {
+          const pendingMove = optimistic.get(appointment._id);
+          return pendingMove ? { ...appointment, ...pendingMove } : appointment;
+        }),
+    [appointments, optimistic, passesFilters],
   );
   const byDay = useMemo(() => {
     const groups = new Map<string, Appointment[]>();
     for (const appointment of appointments ?? []) {
+      if (!passesFilters(appointment)) continue;
       const customer = appointment.customer;
       const matches = search.matches(
         customer ? `${customer.firstName} ${customer.lastName ?? ""}` : "",
@@ -388,7 +547,7 @@ export function AppointmentsView({
     return [...groups.entries()].sort(
       (a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime(),
     );
-  }, [appointments, search]);
+  }, [appointments, search, passesFilters]);
 
   return (
     // data-fills-pane only in the grid views. The list PAGE-scrolls and its
@@ -420,10 +579,33 @@ export function AppointmentsView({
           "Edit hours" used to sit here too; it read as misfiled next to the
           controls that act on this view. Hours live in Business → Hours. */}
       <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {/* Google's menu button: shows and hides the side panel, remembered
+            per viewer. While the panel is open the button sits over it, as
+            wide as it is, so Today and the period start where the grid does
+            (Nudge, Serdar 2026-10-12: "that's how it is in Google Calendar").
+            mr-4 makes up the panel's gap-6 against this row's gap-2. Not on
+            a phone, where the toolbar's pickers do the panel's job. */}
+        <span className={`hidden shrink-0 md:inline-flex ${panelOpen ? "md:mr-4 md:w-56" : ""}`}>
+          <button
+            type="button"
+            aria-label={panelOpen ? t("calendar.panelHide") : t("calendar.panelShow")}
+            title={panelOpen ? t("calendar.panelHide") : t("calendar.panelShow")}
+            aria-expanded={panelOpen}
+            aria-controls="calendar-panel"
+            onClick={togglePanel}
+            className={iconButtonClass("quiet", "sm")}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden>
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        </span>
         {view !== "list" && (
           <>
+            {/* h-8, the control scale's 32px declared rather than padded into
+                being, like the view menu across the row. */}
             <button
-              className="rounded-full border border-[var(--border)] px-4 py-1.5 text-sm font-medium transition-colors hover:bg-[var(--muted-bg)]"
+              className="inline-flex h-8 items-center rounded-full border border-[var(--border)] px-4 text-sm font-medium transition-colors hover:bg-[var(--control-hover)]"
               onClick={() => setAnchor(startOfDay(Date.now()))}
             >
               {t("appointments.today")}
@@ -449,12 +631,81 @@ export function AppointmentsView({
             <h3 className="ml-1 text-[22px] font-normal leading-7">{heading}</h3>
           </>
         )}
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {/* The panel's two lists as pickers, on a phone and while the panel
+              is closed: a filter is never applied out of sight. */}
+          <div className={`flex flex-wrap items-center gap-2 ${panelOpen ? "md:hidden" : ""}`}>
+            {staffKeys.length > 1 && (
+              <FilterPicker
+                allLabel={t("calendar.allTeam")}
+                countLabel={(n) => t("calendar.nSelected", { n })}
+                options={[
+                  ...panelStaff.map((row) => ({
+                    id: row._id as string,
+                    label: row.name,
+                    color: staffSwatch(row.color),
+                    ink: staffSwatchInk(row.color),
+                  })),
+                  ...(withUnassigned
+                    ? [
+                        {
+                          id: UNASSIGNED,
+                          label: t("appointments.unassigned"),
+                          color: staffSwatch(undefined),
+                          ink: staffSwatchInk(undefined),
+                        },
+                      ]
+                    : []),
+                ]}
+                value={filters.staff}
+                onChange={(next) => changeFilters({ staff: next })}
+              />
+            )}
+            {serviceKeys.length > 1 && (
+              <FilterPicker
+                allLabel={t("calendar.allServices")}
+                countLabel={(n) => t.plural("calendar.nServices", n)}
+                options={panelServices.map((row) => ({ id: row._id, label: row.name }))}
+                value={filters.services}
+                onChange={(next) => changeFilters({ services: next })}
+              />
+            )}
+          </div>
           <ViewMenu view={view} onView={setView} />
         </div>
       </div>
 
-      {appointments?.length === 0 && view === "list" && (
+      {/* The side panel beside the views. In the list it is sticky, since the
+          page scrolls there; beside a grid it scrolls on its own. */}
+      <div className={view === "list" ? "flex items-start gap-6" : "flex min-h-0 flex-1 gap-6"}>
+      {panelOpen && (
+        <CalendarPanel
+          className={
+            view === "list"
+              ? "sticky top-0 hidden self-start md:flex"
+              : "thin-scroll hidden overflow-y-auto md:flex"
+          }
+          anchor={anchor}
+          highlight={view === "week" || view === "day" ? visiblePeriod : null}
+          onPickDay={(day) => {
+            setAnchor(day);
+            // The list always reads from today, and the year shows no day;
+            // a picked day needs a grid to land on.
+            if (view === "list" || view === "year") setView("week");
+          }}
+          services={panelServices}
+          serviceFilter={filters.services}
+          onServiceFilter={(next) => changeFilters({ services: next })}
+          staff={panelStaff}
+          withUnassigned={withUnassigned}
+          staffFilter={filters.staff}
+          onStaffFilter={(next) => changeFilters({ staff: next })}
+          isOwner={isOwner}
+        />
+      )}
+      <div className={view === "list" ? "min-w-0 flex-1 space-y-4" : "flex min-h-0 min-w-0 flex-1 flex-col gap-4"}>
+
+      {appointments !== undefined && byDay.length === 0 && view === "list" && (
         <p className="text-sm text-[var(--muted)]">{t("appointments.none")}</p>
       )}
 
@@ -526,6 +777,9 @@ export function AppointmentsView({
         <Calendar
           appointments={withOptimistic}
           colorOf={colorOf}
+          team={panelStaff}
+          shownTeam={shownStaff}
+          panelOpen={panelOpen}
           view={view}
           anchor={anchor}
           businessHours={settings?.org.businessHours}
@@ -554,11 +808,18 @@ export function AppointmentsView({
               fulfillment: row.fulfillment,
             }, anchor);
           }}
-          onDraft={(startAt, durationMinutes, band, anchor) => {
-            setProvisional(band);
+          onDraft={(startAt, durationMinutes, band, anchor, staffId) => {
+            setProvisional({ ...band, staffId });
             setSheetFloor(0);
-            setLastDraft({ startAt, durationMinutes, anchor });
-            booking.open({ startAt, durationMinutes }, anchor);
+            setLastDraft({ startAt, durationMinutes, anchor, staffId });
+            booking.open(
+              {
+                startAt,
+                durationMinutes,
+                ...(staffId ? { staffId: staffId as Id<"staff"> } : {}),
+              },
+              anchor,
+            );
           }}
           onOpenClosure={
             isOwner
@@ -669,6 +930,9 @@ export function AppointmentsView({
         </section>
       ))}
 
+      </div>
+      </div>
+
       {/* A failed drag already snapped back; this says why, once, without a
           modal in the way of the calendar the owner is looking at. */}
       {moveError && (
@@ -725,6 +989,9 @@ export function AppointmentsView({
                     {
                       startAt: lastDraft.startAt,
                       durationMinutes: lastDraft.durationMinutes,
+                      ...(lastDraft.staffId
+                        ? { staffId: lastDraft.staffId as Id<"staff"> }
+                        : {}),
                     },
                     lastDraft.anchor,
                   );
@@ -1073,12 +1340,19 @@ type CalendarColumn = {
   key: string;
   day: number;
   label?: string;
+  // Day view: whose column this is, a staff id or UNASSIGNED. A click here
+  // books that person, and the open sheet's band lands in its person's
+  // column.
+  staffId?: string;
+  // Their resolved colour, for the dot before the name in the header.
+  color?: string;
   rows: CalendarAppointment[];
 };
 
-// The grid is roughly this wide on a laptop once the hour gutter is gone.
-// Estimated rather than measured: knowing whether a block can hold a name
-// isn't worth a layout pass on every render.
+// The grid's width before it has been measured (a laptop, no side panel). It
+// is measured from then on (see gridWidth in Calendar): an estimate was fine
+// while the grid had the pane to itself, and wrong by a quarter once the side
+// panel could take 15rem of it, so chips kept a time they had no room for.
 const APPROX_GRID_PX = 1050;
 // How close to the bottom edge counts as "resize" rather than "move". Sized for
 // a fingertip, not a mouse pointer.
@@ -1092,6 +1366,10 @@ const BLOCK_RIGHT_GUTTER_PX = 14;
 // a browser; this only adds what the grid needs on top of it.
 type DragState = DragGeometry & {
   day: number;
+  // The column the gesture is in. A day is not enough once day view has a
+  // column per person: every column shares the day, and a drawn band keyed on
+  // the day alone lit up in all of them.
+  columnKey: string;
   row?: CalendarAppointment;
 };
 
@@ -1110,6 +1388,9 @@ function Calendar({
   timezone,
   onOpenClosure,
   colorOf,
+  team,
+  shownTeam,
+  panelOpen,
 }: {
   appointments: CalendarAppointment[];
   view: "day" | "week";
@@ -1122,6 +1403,9 @@ function Calendar({
     durationMinutes: number,
     band: SlotBand,
     anchor?: Rect,
+    // The person whose day-view column it was drawn in, so the sheet opens
+    // with them picked.
+    staffId?: string,
   ) => void;
   // The slot an open sheet belongs to, drawn as a band so the sheet reads as
   // attached to it.
@@ -1149,6 +1433,12 @@ function Calendar({
   // A team member's resolved colour key, so a booking wears it
   // (lib/staffTint.ts). Undefined means the default lavender.
   colorOf: (staffId?: string) => string | undefined;
+  // The team as the side panel lists it, in the Team card's order, and which
+  // of them (or UNASSIGNED) the panel shows: day view's columns.
+  team: { _id: string; name: string; color: string; active: boolean }[];
+  shownTeam: string[];
+  // The side panel takes width from the grid beside it.
+  panelOpen: boolean;
 }) {
   const { t, language } = useLanguage();
   const locale = localeFor(language);
@@ -1179,9 +1469,16 @@ function Calendar({
   // free at three", and that only reads if each person owns a column. Week
   // view stays seven days, because seven days times four staff is a wall.
   //
-  // Staff is free text and plenty of salons never fill it in, so the columns
-  // are derived from whatever is actually on the day. Nothing filled in means
-  // one plain column, exactly as before.
+  // The columns are the TEAM, in the Team card's order (dragging someone up
+  // there moves their column here, as staff.reorder always promised; the
+  // columns used to sort by name), filtered by the side panel: everyone on
+  // the team who is shown, with or without a booking that day, because an
+  // empty column is the answer to "who is free". A deactivated person gets a
+  // column only on a day they still have a booking. Unassigned trails, and
+  // only when something that day is unassigned. A business with no team is
+  // one plain column, as before. They used to be derived from whoever had a
+  // booking that day, from when staff was free text: a person with a free
+  // day had no column to book them into.
   const columns = useMemo<CalendarColumn[]>(() => {
     if (view !== "day") {
       return days.map((day) => ({
@@ -1194,39 +1491,39 @@ function Calendar({
     }
     const day = days[0];
     const rows = visible.filter(
-          (a) => a.startAt >= day && a.startAt < addLocalDays(day, 1),
-        );
-    // Grouped by staff id, not by the printed name: two people can share a
-    // first name, and the old string grouping made one column out of both — and
-    // two columns out of one person whose name had a trailing space.
-    const named = new Map<string, string>();
-    let anyUnassigned = false;
-    for (const row of rows) {
-      if (row.staffId) named.set(row.staffId, row.staffName?.trim() || row.staffId);
-      else anyUnassigned = true;
-    }
-    if (named.size === 0) return [{ key: String(day), day, rows }];
-
-    const byStaff: CalendarColumn[] = [...named.entries()]
-      .sort((a, b) => a[1].localeCompare(b[1], locale))
-      .map(([staffId, label]) => ({
-        key: `${day}:${staffId}`,
+      (a) => a.startAt >= day && a.startAt < addLocalDays(day, 1),
+    );
+    if (team.length === 0) return [{ key: String(day), day, rows }];
+    const known = new Set(team.map((person) => person._id));
+    const byStaff: CalendarColumn[] = team
+      .filter(
+        (person) =>
+          shownTeam.includes(person._id) &&
+          (person.active || rows.some((row) => row.staffId === person._id)),
+      )
+      .map((person) => ({
+        key: `${day}:${person._id}`,
         day,
-        label,
-        rows: rows.filter((row) => row.staffId === staffId),
+        label: person.name,
+        staffId: person._id,
+        color: person.color,
+        rows: rows.filter((row) => row.staffId === person._id),
       }));
-    // Trailing, and only when someone is actually unassigned: an empty column
-    // for a state nobody is in is just noise.
-    if (anyUnassigned) {
+    // A booking whose person is no longer on the team at all reads as
+    // unassigned here: there is nobody left to give it a column.
+    const unassigned = rows.filter((row) => !row.staffId || !known.has(row.staffId));
+    if (shownTeam.includes(UNASSIGNED) && unassigned.length > 0) {
       byStaff.push({
-        key: `${day}:unassigned`,
+        key: `${day}:${UNASSIGNED}`,
         day,
         label: t("appointments.unassigned"),
-        rows: rows.filter((row) => !row.staffId),
+        staffId: UNASSIGNED,
+        rows: unassigned,
       });
     }
-    return byStaff;
-  }, [view, days, visible, locale, t]);
+    // Everyone filtered out who has nothing that day: still a grid to book on.
+    return byStaff.length > 0 ? byStaff : [{ key: String(day), day, rows }];
+  }, [view, days, visible, team, shownTeam, t]);
 
   // A full 24-hour day, like every calendar a salon owner already uses. It used
   // to open on the working day and stretch only for bookings outside it, which
@@ -1271,7 +1568,10 @@ function Calendar({
   }, [periodStart, dayStart, firstBookingMinute]);
 
   const staffColumns = columns.some((column) => column.label !== undefined);
-  const columnPx = APPROX_GRID_PX / columns.length;
+  // Only a MOVE crosses columns, and only in week view: there a column is a
+  // day, in day view it is a person, and a drag must not quietly hand a
+  // booking to somebody else.
+  const canMoveAcrossColumns = view === "week";
 
   // ---- Direct manipulation ----
   //
@@ -1288,6 +1588,24 @@ function Calendar({
 
   const gutterRef = useRef<HTMLDivElement>(null);
 
+  // The day columns' width, measured: after layout, on a window resize, and
+  // whenever the side panel opens or closes or the columns change. A layout
+  // effect and a resize listener, not a ResizeObserver, whose callbacks never
+  // arrived in this app (AnchoredSheet's note).
+  const [gridWidth, setGridWidth] = useState(APPROX_GRID_PX);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const body = gridRef.current;
+      if (!body) return;
+      const width = body.offsetWidth - (gutterRef.current?.offsetWidth ?? 0);
+      if (width > 0) setGridWidth(width);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [panelOpen, columns.length]);
+  const columnPx = gridWidth / columns.length;
+
   const minuteAtClientY = (clientY: number): number => {
     const body = gridRef.current;
     if (!body) return dayStart * 60;
@@ -1296,9 +1614,9 @@ function Calendar({
 
   // Measured, not assumed: the gutter's width is a Tailwind class today and a
   // wrong constant here would land every drag one column off.
-  const dayAtClientX = (clientX: number, fallback: number): number => {
+  const columnAtClientX = (clientX: number): CalendarColumn | undefined => {
     const body = gridRef.current;
-    if (!body || columns.length === 0) return fallback;
+    if (!body || columns.length === 0) return undefined;
     const rect = body.getBoundingClientRect();
     const index = columnIndexAt(
       clientX,
@@ -1307,7 +1625,7 @@ function Calendar({
       rect.width,
       columns.length,
     );
-    return columns[index].day;
+    return columns[index];
   };
 
   const startDrag = (next: DragState, event: React.PointerEvent) => {
@@ -1323,13 +1641,16 @@ function Calendar({
     // from Tuesday to Thursday is not something this calendar can draw, let
     // alone something a salon means to book.
     //
-    // `day` goes AFTER the spread: advanceDrag carries the whole object
-    // through, so putting it first would let the old day overwrite the new one
-    // on every single move.
-    const day =
-      drag.kind === "move" ? dayAtClientX(event.clientX, drag.day) : drag.day;
+    // `day` and the column go AFTER the spread: advanceDrag carries the whole
+    // object through, so putting them first would let the old day overwrite
+    // the new one on every single move. Only week view crosses columns (see
+    // canMoveAcrossColumns).
+    const target =
+      drag.kind === "move" && canMoveAcrossColumns ? columnAtClientX(event.clientX) : undefined;
+    const day = target?.day ?? drag.day;
+    const columnKey = target?.key ?? drag.columnKey;
     setDrag((current) =>
-      current ? { ...current, ...advanceDrag(current, minute), day } : current,
+      current ? { ...current, ...advanceDrag(current, minute), day, columnKey } : current,
     );
   };
 
@@ -1382,11 +1703,20 @@ function Calendar({
       // sheet offering to book half an hour.
       const startedAt = new Date(startAt);
       const startMinute = startedAt.getHours() * 60 + startedAt.getMinutes();
-      onDraft(startAt, durationMinutes, {
-        day: current.day,
-        startMinute,
-        endMinute: startMinute + durationMinutes,
-      }, anchorRect);
+      const column = columns.find((c) => c.key === current.columnKey);
+      onDraft(
+        startAt,
+        durationMinutes,
+        {
+          day: current.day,
+          startMinute,
+          endMinute: startMinute + durationMinutes,
+          columnKey: current.columnKey,
+        },
+        anchorRect,
+        // A person's column books that person; Unassigned books nobody.
+        column?.staffId && column.staffId !== UNASSIGNED ? column.staffId : undefined,
+      );
       return;
     }
     setDrag(null);
@@ -1566,6 +1896,27 @@ function Calendar({
     return chips;
   };
 
+  // Which column the band is drawn in. A gesture draws where it is. An open
+  // sheet's band is on its day: in the column of the person the sheet has
+  // picked when the day has one per person (so changing the Team member
+  // select moves it across), else where it was drawn, else the day's first.
+  // It used to match on the day alone, so in day view one click lit a band in
+  // every person's column.
+  const bandColumnKey = (() => {
+    if (drag) return drag.columnKey;
+    if (!provisional) return null;
+    const sameDay = columns.filter((column) => column.day === provisional.day);
+    if (sameDay.length === 0) return null;
+    if (sameDay.length === 1) return sameDay[0].key;
+    const byPerson = sameDay.find(
+      (column) => column.staffId === (provisional.staffId ?? UNASSIGNED),
+    );
+    if (byPerson) return byPerson.key;
+    return sameDay.some((column) => column.key === provisional.columnKey)
+      ? (provisional.columnKey ?? null)
+      : sameDay[0].key;
+  })();
+
   return (
     // The grid is a card, the plane around it is the page gradient. Everything
     // INSIDE stays exactly as it was — white paper with the closed hours
@@ -1602,7 +1953,17 @@ function Calendar({
                 key={column.key}
                 className="min-w-0 flex-1 pb-2 text-center text-sm font-medium"
               >
-                <span className="block truncate px-1">{column.label}</span>
+                {/* The person's colour before their name: the key to the
+                    chips in their column, and the dot the side panel and the
+                    Team card show. */}
+                <span className="flex min-w-0 items-center justify-center gap-1.5 px-1">
+                  <span
+                    aria-hidden
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: staffSwatch(column.color) }}
+                  />
+                  <span className="truncate">{column.label}</span>
+                </span>
               </div>
             ))
           : days.map((day) => {
@@ -1696,6 +2057,7 @@ function Calendar({
                     {
                       kind: "create",
                       day: column.day,
+                      columnKey: column.key,
                       anchorMinute: minute,
                       grabOffset: 0,
                       startMinute: minute,
@@ -1778,8 +2140,8 @@ function Calendar({
                     floating over it: Google keeps the block it just drew lit
                     for exactly as long as its popover is up. */}
                 {(() => {
-                  const band = drag ?? provisional;
-                  if (!band || band.day !== column.day) return null;
+                  const band = column.key === bandColumnKey ? (drag ?? provisional) : null;
+                  if (!band) return null;
                   const bandHeight = Math.max(
                     ((band.endMinute - band.startMinute) / 60) * HOUR_PX - 2,
                     14,
@@ -1880,6 +2242,7 @@ function Calendar({
                             // moves it.
                             kind: nearBottom && !isGood ? "resize" : "move",
                             day: column.day,
+                            columnKey: column.key,
                             row,
                             anchorMinute: startMinute,
                             grabOffset: minute - startMinute,

@@ -156,7 +156,20 @@ const enrichedAppointment = v.object({
 // Bucketed to local midnight on the CLIENT rather than here, because "which
 // day" is a question about the reader's clock and the server does not have it.
 export const startsInRange = query({
-  args: { fromMs: v.number(), toMs: v.number() },
+  args: {
+    fromMs: v.number(),
+    toMs: v.number(),
+    // The calendar side panel's filters (CalendarPanel), so the year's dots
+    // agree with the ticks beside them. Absent = everyone and everything, the
+    // same "empty means all" the panel stores. Filtered here rather than by
+    // returning each row's staff and services: the answer stays a list of
+    // numbers, and the filter is in the subscription's args.
+    //
+    // A team member's id, or "unassigned" for a booking with nobody on it.
+    staffIds: v.optional(v.array(v.string())),
+    // A booking passes when any of its lines is one of these services.
+    serviceIds: v.optional(v.array(v.string())),
+  },
   returns: v.array(v.number()),
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
@@ -168,9 +181,19 @@ export const startsInRange = query({
       // A year of a busy salon, with room. Past this the dots stop being the
       // interesting part and the month view is the honest answer.
       .take(5000);
+    const staffIds = args.staffIds ? new Set(args.staffIds) : null;
+    const serviceIds = args.serviceIds ? new Set(args.serviceIds) : null;
     // Cancelled bookings leave no dot: the point of the year is where the shop
     // is committed, and a cancellation is the opposite of a commitment.
-    return rows.filter((row) => row.status !== "cancelled").map((row) => row.startAt);
+    return rows
+      .filter((row) => row.status !== "cancelled")
+      .filter((row) => !staffIds || staffIds.has(row.staffId ?? "unassigned"))
+      .filter(
+        (row) =>
+          !serviceIds ||
+          (row.items ?? []).some((item) => item.serviceId && serviceIds.has(item.serviceId)),
+      )
+      .map((row) => row.startAt);
   },
 });
 

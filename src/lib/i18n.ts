@@ -4167,6 +4167,41 @@ const dictionary = {
     en: "Blocked time",
     de: "Schließzeit",
   },
+  // The calendar's side panel (CalendarPanel): its name for a screen reader,
+  // the ☰ that shows and hides it, and the toolbar pickers that stand in for
+  // its lists on a phone or while it is closed.
+  "calendar.panelLabel": {
+    tr: "Takvim filtreleri",
+    en: "Calendar filters",
+    de: "Kalenderfilter",
+  },
+  "calendar.panelShow": {
+    tr: "Yan paneli göster",
+    en: "Show side panel",
+    de: "Seitenleiste einblenden",
+  },
+  "calendar.panelHide": {
+    tr: "Yan paneli gizle",
+    en: "Hide side panel",
+    de: "Seitenleiste ausblenden",
+  },
+  // The last ticked row of a list, which cannot be unticked.
+  "calendar.lastShown": {
+    tr: "En az biri takvimde kalmalı",
+    en: "At least one stays on the calendar",
+    de: "Mindestens einer bleibt im Kalender",
+  },
+  "calendar.allTeam": { tr: "Tüm ekip", en: "Whole team", de: "Ganzes Team" },
+  "calendar.allServices": {
+    tr: "Tüm hizmetler",
+    en: "All services",
+    de: "Alle Leistungen",
+  },
+  // The team picker's count. Not "people": Unassigned is on the same list.
+  // Never under two (one shown is printed by name).
+  "calendar.nSelected": { tr: "{n} seçili", en: "{n} selected", de: "{n} ausgewählt" },
+  "calendar.nServices.one": { tr: "{n} hizmet", en: "{n} service", de: "{n} Leistung" },
+  "calendar.nServices.other": { tr: "{n} hizmet", en: "{n} services", de: "{n} Leistungen" },
   // The kind switch's accessible name: what the two tabs above choose between.
   "calendar.kindLabel": {
     tr: "Ne eklenecek",
