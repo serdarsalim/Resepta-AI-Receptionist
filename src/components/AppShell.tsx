@@ -18,6 +18,7 @@ import { HeaderSearchProvider, useHeaderSearchSlot } from "@/lib/HeaderSearch";
 import { useHeaderPanesSlot, HeaderPanesProvider } from "@/lib/HeaderPanes";
 import { FeedIcon } from "./FeedIcon";
 import { SegmentedControl } from "./SegmentedControl";
+import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { SearchInput } from "./DataTable";
 import { CustomerJump } from "./CustomerJump";
 
@@ -931,22 +932,15 @@ function UserMenu({
   const { signOut } = useAuthActions();
   const { theme, setTheme, mounted } = useTheme();
   const saveTheme = useMutation(api.users.setMyTheme);
-  // Menu position, measured from the trigger at open time. Null = closed.
-  // Same mechanism as WorkspaceSwitcher below, deliberately: the header sits
-  // inside `flex min-h-0 flex-1 flex-col overflow-hidden`, so an absolute
-  // child gets clipped at the card edge and no z-index rescues it.
-  // Anchored by `top` OR by `bottom`, never both. Pinning the far edge is what
-  // lets the menu open upward from a sidebar footer without anybody having to
-  // guess its height first — a guessed height is a menu that drifts the moment
-  // somebody adds a row to it.
-  const [pos, setPos] = useState<{
-    top?: number;
-    bottom?: number;
-    left: number;
-  } | null>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const open = pos !== null;
+  // Portal + fixed through the shared hook, right-aligned on the avatar and
+  // 8px off it. The header sits inside `flex min-h-0 flex-1 flex-col
+  // overflow-hidden`, so an absolute child gets clipped at the card edge and
+  // no z-index rescues it. Which side it opens on is decided by the room, not
+  // by the caller: downward from the phone header, upward from the sidebar
+  // footer, bottom-anchored there so nobody has to guess its height. It closed
+  // on scroll until 2026-10-13; it follows the avatar now, like every menu.
+  const { triggerRef: btnRef, panelRef: menuRef, pos, open, toggle, close } =
+    useAnchoredPanel(USER_MENU_WIDTH, USER_MENU_MIN_ROOM - 12, "right", { gap: 8 });
 
   // Convex is the cross-device source of truth; localStorage (inside useTheme)
   // is the instant no-FOUC cache. Adopt the stored server preference, but hold
@@ -967,61 +961,6 @@ function UserMenu({
     setTheme(next);
     saveTheme({ theme: next }).catch(() => {
       pending.current = null;
-    });
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        btnRef.current?.contains(target) ||
-        menuRef.current?.contains(target)
-      ) {
-        return;
-      }
-      setPos(null);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPos(null);
-    };
-    // Capture, so a scroll inside any pane closes it rather than leaving the
-    // menu floating away from its trigger. The menu's OWN scrollbar is the
-    // exception: scrolling the list is using it, not leaving it.
-    const onScroll = (e: Event) => {
-      if (menuRef.current?.contains(e.target as Node)) return;
-      setPos(null);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onScroll, true);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScroll, true);
-    };
-  }, [open]);
-
-  // Right-aligned on the trigger, then clamped so it can never hang off a
-  // 390px screen. Opens downward from the phone header and upward from the
-  // sidebar footer — decided by which side has the room, not by which caller
-  // it is, so neither placement has to know about the other.
-  const toggle = () => {
-    if (open) return setPos(null);
-    const r = btnRef.current?.getBoundingClientRect();
-    if (!r) return;
-    const roomBelow = window.innerHeight - r.bottom;
-    setPos({
-      ...(roomBelow < USER_MENU_MIN_ROOM && r.top > roomBelow
-        ? { bottom: window.innerHeight - r.top + 8 }
-        : { top: r.bottom + 8 }),
-      left: Math.max(
-        8,
-        Math.min(
-          r.right - USER_MENU_WIDTH,
-          window.innerWidth - USER_MENU_WIDTH - 8,
-        ),
-      ),
     });
   };
 
@@ -1083,7 +1022,7 @@ function UserMenu({
           <div
             ref={menuRef}
             role="menu"
-            style={{ position: "fixed", width: USER_MENU_WIDTH, ...pos }}
+            style={{ position: "fixed", ...pos }}
             className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
           >
             <div className="border-b border-[var(--border)] px-3 py-2.5">
@@ -1100,7 +1039,7 @@ function UserMenu({
               type="button"
               role="menuitem"
               onClick={() => {
-                setPos(null);
+                close();
                 onOpenAccount();
               }}
               className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted-bg)]"
@@ -1218,43 +1157,11 @@ function WorkspaceSwitcher({
   const data = useQuery(api.users.myWorkspaces, {});
   const setActiveOrg = useMutation(api.users.setActiveOrg);
   const foundWorkspace = useMutation(api.users.foundWorkspace);
-  // Menu position, measured from the trigger at open time. Null = closed.
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const open = pos !== null;
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        btnRef.current?.contains(target) ||
-        menuRef.current?.contains(target)
-      ) {
-        return;
-      }
-      setPos(null);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPos(null);
-    };
-    // Capture, so a scroll inside any pane closes it rather than leaving the
-    // menu floating away from its trigger. The menu's OWN scrollbar is the
-    // exception: scrolling the list is using it, not leaving it.
-    const onScroll = (e: Event) => {
-      if (menuRef.current?.contains(e.target as Node)) return;
-      setPos(null);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onScroll, true);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScroll, true);
-    };
-  }, [open]);
+  // Portal + fixed through the shared hook, which follows the trigger when
+  // the sidebar or the page scrolls; it closed instead until 2026-10-13.
+  const workspaceCount = data?.workspaces.length ?? 0;
+  const { triggerRef: btnRef, panelRef: menuRef, pos, open, toggle, close } =
+    useAnchoredPanel(WORKSPACE_MENU_WIDTH, workspaceCount * 36 + 88);
 
   const active = data?.workspaces.find((w) => w.orgId === data.activeOrgId);
   const label = active?.name || fallbackName || t("app.name");
@@ -1287,18 +1194,6 @@ function WorkspaceSwitcher({
     );
   }
 
-  const toggle = () => {
-    if (open) return setPos(null);
-    const r = btnRef.current?.getBoundingClientRect();
-    if (!r) return;
-    setPos({
-      top: r.bottom + 4,
-      left: Math.max(
-        8,
-        Math.min(r.left, window.innerWidth - WORKSPACE_MENU_WIDTH - 8),
-      ),
-    });
-  };
 
   return (
     <>
@@ -1350,7 +1245,7 @@ function WorkspaceSwitcher({
           <div
             ref={menuRef}
             role="menu"
-            style={{ position: "fixed", width: WORKSPACE_MENU_WIDTH, ...pos }}
+            style={{ position: "fixed", ...pos }}
             className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
           >
             <div className="px-3 pb-1 pt-2 text-[11px] font-medium text-[var(--muted-strong)]">
@@ -1361,7 +1256,7 @@ function WorkspaceSwitcher({
                 key={workspace.orgId}
                 role="menuitem"
                 onClick={() => {
-                  setPos(null);
+                  close();
                   if (workspace.orgId !== data.activeOrgId) {
                     void setActiveOrg({ orgId: workspace.orgId });
                   }
@@ -1387,7 +1282,7 @@ function WorkspaceSwitcher({
                 <button
                   role="menuitem"
                   onClick={() => {
-                    setPos(null);
+                    close();
                     // The mutation switches the active org server-side; the
                     // new org is unnamed, so the onboarding wizard takes over
                     // on the next render — no navigation needed here.

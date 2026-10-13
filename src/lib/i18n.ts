@@ -593,6 +593,13 @@ const dictionary = {
     en: "Cancel appointment",
     de: "Termin absagen",
   },
+  // The calendar list row's ⋯, for screen readers. It said "Actions" in
+  // English in every language until 2026-10-13.
+  "appointments.actions": {
+    tr: "Randevu işlemleri",
+    en: "Appointment actions",
+    de: "Terminaktionen",
+  },
   "appointments.complete": {
     tr: "Tamamlandı olarak işaretle",
     en: "Mark as completed",

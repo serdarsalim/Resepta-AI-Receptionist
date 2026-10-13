@@ -23,6 +23,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { InfoTip } from "@/components/InfoTip";
 import { buttonClass, fieldClass } from "@/components/Control";
+import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import type { Search } from "@/lib/useTableState";
 
 // The console's plane, and the reason /admin now looks like the product it
@@ -674,6 +675,10 @@ export function PercentRow({
   );
 }
 
+// max-h-56: the suggestion list's own cap, which also decides when it opens
+// upward instead.
+const MODEL_LIST_MAX_H = 224;
+
 // A Row whose value is a model name, with a picker fed live from the
 // provider's own model list the first time the field is focused (the nudge
 // listOpenAiModels pattern: names churn, and a scoped key only reaches what
@@ -697,11 +702,15 @@ export function ModelRow({
   onSave: (value: string) => unknown;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
   // null = never fetched; [] = fetched and empty, with reason saying why.
   const [options, setOptions] = useState<string[] | null>(null);
   const [reason, setReason] = useState<string | null>(null);
   const { commit, error, clearError } = useFieldSave(onSave);
+  // The list hangs off the field through the shared hook: portalled, because
+  // every admin card is a clipping scroller and this was an absolute child of
+  // the field, and following the field when the page scrolls.
+  const { triggerRef, panelRef, pos, show, close } =
+    useAnchoredPanel<HTMLInputElement>("trigger", MODEL_LIST_MAX_H);
   const { hidden } = useRowSearch(label);
   if (hidden) return null;
   const filter = (draft ?? "").trim().toLowerCase();
@@ -722,20 +731,21 @@ export function ModelRow({
         <div className="text-sm font-medium">{label}</div>
         {hint && <InfoTip text={hint} />}
       </div>
-      <div className="relative min-w-0">
+      <div className="min-w-0">
         <input
+          ref={triggerRef}
           value={draft ?? current ?? ""}
           onChange={(e) => {
             setDraft(e.target.value);
-            setOpen(true);
+            show();
             if (error) clearError();
           }}
           onFocus={() => {
             fetchOnce();
-            setOpen(true);
+            show();
           }}
           onBlur={() => {
-            setOpen(false);
+            close();
             if (draft === null || draft === (current ?? "")) return;
             void commit(draft).then((ok) => {
               if (ok) setDraft(null);
@@ -746,34 +756,47 @@ export function ModelRow({
             if (e.key === "Escape") {
               setDraft(null);
               clearError();
-              setOpen(false);
+              close();
             }
           }}
           placeholder={placeholder}
           autoComplete="off"
           className={`${fieldClass("sm")} w-full font-mono`}
         />
-        {open && matches.length > 0 && (
-          <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg">
-            {matches.map((o) => (
-              <button
-                key={o}
-                type="button"
-                // mousedown, ahead of the input's blur-commit, or the click
-                // would save the half-typed draft instead of the pick.
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  setDraft(o);
-                  setOpen(false);
-                  if (o !== (current ?? "")) void commit(o);
-                }}
-                className="block w-full truncate rounded px-2 py-1.5 text-left font-mono text-xs hover:bg-[var(--muted-bg)]"
-              >
-                {o}
-              </button>
-            ))}
-          </div>
-        )}
+        {pos &&
+          matches.length > 0 &&
+          createPortal(
+            <div
+              ref={panelRef}
+              style={{
+                position: "fixed",
+                left: pos.left,
+                top: pos.top,
+                bottom: pos.bottom,
+                width: pos.width,
+              }}
+              className="z-[100] max-h-56 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg"
+            >
+              {matches.map((o) => (
+                <button
+                  key={o}
+                  type="button"
+                  // mousedown, ahead of the input's blur-commit, or the click
+                  // would save the half-typed draft instead of the pick.
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setDraft(o);
+                    close();
+                    if (o !== (current ?? "")) void commit(o);
+                  }}
+                  className="block w-full truncate rounded px-2 py-1.5 text-left font-mono text-xs hover:bg-[var(--row-hover-bg)]"
+                >
+                  {o}
+                </button>
+              ))}
+            </div>,
+            document.body,
+          )}
         {options !== null && options.length === 0 && reason && (
           <div className="mt-0.5 text-xs text-[var(--muted)]">
             couldn&apos;t list models ({reason}) — type a name instead
@@ -820,7 +843,6 @@ export function KeyModelRow({
 }) {
   const [keyDraft, setKeyDraft] = useState("");
   const [modelDraft, setModelDraft] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<string[] | null>(null);
   const [reason, setReason] = useState<string | null>(null);
   // Two halves, two independent writes, so two independent refusals — a
@@ -835,6 +857,10 @@ export function KeyModelRow({
     error: modelError,
     clearError: clearModelError,
   } = useFieldSave(onSaveModel);
+  // The model list hangs off the model field through the shared hook, as in
+  // ModelRow: portalled, and following the field when the page scrolls.
+  const { triggerRef, panelRef, pos, show, close } =
+    useAnchoredPanel<HTMLInputElement>("trigger", MODEL_LIST_MAX_H);
   const { hidden } = useRowSearch(label);
   if (hidden) return null;
   const filter = (modelDraft ?? "").trim().toLowerCase();
@@ -876,20 +902,21 @@ export function KeyModelRow({
           />
           <FieldError message={keyError} />
         </div>
-        <div className="relative min-w-0 flex-1">
+        <div className="min-w-0 flex-1">
           <input
+            ref={triggerRef}
             value={modelDraft ?? model ?? ""}
             onChange={(e) => {
               setModelDraft(e.target.value);
-              setOpen(true);
+              show();
               if (modelError) clearModelError();
             }}
             onFocus={() => {
               fetchOnce();
-              setOpen(true);
+              show();
             }}
             onBlur={() => {
-              setOpen(false);
+              close();
               if (modelDraft === null || modelDraft === (model ?? "")) return;
               void commitModel(modelDraft).then((ok) => {
                 if (ok) setModelDraft(null);
@@ -900,7 +927,7 @@ export function KeyModelRow({
               if (e.key === "Escape") {
                 setModelDraft(null);
                 clearModelError();
-                setOpen(false);
+                close();
               }
             }}
             placeholder={modelPlaceholder}
@@ -908,27 +935,41 @@ export function KeyModelRow({
             aria-label={`${label} model`}
             className={`${fieldClass("sm")} w-full font-mono`}
           />
-          {open && matches.length > 0 && (
-            <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg">
-              {matches.map((o) => (
-                <button
-                  key={o}
-                  type="button"
-                  // mousedown, ahead of the input's blur-commit, or the click
-                  // would save the half-typed draft instead of the pick.
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    setModelDraft(o);
-                    setOpen(false);
-                    if (o !== (model ?? "")) void commitModel(o);
-                  }}
-                  className="block w-full truncate rounded px-2 py-1.5 text-left font-mono text-xs hover:bg-[var(--muted-bg)]"
-                >
-                  {o}
-                </button>
-              ))}
-            </div>
-          )}
+          {pos &&
+            matches.length > 0 &&
+            createPortal(
+              <div
+                ref={panelRef}
+                style={{
+                  position: "fixed",
+                  left: pos.left,
+                  top: pos.top,
+                  bottom: pos.bottom,
+                  width: pos.width,
+                }}
+                className="z-[100] max-h-56 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg"
+              >
+                {matches.map((o) => (
+                  <button
+                    key={o}
+                    type="button"
+                    // mousedown, ahead of the input's blur-commit, or the
+                    // click would save the half-typed draft instead of the
+                    // pick.
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setModelDraft(o);
+                      close();
+                      if (o !== (model ?? "")) void commitModel(o);
+                    }}
+                    className="block w-full truncate rounded px-2 py-1.5 text-left font-mono text-xs hover:bg-[var(--row-hover-bg)]"
+                  >
+                    {o}
+                  </button>
+                ))}
+              </div>,
+              document.body,
+            )}
           {options !== null && options.length === 0 && reason && (
             <div className="mt-0.5 text-xs text-[var(--muted)]">
               couldn&apos;t list models ({reason}) — type a name instead

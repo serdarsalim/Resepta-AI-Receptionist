@@ -577,6 +577,17 @@ scrolls, and moving the list must not move the panel), and the panel closes
 only when the trigger has actually left the viewport, since a panel anchored
 to an off-screen control is the drift this exists to prevent.
 
+**Every menu goes through the hook; none positions itself** (2026-10-13).
+Eleven had hand-rolled their own placement and every one closed on scroll:
+the calendar's row ⋯ and view menu, the inbox ⋯, the emoji picker, the account
+menu, the business switcher, the composer's +, the country code picker, the
+prompt editor's @ menu, and both admin model pickers (which were also
+`absolute`). The hook covers what they needed: `prefer: "above"` for a
+drop-up, `gap`, `anchorRect` for a panel hung off the caret, `triggerRef` for
+a component that reads its own trigger, `show()` to open or re-place, `room`
+for a list that shrinks to fit, and it re-places a panel whose size changes
+while open. A ⋯ of verbs is `RowMenu`, not a new copy.
+
 ## Tabs are underlined, never pills
 
 Canonical version is in Mana, `50_Knowledge/design-language.md` (2026-08-12),

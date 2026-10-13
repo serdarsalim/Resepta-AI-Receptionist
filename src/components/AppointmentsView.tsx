@@ -36,6 +36,8 @@ import {
 import { MonthGrid, addMonths, startOfMonth } from "./MonthGrid";
 import { YearGrid, addYears, startOfYear } from "./YearGrid";
 import { BlockSheet, SheetKindTabs, type BlockDraft } from "./BlockSheet";
+import { RowMenu } from "./RowMenu";
+import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { useBookingSheet } from "./useBookingSheet";
 import type { Rect } from "@/lib/anchoredSheet";
 
@@ -584,7 +586,7 @@ export function AppointmentsView({
                 >
                   {t(STATUS_KEY[appointment.status])}
                 </span>
-                <RowMenu
+                <AppointmentRowMenu
                   status={appointment.status}
                   onSetStatus={(status) =>
                     void setStatus({ appointmentId: appointment._id, status })
@@ -655,8 +657,9 @@ type AppointmentStatus = "scheduled" | "confirmed" | "cancelled" | "completed" |
 
 // Row actions live behind a hover-revealed ⋯ menu (Nudge convention: row
 // actions show on hover only). Items are contextual verbs, never a repeat of
-// the status pill's label.
-function RowMenu({
+// the status pill's label. The shared RowMenu since 2026-10-13: this copy
+// positioned itself and closed whenever anything scrolled.
+function AppointmentRowMenu({
   status,
   onSetStatus,
 }: {
@@ -664,46 +667,6 @@ function RowMenu({
   onSetStatus: (status: AppointmentStatus) => void;
 }) {
   const { t } = useLanguage();
-  // Portal + fixed positioning, measured at open time — an absolute child
-  // would clip on the card's overflow-hidden (the InfoTip rule; see AGENTS.md).
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const open = pos !== null;
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (!btnRef.current?.contains(target) && !menuRef.current?.contains(target)) {
-        setPos(null);
-      }
-    };
-    // Fixed coords go stale when the PAGE scrolls — but the menu's own
-    // scrollbar is the exception: scrolling the list is using it.
-    const onScroll = (e: Event) => {
-      if (menuRef.current?.contains(e.target as Node)) return;
-      setPos(null);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("scroll", onScroll, true);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("scroll", onScroll, true);
-    };
-  }, [open]);
-
-  const toggle = () => {
-    if (open) return setPos(null);
-    const r = btnRef.current?.getBoundingClientRect();
-    if (!r) return;
-    const MENU_W = 224; // w-56
-    setPos({
-      top: r.bottom + 4,
-      left: Math.max(8, Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)),
-    });
-  };
-
   const items: { key: string; label: string; status: AppointmentStatus; danger?: boolean }[] =
     status === "scheduled" || status === "confirmed"
       ? [
@@ -714,42 +677,16 @@ function RowMenu({
       : [{ key: "reopen", label: t("appointments.reopen"), status: "scheduled" }];
 
   return (
-    <>
-      <button
-        ref={btnRef}
-        aria-label="Actions"
-        onClick={toggle}
-        className={`rounded-md px-1.5 py-0.5 text-[var(--muted)] transition-opacity hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] ${
-          open ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-        }`}
-      >
-        ⋯
-      </button>
-      {pos &&
-        createPortal(
-          <div
-            ref={menuRef}
-            style={{ position: "fixed", top: pos.top, left: pos.left, width: 224 }}
-            className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
-          >
-            {items.map((item) => (
-              <button
-                key={item.key}
-                className={`flex w-full px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted-bg)] ${
-                  item.danger ? "text-red-600 dark:text-red-400" : ""
-                }`}
-                onClick={() => {
-                  setPos(null);
-                  onSetStatus(item.status);
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>,
-          document.body,
-        )}
-    </>
+    <RowMenu
+      reveal
+      label={t("appointments.actions")}
+      items={items.map((item) => ({
+        key: item.key,
+        label: item.label,
+        danger: item.danger,
+        onSelect: () => onSetStatus(item.status),
+      }))}
+    />
   );
 }
 
@@ -815,6 +752,8 @@ function blockStyle(status: string, isPast: boolean): string {
 // what a day is, and they were in different files.
 const startOfDay = startOfLocalDay;
 
+const VIEW_MENU_W = 176;
+
 // The view picker. A dropdown rather than five segments, because five segments
 // is a row of buttons four of which are wrong, and the set will keep growing.
 // The shortcut letter rides each row: it teaches the keyboard without a help
@@ -827,58 +766,21 @@ function ViewMenu({
   onView: (next: ViewMode) => void;
 }) {
   const { t } = useLanguage();
-  // Portal + fixed, measured at open time, closed on outside-mousedown AND on
-  // scroll. Not `absolute`: the shell's main pane scrolls, so an absolute child
+  // Portal + fixed through the shared hook, which follows the button when the
+  // page scrolls. It closed on scroll before, like every hand-rolled menu
+  // here. Not `absolute`: the shell's main pane scrolls, so an absolute child
   // clips there — the rule in AGENTS.md that this repo keeps re-learning.
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const open = pos !== null;
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (!btnRef.current?.contains(target) && !menuRef.current?.contains(target)) {
-        setPos(null);
-      }
-    };
-    // Fixed coords go stale when the PAGE scrolls — but the menu's own
-    // scrollbar is the exception: scrolling the list is using it.
-    const onScroll = (e: Event) => {
-      if (menuRef.current?.contains(e.target as Node)) return;
-      setPos(null);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setPos(null);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("scroll", onScroll, true);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("scroll", onScroll, true);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  const MENU_W = 176;
-  const toggle = () => {
-    if (open) return setPos(null);
-    const r = btnRef.current?.getBoundingClientRect();
-    if (!r) return;
-    setPos({
-      top: r.bottom + 4,
-      left: Math.max(8, Math.min(r.left, window.innerWidth - MENU_W - 8)),
-    });
-  };
+  const { triggerRef, panelRef, pos, open, toggle, close } = useAnchoredPanel(
+    VIEW_MENU_W,
+    VIEW_MODES.length * 32 + 8,
+  );
 
   const current = VIEW_MODES.find((mode) => mode.id === view);
 
   return (
     <>
       <button
-        ref={btnRef}
+        ref={triggerRef}
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -895,9 +797,15 @@ function ViewMenu({
       {pos &&
         createPortal(
           <div
-            ref={menuRef}
+            ref={panelRef}
             role="menu"
-            style={{ position: "fixed", top: pos.top, left: pos.left, width: MENU_W }}
+            style={{
+              position: "fixed",
+              top: pos.top,
+              bottom: pos.bottom,
+              left: pos.left,
+              width: pos.width,
+            }}
             className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg"
           >
             {VIEW_MODES.map((mode) => (
@@ -908,7 +816,7 @@ function ViewMenu({
                 aria-checked={view === mode.id}
                 onClick={() => {
                   onView(mode.id);
-                  setPos(null);
+                  close();
                 }}
                 className={`flex w-full items-center justify-between gap-6 px-3 py-1.5 text-left text-sm transition-colors hover:bg-[var(--row-hover-bg)] ${
                   view === mode.id ? "font-medium" : ""

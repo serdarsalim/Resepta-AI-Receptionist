@@ -67,8 +67,9 @@ export function VariableInsertDropdown({
   // its homes (CampaignsView, EmailBodyEditor, RemindersView) — so it clipped on
   // the nearest overflow-hidden ancestor, which every card and the shell's main
   // pane are. AGENTS.md: "treat a clipped popup as a bug you introduced
-  // knowingly." The hook also brings outside-click, Escape, close-on-scroll and
-  // the flip-up when there is no room below, none of which this had.
+  // knowingly." The hook also brings outside-click, Escape, following the
+  // trigger on scroll and the flip-up when there is no room below, none of
+  // which this had.
   const { triggerRef, panelRef, pos, open, toggle, close } = useAnchoredPanel(
     240,
     260,

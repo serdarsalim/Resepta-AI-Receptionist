@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import {
   countryOptions,
   findCountryByCode,
@@ -22,8 +23,10 @@ import { fieldClass, type ControlSize } from "./Control";
 //      viewport on focus and the salon owner is left panned halfway off screen.
 //
 // Everything else is Nudge's: same geometry constants, same flip-above rule,
-// same outside-mousedown / Escape / capture-scroll close, same preventScroll
-// focus, same flag + dial code trigger.
+// same outside-mousedown / Escape close, same preventScroll focus, same flag +
+// dial code trigger. One more correction since 2026-10-13: the panel FOLLOWS
+// the trigger when an ancestor scrolls (useAnchoredPanel) instead of closing,
+// so the record's phone row can be scrolled into view with the list open.
 
 type Props = {
   // Selected country prefix in "+digits" form (e.g. "+90"), or null/empty for none.
@@ -47,8 +50,7 @@ type Props = {
 const PANEL_W = 256; // 16rem
 const PANEL_MAX_H = 300;
 const MIN_PANEL_H = 180; // below this, flipping above is worth it
-const GAP = 6; // trigger to panel
-const EDGE = 8; // keep clear of the viewport edge
+const GAP = 6; // trigger to panel; the 8px viewport margin is the hook's
 
 // Strings live here rather than in src/lib/i18n.ts because that dictionary is
 // owned elsewhere right now. Same shape as its entries, typed against the same
@@ -88,24 +90,27 @@ export function CountryCodeSelect({
       ? "inline-flex shrink-0 items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-2 text-base hover:bg-[var(--muted-bg)] disabled:opacity-50 disabled:cursor-not-allowed"
       : "w-full inline-flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-base hover:bg-[var(--muted-bg)] disabled:opacity-50 disabled:cursor-not-allowed";
 
-  const [open, setOpen] = useState(false);
   // The listbox needs a stable id so the trigger can point aria-controls at
   // it; useId keeps two pickers on one page from colliding.
   const listId = useId();
   const [query, setQuery] = useState("");
-  const containerRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  // Viewport coordinates for the panel. It renders `fixed` inside a PORTAL, not
-  // absolute: an absolutely-positioned 16rem panel hanging off a ~60px trigger
-  // overflows whatever column it sits in, and `overflow-y-auto` makes that
-  // column a horizontal scroller too (CSS promotes the other axis), so opening
-  // the picker grew the scroll area and then focusing the search box scrolled
-  // it into view, yanking the whole card sideways. Portal + fixed takes the
-  // panel out of every clip context, so it can't contribute scrollWidth
-  // anywhere and no overflow-hidden ancestor can crop it.
-  const [pos, setPos] = useState<{ top: number; left: number; maxH: number } | null>(null);
+  // It renders `fixed` inside a PORTAL, not absolute: an absolutely-positioned
+  // 16rem panel hanging off a ~60px trigger overflows whatever column it sits
+  // in, and `overflow-y-auto` makes that column a horizontal scroller too (CSS
+  // promotes the other axis), so opening the picker grew the scroll area and
+  // then focusing the search box scrolled it into view, yanking the whole card
+  // sideways. Portal + fixed takes the panel out of every clip context, so it
+  // can't contribute scrollWidth anywhere and no overflow-hidden ancestor can
+  // crop it. Flips above when there is less than MIN_PANEL_H below and more
+  // room above; `room` is what the side it opened on can hold.
+  const { triggerRef, panelRef, pos, room, open, toggle, close } = useAnchoredPanel(
+    PANEL_W,
+    MIN_PANEL_H - 12,
+    "left",
+    { gap: GAP },
+  );
+  const maxH = Math.max(MIN_PANEL_H, Math.min(PANEL_MAX_H, room));
 
   const selectedDigits = String(value ?? "").replace(/\D/g, "");
   const selected = useMemo(
@@ -113,65 +118,17 @@ export function CountryCodeSelect({
     [selectedDigits],
   );
 
-  // Place the panel under the trigger, clamped into the viewport, flipping
-  // above when there isn't room below. Recomputed on open and on resize.
-  const place = useCallback(() => {
-    const r = triggerRef.current?.getBoundingClientRect();
-    if (!r) return;
-    const below = window.innerHeight - r.bottom - GAP - EDGE;
-    const above = r.top - GAP - EDGE;
-    const flip = below < MIN_PANEL_H && above > below;
-    const maxH = Math.max(MIN_PANEL_H, Math.min(PANEL_MAX_H, flip ? above : below));
-    setPos({
-      top: flip ? r.top - GAP - maxH : r.bottom + GAP,
-      left: Math.min(Math.max(EDGE, r.left), window.innerWidth - PANEL_W - EDGE),
-      maxH,
-    });
-  }, []);
-
   useEffect(() => {
     if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (containerRef.current?.contains(t) || panelRef.current?.contains(t)) return;
-      setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    // A fixed panel can't follow a scrolling ancestor, so close instead of
-    // letting it drift away from its trigger. Capture catches inner scrollers
-    // too, though — including the option list INSIDE the panel — so scrolling
-    // a long country list closed the picker mid-scroll. Panel-internal
-    // scrolls are the one kind that never move the trigger; ignore them.
-    const onScroll = (e: Event) => {
-      if (panelRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-    };
-    window.addEventListener("mousedown", onClick);
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("resize", place);
-    return () => {
-      window.removeEventListener("mousedown", onClick);
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("resize", place);
-    };
-  }, [open, place]);
-
-  useEffect(() => {
-    if (open) {
-      setQuery("");
-      place();
-      // preventScroll is the other half of the fix: focusing the search box
-      // otherwise asks the browser to scroll it into view, which is what
-      // actually moved the card even before the panel overflowed anything.
-      requestAnimationFrame(() => searchRef.current?.focus({ preventScroll: true }));
-    } else {
-      setPos(null);
-    }
-  }, [open, place]);
+    setQuery("");
+    // preventScroll is the other half of the fix above: focusing the search
+    // box otherwise asks the browser to scroll it into view, which is what
+    // actually moved the card even before the panel overflowed anything.
+    const raf = requestAnimationFrame(() =>
+      searchRef.current?.focus({ preventScroll: true }),
+    );
+    return () => cancelAnimationFrame(raf);
+  }, [open]);
 
   const filtered = useMemo(() => {
     const all: CountryOption[] = [NOT_SET, ...countryOptions(language)];
@@ -185,18 +142,18 @@ export function CountryCodeSelect({
 
   const select = (code: string) => {
     onChange(code ? `+${code}` : "");
-    setOpen(false);
+    close();
   };
 
   const placeholder = COPY.pick[language];
 
   return (
-    <div ref={containerRef} className={className}>
+    <div className={className}>
       <button
         ref={triggerRef}
         type="button"
         disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
         className={triggerCls}
         role="combobox"
         aria-expanded={open}
@@ -235,7 +192,7 @@ export function CountryCodeSelect({
         createPortal(
           <div
             ref={panelRef}
-            style={{ top: pos.top, left: pos.left, width: PANEL_W }}
+            style={{ top: pos.top, bottom: pos.bottom, left: pos.left, width: PANEL_W }}
             className="fixed z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
             role="listbox"
             id={listId}
@@ -249,7 +206,7 @@ export function CountryCodeSelect({
               aria-label={COPY.search[language]}
               className="block w-full rounded-none border-0 border-b border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base outline-none"
             />
-            <div className="thin-scroll overflow-y-auto p-1" style={{ maxHeight: pos.maxH - 44 }}>
+            <div className="thin-scroll overflow-y-auto p-1" style={{ maxHeight: maxH - 44 }}>
               {filtered.length === 0 ? (
                 <div className="px-3 py-2 text-sm text-[var(--muted)]">
                   {COPY.none[language]}

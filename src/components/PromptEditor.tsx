@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 
 // The instructions textarea with @-completion for the agent's variables.
 //
@@ -26,10 +27,12 @@ function fold(text: string): string {
     .replace(/[üÜ]/g, "u");
 }
 
-// Where the caret is on screen, via a hidden mirror of the textarea. The
-// mirror must copy every property that affects wrapping or the marker lands
-// on the wrong line.
-function caretViewportPos(textarea: HTMLTextAreaElement): { left: number; top: number } {
+// Where the caret's line is on screen, via a hidden mirror of the textarea.
+// The mirror must copy every property that affects wrapping or the marker
+// lands on the wrong line. A zero-width rect one line tall: useAnchoredPanel
+// hangs the @ menu under it, or over it near the bottom of the screen, and
+// re-reads it as the page scrolls.
+function caretRect(textarea: HTMLTextAreaElement): DOMRect {
   const style = window.getComputedStyle(textarea);
   const mirror = document.createElement("div");
   for (const prop of [
@@ -63,16 +66,12 @@ function caretViewportPos(textarea: HTMLTextAreaElement): { left: number; top: n
   const box = textarea.getBoundingClientRect();
   const lineHeight = parseFloat(style.lineHeight) || 18;
   const left = box.left + marker.offsetLeft - textarea.scrollLeft;
-  const top = box.top + marker.offsetTop - textarea.scrollTop + lineHeight;
+  const top = box.top + marker.offsetTop - textarea.scrollTop;
   mirror.remove();
-  return {
-    left: Math.min(Math.max(8, left), window.innerWidth - 240),
-    top: Math.min(Math.max(8, top), window.innerHeight - 40),
-  };
+  return new DOMRect(left, top, 0, lineHeight);
 }
 
 type Menu = {
-  anchor: { left: number; top: number };
   start: number; // index of the "@" in the value
   fragment: string;
 };
@@ -182,9 +181,27 @@ export function PromptEditor({
   const { t } = useLanguage();
   const ref = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [active, setActive] = useState(0);
+  // The @ menu hangs off the CARET, through the shared hook: the textarea is
+  // its trigger (a click in it is not an outside click), the caret's line is
+  // what it measures, and it follows when the page scrolls. It closed on any
+  // scroll until 2026-10-13, so scrolling a long prompt to see the line you
+  // were typing on took the menu away mid-word.
+  const {
+    panelRef: menuRef,
+    pos: menuPos,
+    open: menuShown,
+    show: showMenu,
+    close: hideMenu,
+  } = useAnchoredPanel<HTMLTextAreaElement>(256, 192, "left", {
+    triggerRef: ref,
+    anchorRect: () => (ref.current ? caretRect(ref.current) : null),
+  });
+  // What the keyboard and the panel act on: a fragment is being typed AND the
+  // panel is up. The hook can drop the panel on its own (an outside click, the
+  // caret's line scrolled off screen) while `menu` still holds the fragment.
+  const menuOpen = menu !== null && menuShown;
 
   const matches = useMemo(() => {
     if (!menu) return [];
@@ -211,7 +228,8 @@ export function PromptEditor({
   const close = useCallback(() => {
     setMenu(null);
     setActive(0);
-  }, []);
+    hideMenu();
+  }, [hideMenu]);
 
   // The @ trigger: an @ at a word boundary with the caret still on its line.
   // Reads the textarea directly, never the value prop: inside an input event
@@ -228,31 +246,15 @@ export function PromptEditor({
     if (at > 0 && /[\w{}@]/.test(before[at - 1])) return close();
     const fragment = before.slice(at + 1);
     if (fragment.length > 40 || fragment.includes("\n")) return close();
-    setMenu({ anchor: caretViewportPos(el), start: at, fragment });
+    setMenu({ start: at, fragment });
     setActive(0);
-  }, [close]);
-
-  useEffect(() => {
-    if (!menu) return;
-    // Capture-phase so scrolls inside any ancestor close the menu (the
-    // anchor moves with them) — but the menu's OWN scrollbar must not:
-    // scrolling the list is using it, not leaving it.
-    const onScroll = (event: Event) => {
-      if (menuRef.current?.contains(event.target as Node)) return;
-      close();
-    };
-    const onResize = () => close();
-    window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("resize", onResize);
-    return () => {
-      window.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("resize", onResize);
-    };
-  }, [menu, close]);
+    // Opens the panel, or moves it to where the caret is now.
+    showMenu();
+  }, [close, showMenu]);
 
   const insert = (variable: PromptVariable) => {
     const el = ref.current;
-    if (!el || !menu) return;
+    if (!el || !menuOpen || !menu) return;
     const caret = el.selectionStart ?? 0;
     // The LABEL goes in, and menu.start indexes the textarea, so both sides of
     // the splice have to come from the textarea too — slicing `value` here
@@ -346,11 +348,11 @@ export function PromptEditor({
           mirror.scrollTop = event.currentTarget.scrollTop;
         }}
         onKeyDown={(event) => {
-          if (singleLine && event.key === "Enter" && !menu) {
+          if (singleLine && event.key === "Enter" && !menuOpen) {
             event.preventDefault();
             return;
           }
-          if (!menu || matches.length === 0) return;
+          if (!menuOpen || matches.length === 0) return;
           if (event.key === "ArrowDown") {
             event.preventDefault();
             setActive((index) => (index + 1) % matches.length);
@@ -394,12 +396,18 @@ export function PromptEditor({
             </span>
           ))}
       </div>
-      {menu &&
+      {menuOpen &&
+        menuPos &&
         createPortal(
           <div
             ref={menuRef}
-            style={{ left: menu.anchor.left, top: menu.anchor.top }}
-            className="fixed z-[60] max-h-48 w-64 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg"
+            style={{
+              left: menuPos.left,
+              top: menuPos.top,
+              bottom: menuPos.bottom,
+              width: menuPos.width,
+            }}
+            className="fixed z-[60] max-h-48 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg"
           >
             {/* An empty menu still renders: silence after typing @ reads as
                 broken. The row says where variables come from instead. */}

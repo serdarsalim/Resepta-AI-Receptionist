@@ -5,8 +5,7 @@
 // One row per CUSTOMER across all three channels; calls are a channel here,
 // not a separate tab (ported from Nudge's InboxView).
 
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -17,6 +16,7 @@ import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
 import { FeedFilterPills } from "./FeedFilterPills";
 import { FeedIcon, type FeedIconType } from "./FeedIcon";
+import { RowMenu } from "./RowMenu";
 
 // Which slice of the list the chips are showing. Persisted per browser under
 // this key; the .v1 suffix is the escape hatch if the shape ever changes.
@@ -79,9 +79,8 @@ function previewOf(
 
 // The filter row's ⋯ menu (Nudge convention): bulk verbs live behind it so the
 // row stays one line. One item today — mark all as read, carrying the same
-// count the Unread chip advertises. Portal + fixed positioning, measured at
-// open time, for the same reason as AppointmentsView's RowMenu: an absolute
-// child would clip on the card's overflow-hidden.
+// count the Unread chip advertises. The shared RowMenu since 2026-10-13; this
+// copy positioned itself and closed whenever anything scrolled.
 function InboxMenu({
   unseenCount,
   onMarkAllRead,
@@ -90,88 +89,22 @@ function InboxMenu({
   onMarkAllRead: () => void;
 }) {
   const { t } = useLanguage();
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const open = pos !== null;
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (!btnRef.current?.contains(target) && !menuRef.current?.contains(target)) {
-        setPos(null);
-      }
-    };
-    // Fixed coords go stale when the PAGE scrolls — but the menu's own
-    // scrollbar is the exception: scrolling the list is using it.
-    const onScroll = (e: Event) => {
-      if (menuRef.current?.contains(e.target as Node)) return;
-      setPos(null);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("scroll", onScroll, true);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("scroll", onScroll, true);
-    };
-  }, [open]);
-
-  const toggle = () => {
-    if (open) return setPos(null);
-    const r = btnRef.current?.getBoundingClientRect();
-    if (!r) return;
-    const MENU_W = 224; // w-56
-    setPos({
-      top: r.bottom + 4,
-      left: Math.max(8, Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)),
-    });
-  };
-
   return (
-    <>
-      <button
-        ref={btnRef}
-        type="button"
-        aria-label={t("inbox.menu")}
-        aria-expanded={open}
-        onClick={toggle}
-        className={`ml-auto flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-sm transition-colors ${
-          open
-            ? "bg-[var(--muted-bg)] text-[var(--foreground)]"
-            : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-        }`}
-      >
-        ⋯
-      </button>
-      {pos &&
-        createPortal(
-          <div
-            ref={menuRef}
-            style={{ position: "fixed", top: pos.top, left: pos.left, width: 224 }}
-            className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
-          >
-            <button
-              type="button"
-              disabled={unseenCount === 0}
-              onClick={() => {
-                setPos(null);
-                onMarkAllRead();
-              }}
-              className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted-bg)] disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
-            >
-              <span>{t("inbox.markAllRead")}</span>
-              {/* The chip's rule again: zero renders nothing. */}
-              {unseenCount > 0 && (
-                <span className="tabular-nums text-[var(--muted)]">
-                  {unseenCount}
-                </span>
-              )}
-            </button>
-          </div>,
-          document.body,
-        )}
-    </>
+    <span className="ml-auto">
+      <RowMenu
+        label={t("inbox.menu")}
+        items={[
+          {
+            key: "read",
+            label: t("inbox.markAllRead"),
+            // The chip's rule again: zero renders nothing.
+            hint: unseenCount > 0 ? String(unseenCount) : undefined,
+            disabled: unseenCount === 0,
+            onSelect: onMarkAllRead,
+          },
+        ]}
+      />
+    </span>
   );
 }
 

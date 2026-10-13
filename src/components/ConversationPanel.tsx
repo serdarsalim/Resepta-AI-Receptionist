@@ -25,6 +25,7 @@ import { CallTranscript, CollectedList, humanizeCallEnd } from "./CallDetail";
 import { MessageMedia } from "./MessageMedia";
 import { mediaTypeLabel } from "../../convex/lib/mediaKind";
 import { EmojiPicker } from "./EmojiPicker";
+import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 
 // The header row above the feed has to sit in the same column as the feed, or
 // the primary button (Place call, Compose) hangs past the right edge of the
@@ -2773,8 +2774,11 @@ function AutoSendCountdown({ deadline }: { deadline: number }) {
 // Choosing Emoji swaps the panel's CONTENT to the emoji grid rather than
 // opening a second popover: two floating panels racing each other's
 // outside-click handlers is how the pick landed after the panel had already
-// unmounted. Same portal contract as EmojiPicker: fixed, body-portaled,
-// closed on outside mousedown, Escape and any scroll outside the panel.
+// unmounted. Same portal contract as EmojiPicker, through useAnchoredPanel:
+// fixed, body-portaled, closed on outside mousedown and Escape, and it
+// FOLLOWS the + when the pane scrolls (it closed until 2026-10-13). It prefers
+// to open upward, since the + sits at the foot of the conversation, and the
+// hook re-places it when Emoji swaps the menu for the taller grid.
 const PLUS_MENU_W = 208;
 const PLUS_MENU_H = 128;
 const PLUS_EMOJI_W = 320;
@@ -2796,54 +2800,29 @@ function ComposerPlusMenu({
   onSchedule: () => void;
 }) {
   const { t } = useLanguage();
-  const [panel, setPanel] = useState<{
-    view: "menu" | "emoji";
-    top: number;
-    left: number;
-  } | null>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  // Drop-UP: bottom edge pinned above the button, flipping below only when
-  // the viewport leaves no room, clamped on the right so the emoji grid
-  // never runs off screen next to Send.
-  const placed = (view: "menu" | "emoji") => {
-    const r = btnRef.current?.getBoundingClientRect();
-    if (!r) return null;
-    const w = view === "menu" ? PLUS_MENU_W : PLUS_EMOJI_W;
-    const h = view === "menu" ? PLUS_MENU_H : PLUS_EMOJI_H;
-    const up = r.top - h - 6 >= 8;
-    return {
-      view,
-      top: up ? r.top - h - 6 : Math.min(r.bottom + 6, window.innerHeight - h - 8),
-      left: Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)),
-    };
-  };
-
+  // Which face the open panel shows. Reset to the menu every time it opens.
+  const [view, setView] = useState<"menu" | "emoji">("menu");
+  // Drop-UP, right-aligned on the +, clamped so the emoji grid never runs off
+  // screen next to Send; below only when the viewport leaves no room above.
+  const {
+    triggerRef: btnRef,
+    panelRef,
+    pos,
+    open: panelOpen,
+    toggle,
+    close,
+  } = useAnchoredPanel(
+    view === "menu" ? PLUS_MENU_W : PLUS_EMOJI_W,
+    view === "menu" ? PLUS_MENU_H : PLUS_EMOJI_H,
+    "right",
+    { prefer: "above", gap: 6 },
+  );
+  const panel = pos ? { view, ...pos } : null;
+  // Back to the menu once it shuts, so the next open measures for the menu
+  // and never paints a frame placed for the grid.
   useEffect(() => {
-    if (!panel) return;
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (!panelRef.current?.contains(target) && !btnRef.current?.contains(target)) {
-        setPanel(null);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPanel(null);
-    };
-    const onScroll = (e: Event) => {
-      if (panelRef.current?.contains(e.target as Node)) return;
-      setPanel(null);
-    };
-    window.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onScroll, true);
-    return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScroll, true);
-    };
-  }, [panel]);
+    if (!panelOpen) setView("menu");
+  }, [panelOpen]);
 
   const dark =
     typeof document !== "undefined" &&
@@ -2858,9 +2837,9 @@ function ComposerPlusMenu({
         ref={btnRef}
         type="button"
         aria-label={t("contact.composerMore")}
-        aria-expanded={panel !== null}
+        aria-expanded={panelOpen}
         disabled={disabled}
-        onClick={() => setPanel(panel ? null : placed("menu"))}
+        onClick={toggle}
         className={`shrink-0 rounded-full p-2 transition-colors disabled:opacity-50 ${
           active || panel
             ? "text-[var(--accent)]"
@@ -2889,7 +2868,13 @@ function ComposerPlusMenu({
         createPortal(
           <div
             ref={panelRef}
-            style={{ position: "fixed", top: panel.top, left: panel.left, zIndex: 60 }}
+            style={{
+              position: "fixed",
+              top: panel.top,
+              bottom: panel.bottom,
+              left: panel.left,
+              zIndex: 60,
+            }}
             className={
               panel.view === "menu"
                 ? "w-[208px] rounded-xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-lg"
@@ -2901,7 +2886,7 @@ function ComposerPlusMenu({
                 <button
                   type="button"
                   className={row}
-                  onClick={() => setPanel(placed("emoji"))}
+                  onClick={() => setView("emoji")}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--muted)]" aria-hidden>
                     <circle cx="12" cy="12" r="9" />
@@ -2914,7 +2899,7 @@ function ComposerPlusMenu({
                   type="button"
                   className={row}
                   onClick={() => {
-                    setPanel(null);
+                    close();
                     onAttach();
                   }}
                 >
@@ -2929,7 +2914,7 @@ function ComposerPlusMenu({
                   type="button"
                   className={row}
                   onClick={() => {
-                    setPanel(null);
+                    close();
                     onSchedule();
                   }}
                 >
@@ -2944,7 +2929,7 @@ function ComposerPlusMenu({
               <Picker
                 onEmojiClick={(d: EmojiClickData) => {
                   onPickEmoji(d.emoji);
-                  setPanel(null);
+                  close();
                 }}
                 theme={dark ? Theme.DARK : Theme.LIGHT}
                 emojiStyle={EmojiStyle.NATIVE}
