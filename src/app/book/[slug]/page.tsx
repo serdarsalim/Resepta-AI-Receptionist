@@ -21,7 +21,13 @@ import { MAX_LINES_PER_BOOKING } from "../../../../convex/lib/bookingLimits";
 import { slugify } from "../../../../convex/lib/publicSlug";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { isLanguage, translate, type Language, type TranslationKey } from "@/lib/i18n";
+import {
+  CONFIRMATION_LINE,
+  isLanguage,
+  translate,
+  type Language,
+  type TranslationKey,
+} from "@/lib/i18n";
 import { PhoneInput } from "@/components/PhoneField";
 import { formatMoney } from "@/lib/money";
 
@@ -145,6 +151,8 @@ export default function BookingPage({
     token?: string;
     startMs: number | null;
     goods: boolean;
+    // Which channel the confirmation is really coming by; absent = none is.
+    confirmBy?: keyof typeof CONFIRMATION_LINE;
   } | null>(null);
 
   // Resolved against the published list every render rather than stored, so a
@@ -283,7 +291,13 @@ export default function BookingPage({
             </a>
           </p>
         )}
-        <p className="mt-2 text-xs text-[var(--muted)]">{t("booking.confirmationHint")}</p>
+        {/* Only what is really coming: the backend judged the rules, the
+            consent and the channels (booking.book's confirmBy). */}
+        {done.confirmBy && (
+          <p className="mt-2 text-xs text-[var(--muted)]">
+            {t(CONFIRMATION_LINE[done.confirmBy])}
+          </p>
+        )}
       </Shell>
     );
   }
@@ -1011,7 +1025,12 @@ export default function BookingPage({
               } catch {
                 // A full or blocked store costs the prefill, not the booking.
               }
-              setDone({ token: result.token, startMs, goods: goodsOnly });
+              setDone({
+                token: result.token,
+                startMs,
+                goods: goodsOnly,
+                confirmBy: result.confirmBy,
+              });
             }
             else if (result.reason === "slot-taken") {
               // Someone got there first. Back to the grid — which is live —

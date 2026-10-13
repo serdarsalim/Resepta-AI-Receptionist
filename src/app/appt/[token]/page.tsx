@@ -9,7 +9,13 @@ import { useMutation, useQuery } from "convex/react";
 import { use, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { isLanguage, translate, type Language, type TranslationKey } from "@/lib/i18n";
+import {
+  CONFIRMATION_LINE,
+  isLanguage,
+  translate,
+  type Language,
+  type TranslationKey,
+} from "@/lib/i18n";
 
 function todayIn(timezone: string): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -44,7 +50,11 @@ export default function ManageAppointmentPage({
   const [date, setDate] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [moved, setMoved] = useState(false);
+  // Set once a move lands, carrying which channel its re-sent confirmation is
+  // really coming by (booking.reschedule's confirmBy; absent = none is).
+  const [moved, setMoved] = useState<{
+    confirmBy?: keyof typeof CONFIRMATION_LINE;
+  } | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
 
   // Only canModify. It used to also require the org's public booking slug and
@@ -137,6 +147,7 @@ export default function ManageAppointmentPage({
           {moved && (
             <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-400">
               {t("booking.moved")}
+              {moved.confirmBy && ` ${t(CONFIRMATION_LINE[moved.confirmBy])}`}
             </p>
           )}
         </div>
@@ -217,7 +228,7 @@ export default function ManageAppointmentPage({
                       setBusy(false);
                       if (result.ok) {
                         setMoving(false);
-                        setMoved(true);
+                        setMoved({ confirmBy: result.confirmBy });
                       } else if (result.reason === "slot-taken") {
                         setError("slot-taken");
                       } else setError(result.reason ?? "error");

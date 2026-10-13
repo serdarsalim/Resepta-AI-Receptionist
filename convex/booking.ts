@@ -22,6 +22,7 @@ import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { assignPublicSlug, slugMatchesName } from "./lib/publicSlug";
 import { MAX_LINES_PER_BOOKING, MAX_UPCOMING_PER_PHONE } from "./lib/bookingLimits";
 import { CHANGES_PER_DAY, changesToday, withChange } from "./lib/agentChange";
+import { confirmByOf, lifecycleChannels } from "./lib/lifecycleSend";
 import {
   scheduleConfirmationIfConfigured,
   scheduleLifecycleMessages,
@@ -64,6 +65,26 @@ const MAX_AHEAD_MS = 400 * 24 * 60 * 60_000;
 // Queries and mutations both call the helpers below, so they ask for the
 // read half of the db only — the same narrowing messageRules.rulesForOrg does.
 type ReadCtx = { db: Pick<MutationCtx["db"], "query" | "get"> };
+
+// Which channel the confirmation for a booking or a move is coming by, as the
+// page tells the customer. Absent when no confirmation will reach them: no
+// live booking rule, no consent on record, no channel that can carry it. The
+// page then says nothing rather than promise a message that is not coming
+// (lib/lifecycleSend.lifecycleChannels, the send path's own predicates).
+const confirmByValidator = v.optional(
+  v.union(v.literal("whatsapp"), v.literal("email"), v.literal("both")),
+);
+
+// Asked only when the rules actually scheduled something: zero scheduled is
+// an answer already, and the reach read costs a few queries.
+async function confirmationChannel(
+  ctx: MutationCtx,
+  appointmentId: Id<"appointments">,
+  scheduled: number,
+) {
+  if (scheduled === 0) return undefined;
+  return confirmByOf(await lifecycleChannels(ctx, appointmentId, "booking"));
+}
 
 // One visit can hold SEVERAL lines — appointments.items' own doctrine, written
 // into the schema long before this page could express it: "a haircut plus a
@@ -584,6 +605,8 @@ export const book = mutation({
     reason: v.optional(v.string()),
     // The self-serve key, for the confirmation screen's manage link.
     token: v.optional(v.string()),
+    // What the confirmation screen may promise (confirmByValidator).
+    confirmBy: confirmByValidator,
   }),
   handler: async (ctx, args) => {
     const org = await orgBySlug(ctx, args.slug);
@@ -741,7 +764,8 @@ export const book = mutation({
       manageToken,
     });
     await syncAppointmentSchedule(ctx, appointmentId);
-    await scheduleConfirmationIfConfigured(ctx, org._id, appointmentId);
+    const scheduled = await scheduleConfirmationIfConfigured(ctx, org._id, appointmentId);
+    const confirmBy = await confirmationChannel(ctx, appointmentId, scheduled);
 
     // Written LAST, and never fatal. A note is the least important thing this
     // mutation does — the appointment is the point — so nothing about it may
@@ -760,7 +784,11 @@ export const book = mutation({
         body: note,
       });
     }
-    return { ok: true, token: manageToken };
+    // Two literals rather than a spread, so the page's type keeps `token`
+    // and `confirmBy` on every branch of the result.
+    return confirmBy
+      ? { ok: true, token: manageToken, confirmBy }
+      : { ok: true, token: manageToken };
   },
 });
 
@@ -853,7 +881,12 @@ export const manage = query({
 
 export const reschedule = mutation({
   args: { token: v.string(), startMs: v.number() },
-  returns: v.object({ ok: v.boolean(), reason: v.optional(v.string()) }),
+  returns: v.object({
+    ok: v.boolean(),
+    reason: v.optional(v.string()),
+    // What the page may say about the confirmation a move re-sends.
+    confirmBy: confirmByValidator,
+  }),
   handler: async (ctx, args) => {
     const found = await appointmentByToken(ctx, args.token);
     if (!found) return { ok: false, reason: "not-found" };
@@ -943,8 +976,9 @@ export const reschedule = mutation({
     // The confirmation goes again with the new time. Its ICS rides the same
     // UID (the appointment id) at a bumped SEQUENCE, so the customer's
     // calendar entry MOVES rather than gaining a twin or keeping the old slot.
-    await scheduleConfirmationIfConfigured(ctx, org._id, appointment._id);
-    return { ok: true };
+    const scheduled = await scheduleConfirmationIfConfigured(ctx, org._id, appointment._id);
+    const confirmBy = await confirmationChannel(ctx, appointment._id, scheduled);
+    return confirmBy ? { ok: true, confirmBy } : { ok: true };
   },
 });
 

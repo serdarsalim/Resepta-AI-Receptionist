@@ -1976,7 +1976,12 @@ Facts the next reader should not re-derive:
   suspension, the rule's channel, a lane, words for the shop phone, an
   approved Meta template in the customer's language. Never on "a rule
   exists", and never on a message bound to fail or to go by email only. The
-  phone agent's "a message will follow" counts any channel. A dry tool tells
+  phone agent's "a message will follow" counts any channel. The public
+  booking and manage pages read the same judgement per channel
+  (`lifecycleChannels`, of which `lifecycleReaches` is the yes/no), returned
+  as `confirmBy` by `booking.book` and `booking.reschedule`, to name the
+  channel the confirmation is coming by and to say nothing when none is
+  (2026-10-13). A dry tool tells
   the model a business rule will send the confirmation once the draft is
   sent, so the draft stays short instead of vanishing.
 - **An edited send still records as "sent".** The acceptance rate asks "was

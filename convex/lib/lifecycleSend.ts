@@ -144,26 +144,32 @@ export function emailVerdict(a: {
 
 const OPEN: Doc<"appointments">["status"][] = ["scheduled", "confirmed"];
 
-// Whether the message the business's own rules just scheduled about this
-// appointment will reach its customer, judged per live rule on the trigger
-// the way the send will judge it: on WhatsApp (`whatsapp`, the conversation
-// the chat assistant is in), or on any channel (`any`, what the phone agent
-// may promise). A provider can still refuse at send time; this answers
-// everything that is already knowable.
-export async function lifecycleReaches(
+// Which channels the message the business's own rules just scheduled about
+// this appointment will reach its customer on, judged per live rule on the
+// trigger the way the send will judge it. A provider can still refuse at send
+// time; this answers everything that is already knowable. The assistants ask
+// it through lifecycleReaches below; the public booking and manage pages
+// (booking.book, booking.reschedule) ask it to say which channel the
+// confirmation is coming by, and to say nothing when none is (2026-10-13:
+// "on its way by WhatsApp or email" was printed whatever the rules, the
+// consent or the channels said).
+export type LifecycleReach = { whatsapp: boolean; email: boolean };
+
+const NOWHERE: LifecycleReach = { whatsapp: false, email: false };
+
+export async function lifecycleChannels(
   ctx: QueryCtx,
   appointmentId: Id<"appointments">,
   trigger: "booking" | "cancellation",
-  where: "whatsapp" | "any",
-): Promise<boolean> {
+): Promise<LifecycleReach> {
   const appointment = await ctx.db.get(appointmentId);
-  if (!appointment) return false;
+  if (!appointment) return NOWHERE;
   const [org, customer] = await Promise.all([
     ctx.db.get(appointment.orgId),
     ctx.db.get(appointment.customerId),
   ]);
   if (!org || !customer || customer.orgId !== org._id || isDeleting(customer)) {
-    return false;
+    return NOWHERE;
   }
   const kind = trigger === "booking" ? "confirmation" : "cancellation";
   // The send's status gate: a confirmation about an open appointment, a
@@ -173,7 +179,7 @@ export async function lifecycleReaches(
       ? !OPEN.includes(appointment.status)
       : appointment.status !== "cancelled"
   ) {
-    return false;
+    return NOWHERE;
   }
   const rules = (
     await ctx.db
@@ -181,13 +187,14 @@ export async function lifecycleReaches(
       .withIndex("by_org", (q) => q.eq("orgId", org._id))
       .collect()
   ).filter((rule) => rule.trigger === trigger && !rule.paused);
-  if (rules.length === 0) return false;
+  if (rules.length === 0) return NOWHERE;
   // The gates every channel shares, in the send's order: a suspended
   // business sends nothing, and KVKK consent gates every channel.
-  if ((org.status ?? "active") === "suspended") return false;
-  if (customer.consentAt === undefined) return false;
-  // The showroom simulates every send into the thread.
-  if (isDemo(org)) return true;
+  if ((org.status ?? "active") === "suspended") return NOWHERE;
+  if (customer.consentAt === undefined) return NOWHERE;
+  // The showroom simulates every send into the thread, as one Cloud
+  // WhatsApp row (wa.sendAppointmentMessage), whatever the rule's channel.
+  if (isDemo(org)) return { whatsapp: true, email: false };
   const [account, templates, evolution, mail] = await Promise.all([
     ctx.db
       .query("waAccounts")
@@ -207,6 +214,7 @@ export async function lifecycleReaches(
     evolutionConfigured: Boolean(evolution),
   });
   const language = customer.language ?? org.language;
+  const reach: LifecycleReach = { whatsapp: false, email: false };
   for (const rule of rules) {
     const channel: Channel = rule.channel ?? org.messageChannel ?? "both";
     const { content, registered } = lifecycleTemplates(templates, rule, kind, language);
@@ -220,8 +228,10 @@ export async function lifecycleReaches(
       registered: Boolean(registered),
       language,
     });
-    if (onWhatsApp.send) return true;
-    if (where === "any" && !onWhatsApp.stop) {
+    if (onWhatsApp.send) reach.whatsapp = true;
+    // A WhatsApp verdict that stops the send stops its email half too.
+    const stopped = onWhatsApp.send === null && onWhatsApp.stop === true;
+    if (!stopped) {
       const byEmail = emailVerdict({
         channel,
         configured: emailLaneConfigured(mail),
@@ -230,8 +240,32 @@ export async function lifecycleReaches(
         hasWords,
         language,
       });
-      if (byEmail.send) return true;
+      if (byEmail.send) reach.email = true;
     }
   }
-  return false;
+  return reach;
+}
+
+// Whether that message reaches the customer on WhatsApp (`whatsapp`, the
+// conversation the chat assistant is in) or on any channel (`any`, what the
+// phone agent may promise).
+export async function lifecycleReaches(
+  ctx: QueryCtx,
+  appointmentId: Id<"appointments">,
+  trigger: "booking" | "cancellation",
+  where: "whatsapp" | "any",
+): Promise<boolean> {
+  const reach = await lifecycleChannels(ctx, appointmentId, trigger);
+  return where === "whatsapp" ? reach.whatsapp : reach.whatsapp || reach.email;
+}
+
+// The reach as the one word a public page needs: which channel(s) a
+// confirmation is coming by, or undefined when it is coming by none.
+export type ConfirmBy = "whatsapp" | "email" | "both";
+
+export function confirmByOf(reach: LifecycleReach): ConfirmBy | undefined {
+  if (reach.whatsapp && reach.email) return "both";
+  if (reach.whatsapp) return "whatsapp";
+  if (reach.email) return "email";
+  return undefined;
 }

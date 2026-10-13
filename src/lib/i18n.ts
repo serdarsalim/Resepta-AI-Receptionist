@@ -1464,10 +1464,26 @@ const dictionary = {
     en: "You're booked!",
     de: "Ihr Termin ist gebucht!",
   },
-  "booking.confirmationHint": {
-    tr: "Onay mesajınız WhatsApp veya e-posta ile geliyor.",
-    en: "Your confirmation is on its way by WhatsApp or email.",
-    de: "Ihre Bestätigung kommt per WhatsApp oder E-Mail.",
+  // Under "You're booked!" and under a move on the manage page, naming the
+  // channel the confirmation is really coming by (booking.book /
+  // booking.reschedule return it as confirmBy, from the send path's own
+  // predicates). Nothing is shown when none is coming: no live booking rule,
+  // no consent on record, or no channel that can carry it. The single line
+  // these replaced promised "WhatsApp or email" in every one of those cases.
+  "booking.confirmationWhatsApp": {
+    tr: "Onay mesajınız WhatsApp ile geliyor.",
+    en: "Your confirmation is on its way by WhatsApp.",
+    de: "Ihre Bestätigung kommt per WhatsApp.",
+  },
+  "booking.confirmationEmail": {
+    tr: "Onay mesajınız e-postayla geliyor.",
+    en: "Your confirmation is on its way by email.",
+    de: "Ihre Bestätigung kommt per E-Mail.",
+  },
+  "booking.confirmationBoth": {
+    tr: "Onay mesajınız WhatsApp ve e-postayla geliyor.",
+    en: "Your confirmation is on its way by WhatsApp and email.",
+    de: "Ihre Bestätigung kommt per WhatsApp und E-Mail.",
   },
   "booking.manageThis": {
     tr: "Randevuyu görüntüle, değiştir veya iptal et",
@@ -1524,10 +1540,12 @@ const dictionary = {
     en: "This appointment is cancelled.",
     de: "Dieser Termin ist storniert.",
   },
+  // The confirmation it re-sends is the booking.confirmation* line under it,
+  // shown only when one is really coming.
   "booking.moved": {
-    tr: "Randevunuz yeni saate taşındı. Onay mesajınız yolda.",
-    en: "Your appointment has been moved. A new confirmation is on its way.",
-    de: "Ihr Termin wurde verschoben. Eine neue Bestätigung ist unterwegs.",
+    tr: "Randevunuz yeni saate taşındı.",
+    en: "Your appointment has been moved.",
+    de: "Ihr Termin wurde verschoben.",
   },
   "booking.callToChange": {
     tr: "Bu randevuyu değiştirmek için lütfen bizi arayın:",
@@ -5121,3 +5139,12 @@ export function translate(language: Language, key: TranslationKey): string {
 export function isLanguage(value: string | null | undefined): value is Language {
   return LANGUAGES.some((l) => l.code === value);
 }
+
+// The public booking and manage pages' confirmation line, keyed by the
+// `confirmBy` that booking.book and booking.reschedule return. No key, no
+// line: a confirmation that is not coming is never promised.
+export const CONFIRMATION_LINE = {
+  whatsapp: "booking.confirmationWhatsApp",
+  email: "booking.confirmationEmail",
+  both: "booking.confirmationBoth",
+} as const satisfies Record<string, TranslationKey>;
