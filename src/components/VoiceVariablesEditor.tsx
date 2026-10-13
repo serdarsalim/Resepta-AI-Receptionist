@@ -637,7 +637,11 @@ export function VoiceVariablesEditor({
       busy,
       rows: draft,
       save: () => void liveRef.current.publish(liveRef.current.draft, true),
-      discard: () => setDraft(liveRef.current.initial),
+      // The same filtered rows the draft starts from and `dirty` compares
+      // against. Resetting to the raw `initial` put the always-sent rows
+      // back, so a Discard left the page saying Unsaved for good on any
+      // agent that had one (found in the browser, 2026-10-13).
+      discard: () => setDraft(contextRowsOf(liveRef.current.initial)),
     });
   }, [dirty, busy, draft, onSaveStateChange]);
 
