@@ -523,6 +523,13 @@ const dictionary = {
     en: "If the cancellation notice is on, it goes to the customer.",
     de: "Ist die Stornomitteilung aktiv, geht sie an den Kunden.",
   },
+  // The same question on a booking whose start has passed: the business is
+  // correcting its own record, and the customer is not messaged (P6).
+  "appointments.cancelConfirmBodyPast": {
+    tr: "Randevu saati geçtiği için müşteriye haber verilmez.",
+    en: "It has already started, so the customer is not told.",
+    de: "Der Termin hat schon begonnen, der Kunde wird nicht benachrichtigt.",
+  },
   "appointments.keep": { tr: "Kalsın", en: "Keep it", de: "Behalten" },
   "appointments.moveFailed": {
     tr: "Takvim bu değişikliği kabul etmedi, randevu eski yerinde kaldı.",

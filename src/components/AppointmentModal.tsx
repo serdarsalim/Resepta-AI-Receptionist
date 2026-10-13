@@ -174,6 +174,14 @@ export function AppointmentModal({
   const [notes, setNotes] = useState(draft.notes ?? "");
 
   const editing = draft.appointmentId !== undefined;
+  // The clock when the sheet opened, for what depends on it. A booking whose
+  // start has passed is a record being kept (appointments
+  // .scheduleLifecycleMessages, P6): cancelling it tells the customer
+  // nothing, and the bin's question says so. An ASAP order's start is when it
+  // was placed, so it never counts.
+  const [openedAt] = useState(() => Date.now());
+  const startedAlready =
+    editing && !draft.fulfillment?.asap && draft.startAt <= openedAt;
 
   // A booking whose customer is already decided: an edit, or the sheet opened
   // from somebody's contact record. The customer is a fact here, not a field,
@@ -391,7 +399,13 @@ export function AppointmentModal({
     <div className="mt-4 space-y-3">
       <div className="text-sm">
         <p className="font-medium">{t("appointments.cancelConfirmTitle")}</p>
-        <p className="text-[var(--muted-strong)]">{t("appointments.cancelConfirmBody")}</p>
+        <p className="text-[var(--muted-strong)]">
+          {t(
+            startedAlready
+              ? "appointments.cancelConfirmBodyPast"
+              : "appointments.cancelConfirmBody",
+          )}
+        </p>
       </div>
       <div className="flex items-center justify-end gap-2">
         <button

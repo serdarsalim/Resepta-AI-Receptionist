@@ -120,6 +120,12 @@ style issue.
   Per-person blocks (Nudge's `hostBlocks`) are an open call for Serdar; do not
   add a staff field to closures without it. `appointments.customerId` stays
   required: a block is availability, not an appointment.
+- **A booking whose start has passed is a record, not news** (2026-10-13,
+  Nudge c8e1e523). `scheduleLifecycleMessages` sends the customer nothing for
+  it on the booking trigger (yesterday's walk-in, a move into the past) or on
+  a cancel the business makes in the app (`byBusiness`). A customer's own
+  late cancel still gets its answer, and an ASAP order is never past. Book,
+  move and cancel through that function and the rule comes with it.
 - **The Cloud lane's token is PLATFORM-level with a per-org override**
   (2026-08-20, the Meta Tech Provider shape). `waAccounts.accessToken` is
   optional; `resolveWaAccount` (`lib/platformConfig.ts`) hands every loader

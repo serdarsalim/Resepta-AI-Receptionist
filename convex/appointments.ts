@@ -331,6 +331,10 @@ export async function scheduleLifecycleMessages(
     // when their email arrives late; the owner already heard about that
     // booking the first time through and must not hear about it again.
     suppressOwnerAlert?: boolean;
+    // A person in the business made this change in the app (a cancel from
+    // the calendar or the list). On an appointment that has already started
+    // that is the record being kept, and the customer hears nothing (below).
+    byBusiness?: boolean;
   },
   // How many messages to the CUSTOMER were scheduled: one per live rule on
   // this trigger. Scheduled is not delivered: the assistants pair a nonzero
@@ -382,6 +386,22 @@ export async function scheduleLifecycleMessages(
       appointmentId,
       icsMethod: trigger === "booking" ? "REQUEST" : "CANCEL",
     });
+  }
+  // PAST BOOKINGS ARE QUIET (2026-10-13, Nudge c8e1e523). An appointment
+  // whose start has passed is a record being kept, not news for the
+  // customer: logging yesterday's walk-in, or moving a booking into the past,
+  // sends no confirmation, and a cancel the business makes on one sends no
+  // notice. Only staff can put a booking in the past (every customer-facing
+  // door refuses it), and a customer's own late cancel still gets its answer.
+  // Reminders already skip the past (wa.sendAppointmentMessage). An ASAP
+  // order's startAt records when it was placed, not a time it is for, so it
+  // is never "past" here: its confirmation is the reply to the order.
+  const started =
+    appointment !== null &&
+    !appointment.fulfillment?.asap &&
+    appointment.startAt <= Date.now();
+  if (started && (trigger === "booking" || options?.byBusiness === true)) {
+    return 0;
   }
   // Every matching live rule fires — two booking messages is a choice the
   // owner made by having two rows, not a bug to dedupe away.
@@ -505,6 +525,8 @@ export const setStatus = mutation({
     if (args.status === "cancelled" && appointment.status !== "cancelled") {
       await scheduleLifecycleMessages(ctx, orgId, args.appointmentId, "cancellation", {
         suppressOwnerAlert: true,
+        // A person in the business, so a past appointment cancels quietly.
+        byBusiness: true,
       });
     }
     await recordActivity(ctx, {
@@ -603,7 +625,9 @@ export async function cancelAppointment(
       appointment.orgId,
       appointment._id,
       "cancellation",
-      { suppressOwnerAlert: actor !== undefined },
+      // actor present = the business's own cancel, quiet on a past
+      // appointment like setStatus's.
+      { suppressOwnerAlert: actor !== undefined, byBusiness: actor !== undefined },
     );
     if (actor !== undefined) {
       await recordActivity(ctx, {

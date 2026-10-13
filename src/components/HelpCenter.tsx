@@ -195,6 +195,7 @@ const CATEGORIES: Category[] = [
           "Choose the customer, service, team member, date, and start and end times.",
           "Each team member's bookings wear their own color. To change it, open Business and select the dot before their name on the Team card.",
           "Move, resize, complete, cancel, or mark the appointment as a no-show as the day changes.",
+          "An appointment whose start time has already passed, such as yesterday's walk-in, is kept as a record. The customer gets no confirmation for it, and cancelling it later sends no cancellation notice.",
         ],
         keywords: ["appointment", "calendar", "walk in", "reschedule", "cancel", "no show", "colour", "color", "filter", "team"],
       },
