@@ -63,6 +63,7 @@ import { CheckSwitch } from "./CheckSwitch";
 import { SegmentedControl } from "./SegmentedControl";
 import { buttonClass } from "./Control";
 import { EditorSaveBar } from "./EditorSaveBar";
+import { ViewOnlyPill } from "./ViewOnlyPill";
 import { Sheet } from "./Sheet";
 
 // Nudge settings conventions: label-left/input-right on the shared RowLabel
@@ -2816,9 +2817,9 @@ export function RemindersView() {
     // lines nobody writes an SMS-length text in.
     <div className="mx-auto max-w-3xl space-y-4 page-stack">
       {!isOwner && (
-        <p className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-[var(--muted)]">
-          {t("settings.ownerOnly")}
-        </p>
+        <div className="flex justify-end">
+          <ViewOnlyPill title={t("settings.ownerOnly")} />
+        </div>
       )}
 
       <RulesCard

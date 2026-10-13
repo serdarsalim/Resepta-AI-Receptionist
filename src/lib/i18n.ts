@@ -4869,6 +4869,13 @@ const dictionary = {
   },
   "role.owner": { tr: "Yönetici", en: "Admin", de: "Administrator" },
   "role.staff": { tr: "Üye", en: "Member", de: "Mitglied" },
+  // The pill a member sees on a page only an admin can change (ViewOnlyPill);
+  // settings.ownerOnly below is its tooltip. Nudge's own three words.
+  "common.viewOnly": {
+    tr: "Salt görüntüleme",
+    en: "View only",
+    de: "Nur Ansicht",
+  },
   // Follows role.owner: the gate is the tier, not the person who owns the
   // salon, and several people can hold it.
   "settings.ownerOnly": {

@@ -38,6 +38,7 @@ import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { ServicesCard } from "./BusinessView";
 import { KnowledgeCard } from "./KnowledgeCard";
+import { ViewOnlyPill } from "./ViewOnlyPill";
 
 export function KnowledgeView() {
   const { t } = useLanguage();
@@ -51,9 +52,9 @@ export function KnowledgeView() {
   return (
     <div className="mx-auto max-w-3xl space-y-4 page-stack">
       {!isOwner && (
-        <p className="rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-3 py-2 text-xs text-[var(--muted)]">
-          {t("settings.ownerOnly")}
-        </p>
+        <div className="flex justify-end">
+          <ViewOnlyPill title={t("settings.ownerOnly")} />
+        </div>
       )}
       <ServicesCard isOwner={isOwner} />
       <KnowledgeCard isOwner={isOwner} />
