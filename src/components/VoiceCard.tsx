@@ -2,7 +2,6 @@
 
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useState, Fragment } from "react";
-import { createPortal } from "react-dom";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { VoicePicker } from "./VoicePicker";
@@ -12,8 +11,7 @@ import { InfoTip } from "./InfoTip";
 import { Sheet } from "./Sheet";
 import { SegmentedControl } from "./SegmentedControl";
 import { CheckSwitch } from "./CheckSwitch";
-import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
-import { CheckMark, ITEM_CLASS, PANEL_CLASS } from "./DataTable";
+import { MultiSelectDropdown } from "./MultiSelectDropdown";
 
 
 // The roster comes from the org's OWN Retell account (convex/retell.ts
@@ -95,109 +93,6 @@ function languageLabel(tag: string, locale: string, multiple: string): string {
   } catch {
     return tag;
   }
-}
-
-// One direction's numbers for one agent: a trigger that reads like an input
-// and an anchored checkbox panel over every line on the account. The native
-// <select> this replaces could neither show multiple selections nor render as
-// anything but the OS popup. Toggling a number another agent holds MOVES it,
-// the same steal the old single-select always did — the ✓ simply shows where
-// it is now.
-function LineMultiSelect({
-  numbers,
-  selected,
-  disabled,
-  placeholder,
-  label,
-  emptyLabel,
-  onToggle,
-}: {
-  numbers: string[];
-  selected: string[];
-  disabled: boolean;
-  placeholder: string;
-  // Names the control for screen readers; the column header names it for
-  // everyone else.
-  label: string;
-  // Shown in the panel when the account has no numbers at all.
-  emptyLabel: string;
-  onToggle: (number: string, next: boolean) => void;
-}) {
-  const { triggerRef, panelRef, pos, open, toggle } = useAnchoredPanel(224, 264);
-  // A held line the account no longer lists still renders (and can be
-  // unchecked), so the row shows the truth rather than silently dropping it.
-  const options = [...new Set([...numbers, ...selected])];
-  return (
-    <>
-      <button
-        ref={triggerRef}
-        type="button"
-        disabled={disabled}
-        aria-label={label}
-        aria-expanded={open}
-        onClick={(event) => {
-          event.stopPropagation();
-          toggle();
-        }}
-        className="flex w-full min-w-36 items-start justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-left text-xs disabled:opacity-60"
-      >
-        {/* Every held line, one per row — "+43… +1" made the second number a
-            count you had to open the panel to read (Serdar). */}
-        {selected.length === 0 ? (
-          <span className="truncate text-[var(--muted)]">{placeholder}</span>
-        ) : (
-          <span className="flex min-w-0 flex-col gap-0.5">
-            {selected.map((number) => (
-              <span key={number} className="truncate">
-                {number}
-              </span>
-            ))}
-          </span>
-        )}
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          aria-hidden
-          className="mt-0.5 shrink-0 text-[var(--muted)]"
-        >
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </button>
-      {pos &&
-        createPortal(
-          <div
-            ref={panelRef}
-            style={{ position: "fixed", maxHeight: 264, ...pos }}
-            className={`${PANEL_CLASS} text-xs`}
-          >
-            {options.length === 0 && (
-              <div className="px-2.5 py-1.5 text-[var(--muted)]">{emptyLabel}</div>
-            )}
-            {options.map((number) => {
-              const on = selected.includes(number);
-              return (
-                <button
-                  key={number}
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => onToggle(number, !on)}
-                  className={`${ITEM_CLASS} disabled:opacity-60`}
-                >
-                  <CheckMark on={on} />
-                  <span className="truncate">{number}</span>
-                </button>
-              );
-            })}
-          </div>,
-          document.body,
-        )}
-    </>
-  );
 }
 
 export function VoiceCard({
@@ -574,36 +469,55 @@ export function VoiceCard({
                         with Retell. */}
                     {(["inbound", "outbound"] as const).map((direction) => (
                       <td key={direction} className="px-3 py-2">
-                        <LineMultiSelect
-                          numbers={(roster?.phoneNumbers ?? []).map((n) => n.number)}
-                          selected={(orgLines ?? [])
+                        {(() => {
+                          // One direction's numbers for one agent. Toggling a
+                          // number another agent holds MOVES it, the same
+                          // steal the old single-select always did; the ✓
+                          // simply shows where it is now. A held line the
+                          // account no longer lists still renders (and can
+                          // be unticked), so the row shows the truth rather
+                          // than silently dropping it.
+                          const held = (orgLines ?? [])
                             .filter(
                               (line) =>
                                 (direction === "inbound"
                                   ? line.inboundAgentId
                                   : line.outboundAgentId) === row.retellAgentId,
                             )
-                            .map((line) => line.number)}
-                          disabled={assigningLine === row.retellAgentId}
-                          placeholder={t("settings.voiceAddNumber")}
-                          label={t(
-                            direction === "inbound"
-                              ? "settings.inboundNumber"
-                              : "settings.outboundNumber",
-                          )}
-                          emptyLabel={t("settings.voiceNoNumber")}
-                          onToggle={(number, next) => {
-                            setAssigningLine(row.retellAgentId);
-                            setLineErrorId(null);
-                            void (next ? attachLine : detachLine)({
-                              agentId: row.retellAgentId,
-                              number,
-                              direction,
-                            })
-                              .catch(() => setLineErrorId(row.retellAgentId))
-                              .finally(() => setAssigningLine(null));
-                          }}
-                        />
+                            .map((line) => line.number);
+                          const numbers = (roster?.phoneNumbers ?? []).map((n) => n.number);
+                          return (
+                            <MultiSelectDropdown
+                              options={[...new Set([...numbers, ...held])]}
+                              selected={held}
+                              disabled={assigningLine === row.retellAgentId}
+                              placeholder={t("settings.voiceAddNumber")}
+                              label={t(
+                                direction === "inbound"
+                                  ? "settings.inboundNumber"
+                                  : "settings.outboundNumber",
+                              )}
+                              emptyLabel={t("settings.voiceNoNumber")}
+                              onChange={(next) => {
+                                // One click is one toggle: the number that
+                                // appeared or the one that went.
+                                const attached = next.find((n) => !held.includes(n));
+                                const number =
+                                  attached ?? held.find((n) => !next.includes(n));
+                                if (!number) return;
+                                setAssigningLine(row.retellAgentId);
+                                setLineErrorId(null);
+                                void (attached ? attachLine : detachLine)({
+                                  agentId: row.retellAgentId,
+                                  number,
+                                  direction,
+                                })
+                                  .catch(() => setLineErrorId(row.retellAgentId))
+                                  .finally(() => setAssigningLine(null));
+                              }}
+                            />
+                          );
+                        })()}
                       </td>
                     ))}
                     {/* The same CheckSwitch the Services table uses for its

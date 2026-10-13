@@ -17,8 +17,8 @@ import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 
 // Checkmark box. A stock checkbox is outside the house style, and this one
 // reads the same in every panel — exported with the two panel classes below
-// so other multi-select dropdowns (VoiceCard's number pickers) are this one
-// visual, not a drifting copy.
+// so other multi-select dropdowns (MultiSelectDropdown, the voice agents'
+// number pickers) are this one visual, not a drifting copy.
 export function CheckMark({ on }: { on: boolean }) {
   return (
     <span
@@ -37,8 +37,10 @@ export function CheckMark({ on }: { on: boolean }) {
 export const PANEL_CLASS =
   "thin-scroll z-[100] overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 text-sm text-[var(--foreground)] shadow-lg";
 
+// --row-hover-bg, not --muted-bg: the panel is --card, and in dark the two
+// are one colour, so the hover showed nothing.
 export const ITEM_CLASS =
-  "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--muted-bg)]";
+  "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--row-hover-bg)]";
 
 // A dropdown action. Used for the rare actions parked at the foot of the
 // column picker, where they belong instead of on the toolbar.
