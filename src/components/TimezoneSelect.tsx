@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
+import { fieldClass } from "./Control";
 // The table's search folding, not a second copy. It handles the dotted/dotless
 // i BEFORE lowercasing — JS turns "İ" into i + a combining dot, so a fold that
 // lowercases first never matches "İstanbul" typed on a Turkish keyboard, which
@@ -99,7 +100,9 @@ export function TimezoneSelect({
         type="button"
         disabled={disabled}
         onClick={toggle}
-        className="inline-flex w-full items-center justify-between gap-2 rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-sm transition-colors hover:bg-[var(--muted-bg)] disabled:cursor-not-allowed disabled:opacity-50"
+        // The scale's sm field (Control.tsx), the look FIELD was matched to,
+        // now at a declared height like the inputs beside it.
+        className={`${fieldClass("sm")} inline-flex w-full items-center justify-between gap-2 transition-colors hover:bg-[var(--muted-bg)] disabled:cursor-not-allowed`}
       >
         <span className="truncate">{cityFromIana(value)}</span>
         <span

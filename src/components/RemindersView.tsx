@@ -2593,7 +2593,7 @@ export function BusinessHoursCard({
                   type="time"
                   aria-label={`${dayNames[day]} ${t("settings.openFrom")}`}
                   disabled={!open}
-                  className={`${FIELD} w-full min-w-0 disabled:opacity-40`}
+                  className={`${FIELD} w-full min-w-0`}
                   defaultValue={win ? minutesToTimeValue(win.startMinute) : ""}
                   onChange={(e) => {
                     const minutes = timeValueToMinutes(e.target.value);
@@ -2625,7 +2625,7 @@ export function BusinessHoursCard({
                   type="time"
                   aria-label={`${dayNames[day]} ${t("settings.openTo")}`}
                   disabled={!open}
-                  className={`${FIELD} w-full min-w-0 disabled:opacity-40`}
+                  className={`${FIELD} w-full min-w-0`}
                   defaultValue={win ? minutesToTimeValue(win.endMinute) : ""}
                   onChange={(e) => {
                     const minutes = timeValueToMinutes(e.target.value);

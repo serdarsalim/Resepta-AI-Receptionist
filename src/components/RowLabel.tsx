@@ -1,5 +1,6 @@
 "use client";
 
+import { fieldClass } from "./Control";
 import { InfoTip } from "./InfoTip";
 
 // Left-column label for the label-left/input-right settings grids. Shared by
@@ -40,8 +41,12 @@ export const ROW_GRID =
 // in the card instead of a border floating on it. The base style stays as it
 // is for every other surface; rows opt in by adding this next to their width
 // cap.
-export const FIELD =
-  "rounded-md bg-[var(--background)] px-3 py-1.5 text-sm";
+//
+// Since 2026-10-13 it is the control scale's sm field (Control.tsx), the same
+// look with a DECLARED 32px. Built from padding it gave the Business card's
+// inputs 34px and its selects ~31px, because a native select ignores
+// line-height, and the Hours card's time inputs a third height of their own.
+export const FIELD = fieldClass("sm");
 
 export function RowLabel({ label, hint, hintPlacement }: { label: string; hint?: string; hintPlacement?: "above" | "below" }) {
   return (

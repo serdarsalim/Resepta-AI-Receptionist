@@ -12,6 +12,7 @@ import {
   parseMoney,
 } from "@/lib/money";
 import { formatDayHeading, formatTime } from "@/lib/datetime";
+import { buttonClass, fieldClass, iconButtonClass } from "./Control";
 import { PhoneInput } from "./PhoneField";
 import { WhenPicker } from "./WhenPicker";
 import { placeBeside, type Placement, type Rect } from "@/lib/anchoredSheet";
@@ -522,7 +523,11 @@ export function AppointmentModal({
                       aria-expanded={listOpen}
                       aria-controls="modal-customer-list"
                       required
-                      className="min-w-0 flex-1"
+                      // Every field in this sheet is the scale's sm (32px):
+                      // they inherited their size from whatever wrapped them,
+                      // so the name was 12px text in a label, the service
+                      // select 16px in a div, and the price box 42px tall.
+                      className={`${fieldClass("sm")} min-w-0 flex-1`}
                       placeholder={t("appointments.findCustomerHint")}
                       value={customerQuery}
                       ref={searchRef}
@@ -645,6 +650,7 @@ export function AppointmentModal({
                         // so required is unconditional; reportValidity in
                         // submit() is what surfaces it.
                         required
+                        size="sm"
                         className="min-w-0 flex-1"
                       />
                     </label>
@@ -667,7 +673,9 @@ export function AppointmentModal({
                  datetime-local (which typed the year to 0025 with no way
                  back) and a raw minutes box. */
               <div className="flex min-w-0 items-start gap-3 text-xs font-medium">
-                <span className="w-24 shrink-0 pt-2.5">{t("appointments.when")}</span>
+                {/* pt-2: a 16px label line centred on the 32px chip beside
+                    it, the same offset every label in this column takes. */}
+                <span className="w-24 shrink-0 pt-2">{t("appointments.when")}</span>
                 <WhenPicker
                   startAt={startAt}
                   durationMinutes={durationMinutes}
@@ -688,10 +696,12 @@ export function AppointmentModal({
                 <span className="w-24 shrink-0 text-xs font-medium">
                   {t("appointments.when")}
                 </span>
+                {/* py-1.5: one line of it is 32px, the height of the chips
+                    it turns into, so clicking to edit moves nothing. */}
                 <button
                   type="button"
                   onClick={() => setTimeEditing(true)}
-                  className="min-w-0 flex-1 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted-bg)]"
+                  className="min-w-0 flex-1 rounded-lg px-3 py-1.5 text-left text-sm transition-colors hover:bg-[var(--control-hover)]"
                 >
                   <span className="flex flex-wrap items-baseline gap-x-3">
                     <span>{formatDayHeading(startAt, language)}</span>
@@ -737,14 +747,14 @@ export function AppointmentModal({
           {/* One row per service delivered. A cut plus a beard trim is one
               visit with two lines, not two bookings on top of each other. */}
           <div className="flex gap-3">
-            <span className="w-24 shrink-0 pt-2.5 text-xs font-medium">
+            <span className="w-24 shrink-0 pt-2 text-xs font-medium">
               {t("appointments.service")}
             </span>
             <div className="min-w-0 flex-1 space-y-1.5">
             {lines.map((line, index) => (
               <div key={index} className="flex items-center gap-2">
                 <select
-                  className="min-w-0 flex-1"
+                  className={`${fieldClass("sm")} min-w-0 flex-1`}
                   value={line.serviceId}
                   onChange={(e) => setLine(index, e.target.value)}
                 >
@@ -764,7 +774,7 @@ export function AppointmentModal({
                     max={99}
                     step={1}
                     aria-label={t("appointments.quantity")}
-                    className="w-14 shrink-0"
+                    className={`${fieldClass("sm")} w-14 shrink-0`}
                     value={line.quantity}
                     onChange={(e) =>
                       setLines((prev) =>
@@ -786,7 +796,7 @@ export function AppointmentModal({
                   // Wide enough for a four-digit price with cents — 5600.00
                   // clipped at w-24. The select is the flexible one, so this
                   // is where the room comes from.
-                  className="w-28 shrink-0"
+                  className={`${fieldClass("sm")} w-28 shrink-0`}
                   value={line.price}
                   placeholder={currencySymbol(currency, language)}
                   onChange={(e) =>
@@ -797,13 +807,15 @@ export function AppointmentModal({
                     )
                   }
                 />
+                {/* Square and as tall as the fields it removes, so the line
+                    stays one height whichever line it is. */}
                 <button
                   type="button"
                   aria-label={t("common.delete")}
                   onClick={() =>
                     setLines((prev) => prev.filter((_, i) => i !== index))
                   }
-                  className="shrink-0 rounded-md px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-red-600 dark:hover:text-red-400"
+                  className={iconButtonClass("danger", "sm")}
                 >
                   ×
                 </button>
@@ -835,7 +847,7 @@ export function AppointmentModal({
           <label className="flex min-w-0 items-center gap-3 text-xs font-medium">
             <span className="w-24 shrink-0">{staffLabel}</span>
               <select
-                className="min-w-0 flex-1"
+                className={`${fieldClass("sm")} min-w-0 flex-1`}
                 value={staffId}
                 onChange={(e) => setStaffId(e.target.value)}
               >
@@ -851,13 +863,14 @@ export function AppointmentModal({
             </label>
 
           <label className="flex min-w-0 items-start gap-3 text-xs font-medium">
-            <span className="w-24 shrink-0 pt-2.5">{t("appointments.notes")}</span>
+            <span className="w-24 shrink-0 pt-2">{t("appointments.notes")}</span>
             {/* One row, and it grows as you type rather than reserving
                 space for words nobody has written. Most bookings carry no
-                note at all. */}
+                note at all. Multiline sm: one row of it is exactly the 32px
+                of the fields above it. */}
             <textarea
               rows={1}
-              className="min-w-0 flex-1 resize-y"
+              className={`${fieldClass("sm", { multiline: true })} min-w-0 flex-1 resize-y`}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
@@ -887,11 +900,13 @@ export function AppointmentModal({
 
         <div className="mt-4 flex items-center justify-between gap-2">
           {onDelete ? (
+            // md, the 36px the two pills on the right of this row already
+            // are; the pills keep their Google shape and their own classes.
             <button
               type="button"
               onClick={onDelete}
               disabled={pending}
-              className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-red-600"
+              className={buttonClass("danger", "md")}
             >
               {t("appointments.cancelAppointment")}
             </button>

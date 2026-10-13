@@ -10,6 +10,7 @@ import {
 } from "@/lib/phone";
 import { useLanguage } from "@/lib/LanguageProvider";
 import type { Language } from "@/lib/i18n";
+import { fieldClass, type ControlSize } from "./Control";
 
 // The country dial-code picker, ported from Nudge (src/components/CountryCodeSelect.tsx)
 // with two corrections that Resepta's own rules demand:
@@ -35,6 +36,10 @@ type Props = {
   // against a phone-number input. Default keeps the bordered form-field look
   // with the country spelled out.
   variant?: "default" | "flag";
+  // The control scale's field height (Control.tsx), for a form whose other
+  // fields wear it: the booking sheet. Unset keeps the 16px public-page size
+  // the booking page's phone row was measured at.
+  size?: ControlSize;
 };
 
 // Panel geometry. PANEL_W must match the rendered width below, it's what the
@@ -69,13 +74,17 @@ export function CountryCodeSelect({
   disabled,
   className,
   variant = "default",
+  size,
 }: Props) {
   const { language } = useLanguage();
   // Borders belong to containers, and a combobox trigger IS a form field: it
   // stands flush against the number input and the pair has to read as one
   // control. This is not the bordered-secondary-button case.
-  const triggerCls =
-    variant === "flag"
+  const triggerCls = size
+    ? variant === "flag"
+      ? `${fieldClass(size)} inline-flex shrink-0 items-center gap-1 hover:bg-[var(--muted-bg)] disabled:cursor-not-allowed`
+      : `${fieldClass(size)} inline-flex w-full items-center justify-between gap-2 hover:bg-[var(--muted-bg)] disabled:cursor-not-allowed`
+    : variant === "flag"
       ? "inline-flex shrink-0 items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-2 text-base hover:bg-[var(--muted-bg)] disabled:opacity-50 disabled:cursor-not-allowed"
       : "w-full inline-flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-base hover:bg-[var(--muted-bg)] disabled:opacity-50 disabled:cursor-not-allowed";
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CountryCodeSelect, FlagByIso } from "./CountryCodeSelect";
+import { fieldClass, type ControlSize } from "./Control";
 import { absorbInternational, joinPhone, phoneCountry, splitPhone } from "@/lib/phone";
 import { useDetectedDialCode } from "@/lib/useDialCode";
 import { useLanguage } from "@/lib/LanguageProvider";
@@ -240,7 +241,12 @@ export function PhoneInput({
   className,
   defaultValue,
   autoFocus,
+  size,
 }: {
+  // The control scale's field height for both halves (Control.tsx), in a form
+  // whose other fields wear it: the booking sheet. Unset keeps the 16px size
+  // the public booking page's phone row was measured at.
+  size?: ControlSize;
   name?: string;
   // Point the row's <label htmlFor> at the number box rather than letting the
   // browser bind it to the country trigger, which would open the picker.
@@ -291,7 +297,7 @@ export function PhoneInput({
   return (
     <div className={className}>
       <div className="flex flex-wrap items-center gap-1.5">
-        <CountryCodeSelect variant="flag" value={code} onChange={setCode} />
+        <CountryCodeSelect variant="flag" size={size} value={code} onChange={setCode} />
         <input
           ref={inputRef}
           id={id}
@@ -306,7 +312,7 @@ export function PhoneInput({
             if (missingCode) e.preventDefault();
           }}
           placeholder={NATIONAL_PLACEHOLDER}
-          className={nationalCls}
+          className={size ? `${fieldClass(size)} min-w-[9rem] flex-1` : nationalCls}
         />
       </div>
       <input type="hidden" name={name} value={joinPhone(code, national)} />

@@ -144,6 +144,11 @@
      modes and the bubble can never vanish into its ground. */
   --note-bubble-bg: color-mix(in srgb, var(--foreground) 6%, transparent);
   --note-bubble-hover-bg: color-mix(in srgb, var(--foreground) 10%, transparent);
+  /* The hover wash of every borderless and outlined button (Control.tsx,
+     .card-action). Not --muted-bg: in dark that IS --card, so a muted-bg hover
+     on a card showed nothing. Mixed from the foreground, so one definition
+     reads in both themes, the --closed-bg trick again. */
+  --control-hover: color-mix(in srgb, var(--foreground) 6%, transparent);
   --scrollbar-thumb: rgba(0, 0, 0, 0.18);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.32);
 }
@@ -574,7 +579,10 @@ thead {
      What did NOT change: a filled button still means the one action a screen
      is FOR. The sheet that opens from these keeps its filled confirm, the
      composer keeps its filled Send, and the Customers toolbar keeps its filled
-     Add customer, because that page IS the list it adds to. */
+     Add customer, because that page IS the list it adds to.
+
+     Control.tsx's `outline` variant is this look at any of the three heights
+     (the record's "+ Add sale" wears it at 28px). The two must agree. */
   .card-action {
     height: 2rem;
     border: 1px solid var(--border);
@@ -586,7 +594,7 @@ thead {
     transition: background-color 120ms;
   }
   .card-action:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--foreground) 6%, transparent);
+    background: var(--control-hover);
   }
   .card-action:disabled {
     opacity: 0.4;

@@ -182,8 +182,13 @@ export function WhenPicker({
 
   // Chips in the muted wash, borderless — inputs read as values here, the
   // way Google's grey chips do, not as form boxes.
+  //
+  // h-8 py-0: the control scale's 32px (Control.tsx), the height of every
+  // other field in the booking sheet, declared rather than padded into being.
+  // Dark takes the foreground wash instead of --muted-bg, which there IS the
+  // sheet's own --card, so the chips used to be bare text in dark mode.
   const chip =
-    "rounded-lg border-0 bg-[var(--muted-bg)] px-3 py-2 text-sm text-[var(--foreground)]";
+    "inline-flex h-8 items-center rounded-lg border-0 bg-[var(--muted-bg)] px-3 py-0 text-sm text-[var(--foreground)] dark:bg-[var(--control-hover)]";
 
   const timeChip = (which: "start" | "end") => {
     const isStart = which === "start";

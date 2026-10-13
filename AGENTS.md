@@ -673,7 +673,27 @@ Borders belong to CONTAINERS (cards, inputs, dropdown panels) — never to
 buttons. Secondary/ghost buttons are text + hover wash
 (`text-muted hover:bg-muted-bg`), primary buttons are solid accent fill.
 A bordered chip where a ghost button belongs reads as sloppy; check every
-new control against this before shipping it.
+new control against this before shipping it. The wash is `--control-hover`
+now, not `--muted-bg`, which in dark IS `--card` and hovered to nothing.
+
+## Controls have three heights, and the height is declared (2026-10-13)
+
+`src/components/Control.tsx`, Nudge's control scale with this file's rules:
+`buttonClass` / `iconButtonClass` / `fieldClass` / `controlClass` in three
+sizes. `xs` 28px is dense chrome (an editor toolbar's pickers, a section
+action beside a ⋯), `sm` 32px is the default (every control row, every
+settings field, the booking sheet), `md` 36px is the booking sheet's footer.
+A size names its `h-*` and padding sets only the horizontal rhythm: a height
+built from padding and line-height drifts the moment the type changes, and a
+native `<select>` ignores line-height altogether, which is how the Business
+card's inputs and selects came out 34px and ~31px from the same classes. One
+type size, `text-sm`; below sm the iOS rule in globals.css still wins.
+Variants keep the border rule above: `ghost` and `quiet` have none, `outline`
+is `.card-action`'s look for the two outlined tiers, `danger` is muted until
+hovered. `FIELD` (RowLabel) is `fieldClass("sm")`. Take a size from here for
+any new button or field, and never stack a colour utility on a variant: two
+utilities at one specificity are decided by Tailwind's order, not the class
+string.
 
 ## Voice numbers, caller identity, and the variables doctrine (2026-08-18)
 
