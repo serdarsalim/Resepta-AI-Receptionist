@@ -1605,17 +1605,28 @@ export function AppShell({
             looked like editing a title. Splitting them is what makes the
             switcher legible as a control, and it costs one line of height. */}
           <div
-            // The gap between the two rows is doing the separating, so it is
-            // wider than the app's usual stack step. At 1.5 the product name
-            // and the business under it read as one block with a line break in
-            // it; 3 split them but still crowded, so 4 is where it sits.
+            // The space between the two rows is doing the separating, so it
+            // is wider than the app's usual stack step. At 1.5 the product
+            // name and the business under it read as one block with a line
+            // break in it; 3 split them but still crowded, so 4 (1rem) is
+            // what the eye should see. The product row is h-9 now (below), so
+            // ~0.46rem of that is the row's own room under its centred
+            // content, and gap-2 tops it up to the same 1rem.
             className={`flex flex-col pt-3 ${
-              showCollapsed ? "items-center gap-2 px-1 pb-1" : "gap-4 px-2 pb-2"
+              showCollapsed ? "items-center gap-2 px-1 pb-1" : "gap-2 px-2 pb-2"
             }`}
           >
             <div
+              // h-9 under pt-3 centres the product name 1.875rem down, the
+              // same line as the page title in the header beside it (pt-3
+              // plus half of min-h-13's 2.25rem content box). With the panes
+              // flush and one hairline between them, the two read as one
+              // band across the top of the window, and the name sat 8px
+              // above the title. Nudge's brand row and header share h-14 for
+              // the same reason. Collapsed, the rail stacks mark over toggle
+              // and has no line to share.
               className={`flex items-center ${
-                showCollapsed ? "flex-col gap-1" : "w-full gap-2 px-1.5"
+                showCollapsed ? "flex-col gap-1" : "h-9 w-full gap-2 px-1.5"
               }`}
             >
               <BrandMark size={showCollapsed ? 24 : 20} />

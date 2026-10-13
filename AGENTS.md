@@ -745,6 +745,11 @@ font-medium throughout, and the wash, the darker tier and the glyph at full
 strength say "selected". Each tab keeps its one hue; Nudge tried monochrome
 and Serdar kept the hues, because they make a row findable without reading it.
 
+**The product name sits on the page title's line.** The rail's product row is
+h-9 under the same pt-3 as the header, so both centre 1.875rem down in any
+base font; with the panes flush the top of the window reads as one band. Keep
+the two in step if either moves (the header's min-h-13 floor included).
+
 ## Voice numbers, caller identity, and the variables doctrine (2026-08-18)
 
 A marathon session; the durable rules it produced:
