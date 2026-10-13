@@ -1805,8 +1805,17 @@ export function AppShell({
             picked: its views run px-2 there against our 16, which was handing
             back 16px of a 500px screen on every card. The card's own shadow
             and radius already separate it from the pane; a second inset out
-            here was doing the same job twice. Unchanged from sm up. */}
-        <main className="thin-scroll page-scroll stable-gutter min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 max-sm:px-2 max-sm:has-[[data-fills-pane]]:pb-0">
+            here was doing the same job twice. Unchanged from sm up.
+
+            `relative` (Nudge cbbacbcc), so this pane is the containing block
+            for every absolutely positioned box inside it. Without it the
+            nearest one can be the BODY: an `sr-only` label (position:
+            absolute) deep in a scrolled list then sits at its static place
+            and stretches the DOCUMENT to reach it, scrolling the whole shell
+            up over a blank page. Overflow here and on the shell cannot clip
+            a box whose containing block is above them. Nothing in the views
+            relied on the body (checked on every tab, 2026-10-13). */}
+        <main className="thin-scroll page-scroll stable-gutter relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 max-sm:px-2 max-sm:has-[[data-fills-pane]]:pb-0">
             {/* Above the content rather than in a corner: someone clicking
               through a demo should never be a minute into it before working
               out that the salon isn't real. Inside the scrolling pane so it
