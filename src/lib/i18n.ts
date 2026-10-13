@@ -910,10 +910,15 @@ const dictionary = {
     en: "Consent",
     de: "Einwilligung",
   },
+  // Says exactly what consent gates, because "no channel sends anything" was
+  // false: the away reply and the assistant's answers reply to a message the
+  // customer just sent and go without it (wa.sendAwayReply,
+  // email.sendOutOfHoursReply, the assistant's auto-send). legal.ts makes the
+  // same split in its consent section; keep the two in step.
   "customers.consentHint": {
-    tr: "Müşterinin WhatsApp ve e-posta mesajlarına KVKK onayı. İzin kaydı olmadan hiçbir kanaldan mesaj gönderilmez.",
-    en: "The customer's KVKK consent to WhatsApp and email messages. Without it, no channel sends anything.",
-    de: "Die Einwilligung des Kunden nach DSGVO für Nachrichten über WhatsApp und E-Mail. Ohne sie sendet kein Kanal etwas.",
+    tr: "Müşterinin KVKK kapsamındaki izni. İzin yoksa randevu onayları, hatırlatmalar, kampanyalar, toplu mesaj ve aramalar ona gitmez; ekibiniz de ona WhatsApp'tan yazamaz. Kapalıyken otomatik yanıt ve asistanın cevapları yine gider, çünkü müşterinin az önce gönderdiği mesaja yanıt verirler.",
+    en: "The customer's KVKK consent. Without it they get no confirmations, reminders, campaigns or bulk messages and calls, and your team can't write to them on WhatsApp. The away reply and the assistant's answers still go, because they answer a message the customer just sent.",
+    de: "Die Einwilligung des Kunden nach DSGVO. Ohne sie bekommt er keine Terminbestätigungen, Erinnerungen, Kampagnen oder Sammelaktionen per Nachricht oder Anruf, und Ihr Team kann ihm nicht per WhatsApp schreiben. Die Abwesenheitsantwort und die Antworten des Assistenten gehen trotzdem raus, weil sie auf eine Nachricht antworten, die er gerade geschickt hat.",
   },
   // "Stumm", not "Stummschalten": this is a label on a switch in a four-column
   // footer, and the extra eight characters were the widest single thing in the
@@ -2658,10 +2663,13 @@ const dictionary = {
     en: "AI & WhatsApp",
     de: "KI & WhatsApp",
   },
+  // Not "at Meta's rates": a template message is billed at Meta's cost plus
+  // the operator's markup percent (orgs.waMarkupPercent, falling back to the
+  // platform's), applied in messages.applySendResult via lib/waPricing.
   "aiBilling.hint": {
-    tr: "Yapay zeka, gönderilen yanıt başına ücretlendirilir. WhatsApp'ta yalnızca şablon mesajları ücretlidir — tutar alıcının ülkesine göre Meta tarifesiyle belirlenir; müşterinizin mesajına 24 saat içinde verilen yanıtlar ücretsizdir.",
-    en: "AI is billed per sent reply. On WhatsApp only template messages cost money — priced by the recipient's country at Meta's rates; replies within 24 hours of a customer's message are free.",
-    de: "KI wird pro gesendeter Antwort abgerechnet. Bei WhatsApp kosten nur Vorlagen-Nachrichten Geld — bepreist nach dem Land des Empfängers zu Meta-Tarifen; Antworten innerhalb von 24 Stunden auf eine Kundennachricht sind kostenlos.",
+    tr: "Yapay zeka, gönderilen yanıt başına ücretlendirilir. WhatsApp'ta yalnızca şablon mesajları ücretlidir ve ücret mesaj başına alıcının ülkesine göre belirlenir: o ülke için Meta'nın fiyatı, varsa üzerine bir hizmet payı. Müşterinizin mesajına 24 saat içinde verilen yanıtlar ücretsizdir.",
+    en: "AI is billed per sent reply. On WhatsApp only template messages cost money, per message by the recipient's country: Meta's price for that country, plus a markup where one applies. Replies within 24 hours of a customer's message are free.",
+    de: "KI wird pro gesendeter Antwort abgerechnet. Bei WhatsApp kosten nur Vorlagen-Nachrichten Geld, pro Nachricht nach dem Land des Empfängers: Metas Preis für dieses Land, gegebenenfalls zuzüglich eines Aufschlags. Antworten innerhalb von 24 Stunden auf eine Kundennachricht sind kostenlos.",
   },
   "aiBilling.rateLine": {
     tr: "Yapay zeka yanıtı başına {rate}.",
@@ -3300,10 +3308,14 @@ const dictionary = {
   // advertising v11's improvements is a promise about a version nobody is
   // being offered. Its last sentence is the load-bearing one: the sync
   // replaces tools and knobs and never the owner's prompt.
+  //
+  // The middle sentence is v15: the post-call analysis field
+  // resepta_no_ai_calls (retell.markNoAiCallsFromCall). The label in quotes is
+  // the record footer's switch, customers.noAiCalls, word for word.
   "voiceDetail.templateBehindHint": {
-    tr: "Güncellemeden sonra asistan arayana hangi saatin uygun olduğunu sorar, o saat doluysa en yakın boş saatleri önerir, takvime bakarken sessiz kalmak yerine kısa bir söz söyler, işletme, ekip ve hizmet adlarınızı daha iyi anlar ve on dakikayı geçen aramayı sonlandırır. Talimat metnine dokunmaz.",
-    en: "After the update the agent asks which time suits the caller, offers the nearest free times when that one is taken, says a few words instead of going quiet while it checks the calendar, hears your business, team and service names more reliably, and ends any call that runs past ten minutes. Your instructions are not touched.",
-    de: "Nach dem Update fragt der Agent, welche Uhrzeit passt, bietet bei einer belegten Zeit die nächsten freien an, sagt beim Blick in den Kalender kurz etwas, statt zu schweigen, versteht Ihre Betriebs-, Team- und Leistungsnamen zuverlässiger und beendet Anrufe nach zehn Minuten. Ihre Anweisung bleibt unverändert.",
+    tr: "Güncellemeden sonra asistan arayana hangi saatin uygun olduğunu sorar, o saat doluysa en yakın boş saatleri önerir, takvime bakarken sessiz kalmak yerine kısa bir söz söyler, işletme, ekip ve hizmet adlarınızı daha iyi anlar ve on dakikayı geçen aramayı sonlandırır. Asistan tarafından bir daha aranmak istemediğini söyleyen arayanın kaydında “AI aramaz” işaretini kendisi açar. Talimat metnine dokunmaz.",
+    en: "After the update the agent asks which time suits the caller, offers the nearest free times when that one is taken, says a few words instead of going quiet while it checks the calendar, hears your business, team and service names more reliably, and ends any call that runs past ten minutes. When a caller asks not to be called by the AI again, it turns on \"No AI calls\" on their record. Your instructions are not touched.",
+    de: "Nach dem Update fragt der Agent, welche Uhrzeit passt, bietet bei einer belegten Zeit die nächsten freien an, sagt beim Blick in den Kalender kurz etwas, statt zu schweigen, versteht Ihre Betriebs-, Team- und Leistungsnamen zuverlässiger und beendet Anrufe nach zehn Minuten. Bittet ein Anrufer, nicht mehr von der KI angerufen zu werden, setzt er in dessen Kundenprofil „Kein KI-Anruf“. Ihre Anweisung bleibt unverändert.",
   },
   "voiceDetail.templateUpdate": {
     tr: "Güncelle",
