@@ -18,6 +18,7 @@ import { HeaderSearchProvider, useHeaderSearchSlot } from "@/lib/HeaderSearch";
 import { useHeaderPanesSlot, HeaderPanesProvider } from "@/lib/HeaderPanes";
 import { FeedIcon } from "./FeedIcon";
 import { SegmentedControl } from "./SegmentedControl";
+import { Avatar } from "./Avatar";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { SearchInput } from "./DataTable";
 import { CustomerJump } from "./CustomerJump";
@@ -755,13 +756,6 @@ function ShellHeader({
   );
 }
 
-function initialsFrom(name?: string | null, email?: string | null): string {
-  const source = (name || email || "?").trim();
-  const parts = source.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return source.slice(0, 2).toUpperCase();
-}
-
 function SunIcon() {
   return (
     <svg
@@ -986,17 +980,12 @@ function UserMenu({
         className={
           variant === "row" && !collapsed
             ? "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-black/[0.045] dark:hover:bg-white/[0.05]"
-            : "flex h-8 w-8 items-center justify-center rounded-full bg-[var(--muted-bg)] text-xs font-semibold text-[var(--foreground)] ring-1 ring-[var(--border)] transition-shadow hover:ring-[var(--muted)]"
+            : "group flex h-8 w-8 items-center justify-center rounded-full"
         }
       >
         {variant === "row" && !collapsed ? (
           <>
-            <span
-              aria-hidden
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--muted-bg)] text-xs font-semibold text-[var(--foreground)] ring-1 ring-[var(--border)]"
-            >
-              {initialsFrom(name, email)}
-            </span>
+            <Avatar size="sm" name={name} email={email} />
             {/* Name over address, both truncating: a sidebar is 15rem wide and
                 an email is however long somebody's employer made it. */}
             <span className="min-w-0 flex-1">
@@ -1011,7 +1000,12 @@ function UserMenu({
             </span>
           </>
         ) : (
-          initialsFrom(name, email)
+          <Avatar
+            size="md"
+            name={name}
+            email={email}
+            className="transition-shadow group-hover:ring-[var(--muted)]"
+          />
         )}
       </button>
       {/* Through a portal with fixed positioning, never an absolute child: the
