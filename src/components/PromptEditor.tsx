@@ -428,7 +428,7 @@ export function PromptEditor({
                 }}
                 onMouseEnter={() => setActive(index)}
                 className={`flex w-full items-baseline justify-between gap-2 px-2.5 py-1.5 text-left text-xs ${
-                  index === active ? "bg-[var(--muted-bg)]" : ""
+                  index === active ? "bg-[var(--row-hover-bg)]" : ""
                 }`}
               >
                 {/* The label alone. It carried the key beside it for people

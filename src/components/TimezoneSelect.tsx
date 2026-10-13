@@ -142,8 +142,8 @@ export function TimezoneSelect({
                     key={tz}
                     type="button"
                     onClick={() => select(tz)}
-                    className={`flex w-full items-baseline justify-between gap-3 rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--muted-bg)] ${
-                      tz === value ? "bg-[var(--muted-bg)] font-medium" : ""
+                    className={`flex w-full items-baseline justify-between gap-3 rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--row-hover-bg)] ${
+                      tz === value ? "bg-[var(--row-hover-bg)] font-medium" : ""
                     }`}
                   >
                     <span className="truncate">{cityFromIana(tz)}</span>

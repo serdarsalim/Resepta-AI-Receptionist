@@ -2800,7 +2800,8 @@ function ComposerPlusMenu({
   onSchedule: () => void;
 }) {
   const { t } = useLanguage();
-  // Which face the open panel shows. Reset to the menu every time it opens.
+  // Which face the open panel shows. Back to the menu whenever it shuts
+  // (below), so every open starts there.
   const [view, setView] = useState<"menu" | "emoji">("menu");
   // Drop-UP, right-aligned on the +, clamped so the emoji grid never runs off
   // screen next to Send; below only when the viewport leaves no room above.
@@ -2828,8 +2829,10 @@ function ComposerPlusMenu({
     typeof document !== "undefined" &&
     document.documentElement.classList.contains("dark");
 
+  // --row-hover-bg: on the --card panel in dark, --muted-bg is the panel
+  // itself and the hover showed nothing.
   const row =
-    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)]";
+    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-[var(--foreground)] transition-colors hover:bg-[var(--row-hover-bg)]";
 
   return (
     <>

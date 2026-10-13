@@ -221,8 +221,8 @@ export function CountryCodeSelect({
                       role="option"
                       aria-selected={isSelected}
                       onClick={() => select(c.code)}
-                      className={`flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-sm hover:bg-[var(--muted-bg)] ${
-                        isSelected ? "bg-[var(--muted-bg)] font-medium" : ""
+                      className={`flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-sm hover:bg-[var(--row-hover-bg)] ${
+                        isSelected ? "bg-[var(--row-hover-bg)] font-medium" : ""
                       }`}
                     >
                       {c.iso ? (

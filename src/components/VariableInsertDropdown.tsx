@@ -173,7 +173,7 @@ export function VariableInsertDropdown({
                             e.preventDefault();
                             pick(v.key);
                           }}
-                          className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-[var(--muted-bg)]"
+                          className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-[var(--row-hover-bg)]"
                         >
                           <span className="truncate">{v.label}</span>
                           <span className="shrink-0 font-mono text-[10px] text-[var(--muted)]">

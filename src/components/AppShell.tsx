@@ -1036,7 +1036,7 @@ function UserMenu({
                 close();
                 onOpenAccount();
               }}
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted-bg)]"
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-[var(--row-hover-bg)]"
             >
               <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[var(--muted)]">
                 <PersonIcon />
@@ -1089,7 +1089,7 @@ function UserMenu({
                 target="_blank"
                 rel="noreferrer"
                 role="menuitem"
-                className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted-bg)]"
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-[var(--row-hover-bg)]"
               >
                 <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[var(--muted)]">
                   <HelpIcon />
@@ -1115,7 +1115,7 @@ function UserMenu({
                     );
                   })
                 }
-                className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-[var(--muted-bg)]"
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-[var(--row-hover-bg)]"
               >
                 <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[var(--muted)]">
                   <SignOutIcon />
@@ -1255,7 +1255,7 @@ function WorkspaceSwitcher({
                     void setActiveOrg({ orgId: workspace.orgId });
                   }
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted-bg)]"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--row-hover-bg)]"
               >
                 <span
                   className={`min-w-0 flex-1 truncate ${
@@ -1282,7 +1282,7 @@ function WorkspaceSwitcher({
                     // on the next render — no navigation needed here.
                     void foundWorkspace({});
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--muted-bg)]"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--row-hover-bg)]"
                 >
                   <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[var(--muted)]">
                     <PlusIcon />
