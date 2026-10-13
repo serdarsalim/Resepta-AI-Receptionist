@@ -52,8 +52,11 @@ export async function foundOrg(
       });
     }
   }
-  // Confirmation + one 24h reminder, and the migrated marker — a new org
-  // is born on the messageRules model, never on the legacy fields.
+  // The default rule set (messageRules.seedDefaultRules: confirmation, 24h
+  // and 2h reminders, cancellation notice, 14-day no-show win-back, and the
+  // away reply switched off) and the migrated marker — a new org is born on
+  // the messageRules model, never on the legacy fields. The help center's
+  // "Set confirmation and reminder rules" article lists the same set.
   await seedDefaultRules(ctx.db, orgId);
 
   // Seed the template rows every org needs, as drafts with suggested Meta

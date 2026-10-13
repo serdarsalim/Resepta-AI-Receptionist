@@ -29,7 +29,7 @@ import { LEGAL_UPDATED_ISO } from "@/lib/legal";
 // their date from the document itself, so they cannot drift from what the page
 // prints.
 const LANDING_UPDATED = "2026-08-05";
-const HELP_UPDATED = "2026-08-05";
+const HELP_UPDATED = "2026-10-13";
 const DEMO_UPDATED = "2026-08-05";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
