@@ -615,7 +615,7 @@ export function ConversationPanel({
       // unless this acknowledgement comes with it.
       const askedNoAiCalls = customerRecord?.noAiCallsAt !== undefined;
       const ok = await confirmCall({
-        title: t("calls.placeConfirm").replace("{number}", dialTo),
+        title: t("calls.placeConfirm", { number: dialTo }),
         body: askedNoAiCalls ? t("calls.noAiCallsWarning") : t("calls.placeConfirmBody"),
         confirmLabel: askedNoAiCalls ? t("calls.callAnyway") : t("calls.place"),
         destructive: askedNoAiCalls,
@@ -2611,23 +2611,21 @@ function AgentThreadStrip({
       case "book": {
         const head = change.asap
           ? t("agent.change.bookAsap")
-          : t("agent.change.book").replace("{when}", when(change.at));
+          : t("agent.change.book", { when: when(change.at) });
         return change.services.length > 0 ? `${head} · ${change.services.join(", ")}` : head;
       }
       // Which appointment, when the assistant named it by its services too:
       // two orders can share a minute, and the line has to say which goes.
       case "move": {
-        const head = t("agent.change.move")
-          .replace("{from}", when(change.from))
-          .replace("{to}", when(change.to));
+        const head = t("agent.change.move", { from: when(change.from), to: when(change.to) });
         return change.services?.length ? `${head} · ${change.services.join(", ")}` : head;
       }
       case "cancel": {
-        const head = t("agent.change.cancel").replace("{when}", when(change.at));
+        const head = t("agent.change.cancel", { when: when(change.at) });
         return change.services?.length ? `${head} · ${change.services.join(", ")}` : head;
       }
       case "save":
-        return t("agent.change.save").replace("{fields}", change.labels.join(", "));
+        return t("agent.change.save", { fields: change.labels.join(", ") });
     }
   };
   return (
@@ -2763,7 +2761,7 @@ function AutoSendCountdown({ deadline }: { deadline: number }) {
   return (
     <span className="min-w-0 flex-1 truncate font-medium tabular-nums text-[var(--foreground)]">
       {s > 0
-        ? t("agent.autoSendIn").replace("{s}", String(s))
+        ? t("agent.autoSendIn", { s })
         : t("agent.autoSendNow")}
     </span>
   );

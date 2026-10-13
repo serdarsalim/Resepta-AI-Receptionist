@@ -15,7 +15,7 @@
 // submit.
 
 import { useMutation, useQuery } from "convex/react";
-import { use, useState } from "react";
+import { use, useMemo, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import { MAX_LINES_PER_BOOKING } from "../../../../convex/lib/bookingLimits";
 import { slugify } from "../../../../convex/lib/publicSlug";
@@ -23,10 +23,9 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import {
   CONFIRMATION_LINE,
+  createTranslator,
   isLanguage,
-  translate,
   type Language,
-  type TranslationKey,
 } from "@/lib/i18n";
 import { PhoneInput } from "@/components/PhoneField";
 import { formatMoney } from "@/lib/money";
@@ -119,7 +118,7 @@ export default function BookingPage({
   // render before the org is known: loading, and a slug that answers nothing.
   const pageLanguage: Language =
     page && isLanguage(page.language) ? page.language : viewerLanguage;
-  const t = (key: TranslationKey) => translate(pageLanguage, key);
+  const t = useMemo(() => createTranslator(pageLanguage), [pageLanguage]);
   const book = useMutation(api.booking.book);
 
   const [step, setStep] = useState<Step>("service");
@@ -396,7 +395,7 @@ export default function BookingPage({
         ""
       : picked.length === 1
         ? lineName(picked[0])
-        : t("booking.itemCount").replace("{n}", String(picked.length));
+        : t("booking.itemCount", { n: picked.length });
   // Before a time is picked the duration is the whole answer; after, the time
   // leads and the duration stays, because "how long will I be there" does not
   // stop mattering once you know when you are arriving. A goods order has no
@@ -669,7 +668,7 @@ export default function BookingPage({
           </div>
           {basketFull && (
             <p className="mb-3 text-xs text-[var(--muted)]">
-              {t("booking.maxLines").replace("{n}", String(MAX_LINES_PER_BOOKING))}
+              {t("booking.maxLines", { n: MAX_LINES_PER_BOOKING })}
             </p>
           )}
           {/* MULTI-SELECT since 2026-08-20, reversing this page's own

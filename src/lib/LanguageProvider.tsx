@@ -4,16 +4,17 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import {
   DEFAULT_LANGUAGE,
   LANGUAGE_STORAGE_KEY,
+  createTranslator,
   isLanguage,
-  translate,
   type Language,
-  type TranslationKey,
+  type Translator,
 } from "./i18n";
 
 type LanguageContextValue = {
   language: Language;
   setLanguage: (language: Language) => void;
-  t: (key: TranslationKey) => string;
+  // t(key), t(key, { values }) and t.plural(base, count); see i18n.ts.
+  t: Translator;
 };
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
@@ -51,7 +52,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     () => ({
       language,
       setLanguage,
-      t: (key: TranslationKey) => translate(language, key),
+      t: createTranslator(language),
     }),
     [language, setLanguage],
   );
@@ -66,6 +67,6 @@ export function useLanguage(): LanguageContextValue {
 }
 
 // Convenience for components that only need the translate function.
-export function useT(): (key: TranslationKey) => string {
+export function useT(): Translator {
   return useLanguage().t;
 }

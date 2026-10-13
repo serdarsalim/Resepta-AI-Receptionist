@@ -359,12 +359,20 @@ above).
    lesson). The Cloud send additionally requires `status === "approved"` plus
    a `metaName` on that same row. Dates inside messages format through
    `convex/lib/format.ts` in the ORG's timezone and the message language.
-2. **App UI.** A typed dictionary in `src/lib/i18n.ts` (`tr`/`en`) behind
-   `LanguageProvider` + `useT()`. Adding a language = adding a column; adding
-   a string = adding a key (the union type makes a missing key a compile
-   error). Deliberately NOT next-intl: no locale-prefixed routes and no SEO
-   surface in a logged-in app. A future PUBLIC booking page can adopt next-intl
-   on its own without touching this.
+2. **App UI.** A typed dictionary in `src/lib/i18n.ts` (`tr`/`en`/`de`)
+   behind `LanguageProvider` + `useT()`. Adding a language = adding a column;
+   adding a string = adding a key (the union type makes a missing key or a
+   missing language a compile error). Values go through the translator, never
+   `.replace("{x}")`: `t("bulk.counts", { done, total, failed, skipped })`,
+   with the placeholder names read off the dictionary's literal types, so a
+   missing or misspelled value fails the typecheck too. A count that changes
+   the words is a `<base>.one` / `<base>.other` pair read with
+   `t.plural(base, count)` (the language's own plural rule, {n} filled with
+   the count in local digits); "1 days" was on screen until 2026-10-13. The
+   public booking and manage pages build theirs with
+   `createTranslator(pageLanguage)`. Deliberately NOT next-intl: no
+   locale-prefixed routes and no SEO surface in a logged-in app. A future
+   PUBLIC booking page can adopt next-intl on its own without touching this.
    The signed-in app follows `orgs.language`; the sign-in screen falls back to
    localStorage then the browser language.
 

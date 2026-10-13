@@ -141,7 +141,7 @@ export function RevenueView() {
               {picked.length > 0 && (
                 <>
                   <span className="text-xs text-[var(--muted)]">
-                    {t("revenue.selected").replace("{n}", String(picked.length))}
+                    {t("revenue.selected", { n: picked.length })}
                   </span>
                   <button
                     className={`${pill} ${pillOff} hover:text-emerald-600 dark:hover:text-emerald-400`}

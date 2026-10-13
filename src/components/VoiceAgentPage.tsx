@@ -308,7 +308,7 @@ export function VoiceAgentPage({
         ...(voiceDirty ? { voiceId: voice } : {}),
       })) as { previousPrompt: string; version: number | null };
       setPrevious(res.previousPrompt);
-      setStatus(t("voiceDetail.published").replace("{n}", String(res.version ?? "?")));
+      setStatus(t("voiceDetail.published", { n: res.version ?? "?" }));
       load();
     });
 
@@ -385,7 +385,7 @@ export function VoiceAgentPage({
         throw error;
       }
       setStatus(
-        t("voiceDetail.callingFromTo").replace("{to}", res.to).replace("{from}", res.from),
+        t("voiceDetail.callingFromTo", { to: res.to, from: res.from }),
       );
     });
   };
@@ -819,10 +819,7 @@ export function VoiceAgentPage({
                   onClick={() => {
                     void (async () => {
                       const ok = await confirmDelete({
-                        title: t("settings.voiceDisconnectConfirm").replace(
-                          "{name}",
-                          detail.name,
-                        ),
+                        title: t("settings.voiceDisconnectConfirm", { name: detail.name }),
                         confirmLabel: t("settings.voiceDisconnect"),
                       });
                       if (!ok) return;
@@ -869,9 +866,7 @@ export function VoiceAgentPage({
         >
           <div className="space-y-3">
             <p className="text-sm text-[var(--muted)]">
-              {t("voiceDetail.confirmCall")
-                .replace("{to}", testTo.trim() || "…")
-                .replace("{name}", detail.name)}
+              {t("voiceDetail.confirmCall", { to: testTo.trim() || "…", name: detail.name })}
             </p>
             {/* Unsaved edits are not part of the call — Retell runs the saved
                 config. Saying so here beats hearing the old prompt and

@@ -653,11 +653,11 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                   const industry = settings.org.industry!;
                   void (async () => {
                     const ok = await confirm({
-                      title: t("settings.industryResetConfirm").replace(
-                        "{industry}",
-                        industries?.find((preset) => preset.key === industry)
-                          ?.name[presetLanguage(language)] ?? industry,
-                      ),
+                      title: t("settings.industryResetConfirm", {
+                        industry:
+                          industries?.find((preset) => preset.key === industry)
+                            ?.name[presetLanguage(language)] ?? industry,
+                      }),
                       body: t("settings.industryResetBody"),
                       confirmLabel: t("settings.industryReset"),
                     });
@@ -1313,7 +1313,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                     onClick={() => {
                       void (async () => {
                         const ok = await confirm({
-                          title: t("services.deleteConfirm").replace("{name}", service.name),
+                          title: t("services.deleteConfirm", { name: service.name }),
                         });
                         if (!ok) return;
                         setError(null);
@@ -1473,7 +1473,7 @@ function FieldTableRow({
   const [editingKey, setEditingKey] = useState(false);
   const inUse = agents.length > 0;
   const voice = field.source === "voice";
-  const usedByText = t("fields.usedByAgents").replace("{agents}", agents.join(", "));
+  const usedByText = t("fields.usedByAgents", { agents: agents.join(", ") });
   return (
     <>
       <tr
@@ -1593,7 +1593,7 @@ function FieldTableRow({
           <ActionTip
             label={
               inUse
-                ? t("fields.deleteInUse").replace("{agents}", agents.join(", "))
+                ? t("fields.deleteInUse", { agents: agents.join(", ") })
                 : t("common.delete")
             }
             onClick={onRemove}
@@ -1612,7 +1612,7 @@ function FieldTableRow({
           <td colSpan={6} className="px-3 py-3">
             <div className="space-y-2">
               <div className="text-xs text-[var(--muted)]">
-                {t("fields.optionsFor").replace("{name}", field.label)}
+                {t("fields.optionsFor", { name: field.label })}
               </div>
               <OptionsEditor options={field.options ?? []} onChange={onSetOptions} />
             </div>
@@ -1817,7 +1817,7 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
                   // its tooltip rather than routing it through here.
                   void (async () => {
                     const ok = await confirm({
-                      title: t("fields.deleteConfirm").replace("{name}", field.label),
+                      title: t("fields.deleteConfirm", { name: field.label }),
                     });
                     if (!ok) return;
                     setError(null);
@@ -2307,7 +2307,7 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                   destructive surface. */}
               {isOwner && row.staffId ? (
                 <ActionTip
-                  label={t("roster.deactivate").replace("{name}", row.name)}
+                  label={t("roster.deactivate", { name: row.name })}
                   onClick={() =>
                     void guard(() => setActive({ staffId: row.staffId!, active: false }))
                   }
@@ -2407,7 +2407,7 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
               <span key={row.key} className="flex items-center text-sm text-[var(--muted)]">
                 <span className="truncate">{row.name}</span>
                 <ActionTip
-                  label={t("roster.restore").replace("{name}", row.name)}
+                  label={t("roster.restore", { name: row.name })}
                   onClick={() =>
                     void guard(() => setActive({ staffId: row.staffId!, active: true }))
                   }
@@ -2431,17 +2431,17 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
                     what history it costs, because that part can't be taken
                     back. */}
                 <ActionTip
-                  label={(row.hasAppointments
-                    ? t("roster.removeWithHistory")
-                    : t("roster.remove")
-                  ).replace("{name}", row.name)}
+                  label={t(
+                    row.hasAppointments ? "roster.removeWithHistory" : "roster.remove",
+                    { name: row.name },
+                  )}
                   multiline
                   onClick={() => {
                     void (async () => {
                       const ok = await confirm({
-                        title: t("roster.remove").replace("{name}", row.name),
+                        title: t("roster.remove", { name: row.name }),
                         body: row.hasAppointments
-                          ? t("roster.removeWithHistory").replace("{name}", row.name)
+                          ? t("roster.removeWithHistory", { name: row.name })
                           : undefined,
                       });
                       if (!ok) return;
@@ -2655,7 +2655,7 @@ function GrantLoginSheet({
 
   return (
     <Sheet
-      title={t("roster.grantLogin").replace("{name}", name)}
+      title={t("roster.grantLogin", { name })}
       hint={t("roster.grantLoginHint")}
       onClose={onClose}
     >

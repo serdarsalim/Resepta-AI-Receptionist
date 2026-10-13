@@ -6,15 +6,14 @@
 // cancel). No auth, no chrome, phone-first, same as /book and /r.
 
 import { useMutation, useQuery } from "convex/react";
-import { use, useState } from "react";
+import { use, useMemo, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import {
   CONFIRMATION_LINE,
+  createTranslator,
   isLanguage,
-  translate,
   type Language,
-  type TranslationKey,
 } from "@/lib/i18n";
 
 function todayIn(timezone: string): string {
@@ -42,7 +41,7 @@ export default function ManageAppointmentPage({
   // words did not.
   const pageLanguage: Language =
     appointment && isLanguage(appointment.language) ? appointment.language : viewerLanguage;
-  const t = (key: TranslationKey) => translate(pageLanguage, key);
+  const t = useMemo(() => createTranslator(pageLanguage), [pageLanguage]);
   const reschedule = useMutation(api.booking.reschedule);
   const cancel = useMutation(api.booking.cancel);
 

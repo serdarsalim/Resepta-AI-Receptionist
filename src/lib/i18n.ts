@@ -19,6 +19,18 @@
 // - KVKK is Turkish law and means nothing in Germany, so the German column
 //   says DSGVO. English keeps KVKK: the English UI serves the Turkish
 //   market, not a German one.
+//
+// Values and plurals (2026-10-13, ported from what Nudge's ICU messages do):
+// - A string names its values in braces, "Goes to {n} people", and the caller
+//   passes them: t("bulk.counts", { done, total, failed, skipped }). The names
+//   are read off this file's own literal types, so a missing or misspelled
+//   value is a compile error, the same as a missing key or language.
+// - A count that changes the words gets a PAIR of keys, `<base>.one` and
+//   `<base>.other`, and t.plural("<base>", count) picks one by the language's
+//   own plural rule and fills {n} with the count. Turkish keeps the noun
+//   singular after a number ("3 kişi"), so its two strings are usually the
+//   same; they are written out anyway, because a sentence around the count
+//   can still change ("Telefon çalar" for one, "Telefonlar çalar" for many).
 
 export const LANGUAGES = [
   { code: "tr", label: "Türkçe" },
@@ -681,7 +693,14 @@ const dictionary = {
     en: "Bulk call",
     de: "Sammelanruf",
   },
-  "bulk.willReach": {
+  // Plural pairs (t.plural): a selection of one used to read "Goes to 1
+  // people".
+  "bulk.willReach.one": {
+    tr: "{n} kişiye gidecek",
+    en: "Goes to {n} person",
+    de: "Geht an {n} Person",
+  },
+  "bulk.willReach.other": {
     tr: "{n} kişiye gidecek",
     en: "Goes to {n} people",
     de: "Geht an {n} Personen",
@@ -718,12 +737,23 @@ const dictionary = {
     en: "Dialled one at a time. The next call waits for the current one to end.",
     de: "Nacheinander. Der nächste Anruf beginnt erst nach dem laufenden.",
   },
-  "bulk.confirmSend": {
+  "bulk.confirmSend.one": {
+    tr: "{n} kişiye gönderilsin mi? Geri alınamaz.",
+    en: "Send to {n} person? This cannot be undone.",
+    de: "An {n} Person senden? Das lässt sich nicht rückgängig machen.",
+  },
+  "bulk.confirmSend.other": {
     tr: "{n} kişiye gönderilsin mi? Geri alınamaz.",
     en: "Send to {n} people? This cannot be undone.",
     de: "An {n} Personen senden? Das lässt sich nicht rückgängig machen.",
   },
-  "bulk.confirmCall": {
+  // The one pair whose Turkish changes too: one phone rings, not phones.
+  "bulk.confirmCall.one": {
+    tr: "{n} kişi aransın mı? Telefonu gerçekten çalar.",
+    en: "Call {n} person? Their phone really rings.",
+    de: "{n} Person anrufen? Das Telefon klingelt wirklich.",
+  },
+  "bulk.confirmCall.other": {
     tr: "{n} kişi aransın mı? Telefonlar gerçekten çalar.",
     en: "Call {n} people? Their phones really ring.",
     de: "{n} Personen anrufen? Die Telefone klingeln wirklich.",
@@ -1876,7 +1906,14 @@ const dictionary = {
     en: "When booked",
     de: "Bei der Buchung",
   },
-  "settings.ruleDaysAfterNoShow": {
+  // The unit beside an editable number, so it agrees with the number: "1 day
+  // after a no-show", never "1 days".
+  "settings.ruleDaysAfterNoShow.one": {
+    tr: "gün sonra, gelmeyen müşteriye",
+    en: "day after a no-show",
+    de: "Tag nach einem Nichterscheinen",
+  },
+  "settings.ruleDaysAfterNoShow.other": {
     tr: "gün sonra, gelmeyen müşteriye",
     en: "days after a no-show",
     de: "Tage nach einem Nichterscheinen",
@@ -1909,8 +1946,11 @@ const dictionary = {
     en: "When it sends",
     de: "Wann sie gesendet wird",
   },
-  "settings.ruleUnitHours": { tr: "saat", en: "hours", de: "Stunden" },
-  "settings.ruleUnitDays": { tr: "gün", en: "days", de: "Tage" },
+  // Options of the unit picker beside the typed amount, so "1" reads "1 hour".
+  "settings.ruleUnitHours.one": { tr: "saat", en: "hour", de: "Stunde" },
+  "settings.ruleUnitHours.other": { tr: "saat", en: "hours", de: "Stunden" },
+  "settings.ruleUnitDays.one": { tr: "gün", en: "day", de: "Tag" },
+  "settings.ruleUnitDays.other": { tr: "gün", en: "days", de: "Tage" },
   "settings.ruleBeforeAppointment": {
     tr: "Randevudan önce",
     en: "Before the appointment",
@@ -1976,29 +2016,55 @@ const dictionary = {
     en: "One automatic reply to a customer who writes outside opening hours — at most once a day per channel. Opening hours must be set in Business → Hours.",
     de: "Eine automatische Antwort an Kundinnen und Kunden, die außerhalb der Öffnungszeiten schreiben — höchstens einmal täglich pro Kanal. Die Öffnungszeiten müssen unter Business → Öffnungszeiten hinterlegt sein.",
   },
-  "settings.ruleHoursAfterEnd": {
+  "settings.ruleHoursAfterEnd.one": {
+    tr: "saat sonra, randevu bitince",
+    en: "hour after the appointment",
+    de: "Stunde nach dem Termin",
+  },
+  "settings.ruleHoursAfterEnd.other": {
     tr: "saat sonra, randevu bitince",
     en: "hours after the appointment",
     de: "Stunden nach dem Termin",
   },
-  "settings.ruleHoursBefore": {
+  "settings.ruleHoursBefore.one": {
+    tr: "saat önce",
+    en: "hour before",
+    de: "Stunde vorher",
+  },
+  "settings.ruleHoursBefore.other": {
     tr: "saat önce",
     en: "hours before",
     de: "Stunden vorher",
   },
   // The list rows' whole sentences (Serdar, 2026-08-28: "Randevudan 2 saat
   // önce" over "2 saat önce" — the row must say what the clock counts from).
-  "settings.ruleWhenBeforeFull": {
+  // Pairs since a one-day win-back read "1 days after a no-show".
+  "settings.ruleWhenBeforeFull.one": {
+    tr: "Randevudan {n} saat önce",
+    en: "{n} hour before the appointment",
+    de: "{n} Stunde vor dem Termin",
+  },
+  "settings.ruleWhenBeforeFull.other": {
     tr: "Randevudan {n} saat önce",
     en: "{n} hours before the appointment",
     de: "{n} Stunden vor dem Termin",
   },
-  "settings.ruleWhenAfterEndFull": {
+  "settings.ruleWhenAfterEndFull.one": {
+    tr: "Randevu bittikten {n} saat sonra",
+    en: "{n} hour after the appointment",
+    de: "{n} Stunde nach dem Termin",
+  },
+  "settings.ruleWhenAfterEndFull.other": {
     tr: "Randevu bittikten {n} saat sonra",
     en: "{n} hours after the appointment",
     de: "{n} Stunden nach dem Termin",
   },
-  "settings.ruleWhenNoShowFull": {
+  "settings.ruleWhenNoShowFull.one": {
+    tr: "Gelmeyen müşteriye {n} gün sonra",
+    en: "{n} day after a no-show",
+    de: "{n} Tag nach einem Nichterscheinen",
+  },
+  "settings.ruleWhenNoShowFull.other": {
     tr: "Gelmeyen müşteriye {n} gün sonra",
     en: "{n} days after a no-show",
     de: "{n} Tage nach einem Nichterscheinen",
@@ -2633,10 +2699,15 @@ const dictionary = {
   // What the balance BUYS, which is the question the balance was standing in
   // for. Minutes, because that is the unit the rate is quoted in and the unit
   // a call is billed in.
-  "wallet.runway": {
-    tr: "Yaklaşık {minutes} dakika görüşme",
-    en: "About {minutes} minutes of talk time",
-    de: "Etwa {minutes} Gesprächsminuten",
+  "wallet.runway.one": {
+    tr: "Yaklaşık {n} dakika görüşme",
+    en: "About {n} minute of talk time",
+    de: "Etwa {n} Gesprächsminute",
+  },
+  "wallet.runway.other": {
+    tr: "Yaklaşık {n} dakika görüşme",
+    en: "About {n} minutes of talk time",
+    de: "Etwa {n} Gesprächsminuten",
   },
   "wallet.topUpWith": {
     tr: "{amount} yükle",
@@ -2794,7 +2865,13 @@ const dictionary = {
     en: "Agent",
     de: "Assistent",
   },
-  "settings.voiceCollectsCount": {
+  // An agent with one field read "1 fields" in the agents table.
+  "settings.voiceCollectsCount.one": {
+    tr: "{n} alan",
+    en: "{n} field",
+    de: "{n} Feld",
+  },
+  "settings.voiceCollectsCount.other": {
     tr: "{n} alan",
     en: "{n} fields",
     de: "{n} Felder",
@@ -4055,10 +4132,15 @@ const dictionary = {
   },
   // Shown in the sheet before saving. Nothing is moved or cancelled — this
   // says what is already there and leaves the decision alone.
-  "closures.appointmentsInside": {
-    tr: "Bu saatlerde zaten {count} randevu var. Hiçbiri iptal edilmez veya taşınmaz.",
-    en: "There are already {count} appointments in this time. None are cancelled or moved.",
-    de: "In diesem Zeitraum gibt es bereits {count} Termine. Keiner wird abgesagt oder verschoben.",
+  "closures.appointmentsInside.one": {
+    tr: "Bu saatlerde zaten {n} randevu var. İptal edilmez, taşınmaz.",
+    en: "There is already {n} appointment in this time. It is not cancelled or moved.",
+    de: "In diesem Zeitraum gibt es bereits {n} Termin. Er wird nicht abgesagt oder verschoben.",
+  },
+  "closures.appointmentsInside.other": {
+    tr: "Bu saatlerde zaten {n} randevu var. Hiçbiri iptal edilmez veya taşınmaz.",
+    en: "There are already {n} appointments in this time. None are cancelled or moved.",
+    de: "In diesem Zeitraum gibt es bereits {n} Termine. Keiner wird abgesagt oder verschoben.",
   },
   "closures.removeConfirm": {
     tr: "Bu kapalı saat kaldırılsın mı? O saatler yeniden randevuya açılır.",
@@ -5138,6 +5220,113 @@ export function translate(language: Language, key: TranslationKey): string {
 
 export function isLanguage(value: string | null | undefined): value is Language {
   return LANGUAGES.some((l) => l.code === value);
+}
+
+// ── Values and plurals ──────────────────────────────────────────────────────
+//
+// The placeholder names come from the dictionary's literal types, all three
+// languages at once, so a value one translation asks for and the caller left
+// out fails the typecheck instead of printing "{n}" on screen.
+
+type PlaceholdersIn<S> = S extends `${string}{${infer Name}}${infer Rest}`
+  ? Name | PlaceholdersIn<Rest>
+  : never;
+
+export type PlaceholderOf<K extends TranslationKey> = PlaceholdersIn<
+  (typeof dictionary)[K][Language]
+>;
+
+export type TranslationValue = string | number;
+
+// The values a key takes. `never` for a key with no placeholders, so handing
+// one values it would ignore is an error too.
+export type TranslationVars<K extends TranslationKey> = [PlaceholderOf<K>] extends [never]
+  ? never
+  : Record<PlaceholderOf<K>, TranslationValue>;
+
+// "{name}" → its value. A replacer function rather than a replacement string,
+// because String.replace reads `$&` and `$'` inside a replacement string as
+// patterns, and these values are customer names. A placeholder with no value
+// is left as written: the types make that unreachable, and a visible "{x}"
+// beats a silently missing word if a string ever drifts past them.
+export function interpolate(
+  template: string,
+  vars: Readonly<Record<string, TranslationValue>>,
+): string {
+  return template.replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g, (match, name: string) =>
+    Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : match,
+  );
+}
+
+// The bases of every `<base>.one` + `<base>.other` pair.
+type PluralBase<K> = K extends `${infer Base}.other`
+  ? `${Base}.one` extends TranslationKey
+    ? Base
+    : never
+  : never;
+export type PluralKey = PluralBase<TranslationKey>;
+
+type PluralPair<B extends PluralKey> = Extract<`${B}.one` | `${B}.other`, TranslationKey>;
+
+// {n} is the count and is always supplied. Anything else a pair names is the
+// caller's to pass, and is required exactly when the pair has one.
+type PluralExtra<B extends PluralKey> = Exclude<PlaceholderOf<PluralPair<B>>, "n">;
+export type PluralRest<B extends PluralKey> = [PluralExtra<B>] extends [never]
+  ? []
+  : [vars: Record<PluralExtra<B>, TranslationValue>];
+
+const pluralRules = new Map<Language, Intl.PluralRules>();
+const countFormats = new Map<Language, Intl.NumberFormat>();
+
+// The language's own rule, from the platform (CLDR). For tr, en and de that is
+// "one" for exactly 1 and "other" for everything else, 0 included; a language
+// added later with more forms (few, many) still lands on .other until it gets
+// keys of its own.
+function pluralForm(language: Language, count: number): "one" | "other" {
+  let rules = pluralRules.get(language);
+  if (!rules) {
+    rules = new Intl.PluralRules(language);
+    pluralRules.set(language, rules);
+  }
+  return rules.select(count) === "one" ? "one" : "other";
+}
+
+// A count in the reader's own digits: 1,500 in English, 1.500 in Turkish and
+// German.
+function formatCount(language: Language, count: number): string {
+  let format = countFormats.get(language);
+  if (!format) {
+    format = new Intl.NumberFormat(language);
+    countFormats.set(language, format);
+  }
+  return format.format(count);
+}
+
+export function translatePlural<B extends PluralKey>(
+  language: Language,
+  base: B,
+  count: number,
+  ...rest: PluralRest<B>
+): string {
+  const key = `${base}.${pluralForm(language, count)}` as TranslationKey;
+  const vars: Record<string, TranslationValue> = rest[0] ?? {};
+  return interpolate(translate(language, key), { ...vars, n: formatCount(language, count) });
+}
+
+// What useT() hands a component, and what the public pages build for the
+// visitor's language. A plain key reads as it always has; a key with values
+// takes them; t.plural picks the form.
+export type Translator = {
+  (key: TranslationKey): string;
+  <K extends TranslationKey>(key: K, vars: TranslationVars<K>): string;
+  plural: <B extends PluralKey>(base: B, count: number, ...rest: PluralRest<B>) => string;
+};
+
+export function createTranslator(language: Language): Translator {
+  const t = ((key: TranslationKey, vars?: Record<string, TranslationValue>) =>
+    vars ? interpolate(translate(language, key), vars) : translate(language, key)) as Translator;
+  t.plural = (base, count, ...rest) => translatePlural(language, base, count, ...rest);
+  return t;
 }
 
 // The public booking and manage pages' confirmation line, keyed by the

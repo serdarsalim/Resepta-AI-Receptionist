@@ -73,7 +73,7 @@ export function KnowledgeCard({ isOwner }: { isOwner: boolean }) {
             onDelete={() => {
               void (async () => {
                 const ok = await confirm({
-                  title: t("knowledge.deleteConfirm").replace("{name}", row.title),
+                  title: t("knowledge.deleteConfirm", { name: row.title }),
                 });
                 if (!ok) return;
                 setError(null);

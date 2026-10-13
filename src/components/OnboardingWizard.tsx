@@ -503,10 +503,7 @@ export function OnboardingWizard() {
               />
               {numberRequest ? (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200">
-                  {t("onboarding.uploaded").replace(
-                    "{file}",
-                    numberRequest.fileName,
-                  )}
+                  {t("onboarding.uploaded", { file: numberRequest.fileName })}
                 </div>
               ) : (
                 /* Same dropzone as NumberRequestCard, and deliberately the

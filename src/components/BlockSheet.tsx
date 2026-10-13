@@ -458,7 +458,7 @@ export function BlockSheet({
         <p className="mt-3 min-h-5 text-sm text-[var(--muted)]">
           {rangeError ?? error ??
             (inside !== undefined && inside > 0
-              ? t("closures.appointmentsInside").replace("{count}", String(inside))
+              ? t.plural("closures.appointmentsInside", inside)
               : "")}
         </p>
 

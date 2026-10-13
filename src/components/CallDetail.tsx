@@ -366,10 +366,7 @@ export function CallDetail({
 
   const billed =
     typeof call.billedMicroUsd === "number" && call.billedMicroUsd > 0
-      ? t("calls.billedLine").replace(
-          "{amount}",
-          `$${(call.billedMicroUsd / 1_000_000).toFixed(2)}`,
-        )
+      ? t("calls.billedLine", { amount: `$${(call.billedMicroUsd / 1_000_000).toFixed(2)}` })
       : null;
   const hasArtefact = !!call.summary || !!ended || !!billed || hasCollected;
 

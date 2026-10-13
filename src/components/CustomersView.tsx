@@ -999,14 +999,14 @@ function BulkBar({
   return (
     <>
       <span className="text-sm font-medium">
-        {t("bulk.selected").replace("{n}", String(count))}
+        {t("bulk.selected", { n: count })}
       </span>
       {noConsent > 0 && (
         <span
           className="text-xs text-amber-600 dark:text-amber-500"
           title={t("customers.cannotBeMessaged")}
         >
-          {t("bulk.noConsentCount").replace("{n}", String(noConsent))}
+          {t("bulk.noConsentCount", { n: noConsent })}
         </span>
       )}
       <span className="ml-auto flex flex-wrap items-center gap-2">

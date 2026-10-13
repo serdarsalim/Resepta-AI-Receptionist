@@ -613,10 +613,7 @@ export function AppointmentModal({
                                 }`}
                               >
                                 <span className="truncate">
-                                  {`+ ${t("appointments.createCustomer").replace(
-                                    "{name}",
-                                    customerQuery.trim(),
-                                  )}`}
+                                  {`+ ${t("appointments.createCustomer", { name: customerQuery.trim() })}`}
                                 </span>
                               </button>
                             </li>

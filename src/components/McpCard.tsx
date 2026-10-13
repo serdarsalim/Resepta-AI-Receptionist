@@ -153,7 +153,7 @@ export function McpCard({ site }: { site: SiteUrl }) {
                 {k.revoked
                   ? t("mcp.revoked")
                   : k.lastUsedAt
-                    ? t("mcp.lastUsed").replace("{when}", when(k.lastUsedAt))
+                    ? t("mcp.lastUsed", { when: when(k.lastUsedAt) })
                     : t("mcp.neverUsed")}
               </span>
               {!k.revoked && (
@@ -162,7 +162,7 @@ export function McpCard({ site }: { site: SiteUrl }) {
                   onClick={() => {
                     void (async () => {
                       const ok = await confirm({
-                        title: t("mcp.revokeConfirm").replace("{name}", k.name),
+                        title: t("mcp.revokeConfirm", { name: k.name }),
                         confirmLabel: t("mcp.revoke"),
                       });
                       if (ok) await revoke({ id: k._id });

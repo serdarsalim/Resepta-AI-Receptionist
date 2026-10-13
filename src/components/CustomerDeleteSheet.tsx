@@ -80,7 +80,7 @@ export function CustomerDeleteSheet({
   };
 
   const title = preview?.name
-    ? t("customers.deleteTitle").replace("{name}", preview.name)
+    ? t("customers.deleteTitle", { name: preview.name })
     : t("customers.deleteTitleUnnamed");
 
   return (
@@ -111,7 +111,7 @@ export function CustomerDeleteSheet({
           )}
           {kept > 0 && (
             <p className="mt-3 text-xs text-[var(--muted)]">
-              {t("customers.deleteActivityKept").replace("{n}", String(kept))}
+              {t("customers.deleteActivityKept", { n: kept })}
             </p>
           )}
           <p className="mt-3 text-sm font-medium text-red-600 dark:text-red-400">

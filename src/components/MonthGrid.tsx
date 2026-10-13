@@ -251,7 +251,7 @@ export function MonthGrid({
                     }}
                     className="block w-full truncate px-1 text-left text-[11px] leading-4 text-[var(--muted)] hover:text-[var(--foreground)]"
                   >
-                    {t("appointments.more").replace("{n}", String(hidden))}
+                    {t("appointments.more", { n: hidden })}
                   </button>
                 )}
               </div>

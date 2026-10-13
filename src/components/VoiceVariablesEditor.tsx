@@ -613,7 +613,7 @@ export function VoiceVariablesEditor({
       });
       if (keepUndo) setPrevious(initial.map((row) => ({ ...row })));
       else setPrevious(null);
-      setStatus(t("voiceVariables.published").replace("{n}", String(result.version ?? "")));
+      setStatus(t("voiceVariables.published", { n: result.version ?? "" }));
       onPublished();
     } catch {
       setStatus(t("settings.voiceActionFailed"));
@@ -918,12 +918,12 @@ export function VoiceVariablesEditor({
           // title and the button below used it raw, so the dialog asked the
           // reader to "Remove {name}" while the sentence between them named
           // the actual variable.
-          title={t("voiceVariables.remove").replace("{name}", removingLabel)}
+          title={t("voiceVariables.remove", { name: removingLabel })}
           onClose={() => setConfirmRemove(null)}
         >
           <div className="space-y-3">
             <p className="text-sm text-[var(--muted)]">
-              {t("voiceVariables.removeBody").replace("{name}", removingLabel)}
+              {t("voiceVariables.removeBody", { name: removingLabel })}
             </p>
             <div className="flex justify-end gap-2">
               <button
@@ -944,7 +944,7 @@ export function VoiceVariablesEditor({
                 // not to the control inside it.
                 className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-[var(--muted-bg)]"
               >
-                {t("voiceVariables.remove").replace("{name}", removingLabel)}
+                {t("voiceVariables.remove", { name: removingLabel })}
               </button>
             </div>
           </div>
@@ -1295,7 +1295,7 @@ function VariablePicker({
                 title={t("voiceVariables.pickerCreateHint")}
                 className="w-full rounded-lg px-2 py-1.5 text-left text-xs font-medium text-[var(--accent)] hover:bg-[var(--muted-bg)]"
               >
-                + {t("voiceVariables.pickerCreate").replace("{name}", trimmed)}
+                + {t("voiceVariables.pickerCreate", { name: trimmed })}
               </button>
             )}
             {trimmed && allowCallOnly && (
@@ -1304,7 +1304,7 @@ function VariablePicker({
                 onClick={() => pick(() => onCallOnly(trimmed))}
                 className="w-full rounded-lg px-2 py-1.5 text-left text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
               >
-                {t("voiceVariables.pickerCallOnly").replace("{name}", trimmed)}
+                {t("voiceVariables.pickerCallOnly", { name: trimmed })}
               </button>
             )}
             {!trimmed && fieldMatches.length === 0 && builtinMatches.length === 0 && (
@@ -1432,7 +1432,7 @@ function VariableRow({
       <button
         type="button"
         onClick={onRemove}
-        aria-label={t("voiceVariables.remove").replace("{name}", displayLabel)}
+        aria-label={t("voiceVariables.remove", { name: displayLabel })}
         className="mt-1 justify-self-end rounded p-1 text-[var(--muted)] opacity-100 transition-opacity hover:text-[var(--foreground)] focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
       >
         <RemoveX />

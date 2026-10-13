@@ -1197,15 +1197,15 @@ function AddRuleSheet({
       const typed = Number(amount);
       if (!Number.isFinite(typed) || typed < bounds.min || typed > bounds.max) {
         setError(
-          t("settings.ruleRange")
-            .replace("{min}", String(bounds.min))
-            .replace("{max}", String(bounds.max))
-            .replace(
-              "{unit}",
-              unit === "days"
-                ? t("settings.ruleUnitDays")
-                : t("settings.ruleUnitHours"),
+          t("settings.ruleRange", {
+            min: bounds.min,
+            max: bounds.max,
+            // Agrees with the upper bound, which is never 1.
+            unit: t.plural(
+              unit === "days" ? "settings.ruleUnitDays" : "settings.ruleUnitHours",
+              bounds.max,
             ),
+          }),
         );
         return;
       }
@@ -1326,8 +1326,13 @@ function AddRuleSheet({
                   }}
                   className="w-32"
                 >
-                  <option value="hours">{t("settings.ruleUnitHours")}</option>
-                  <option value="days">{t("settings.ruleUnitDays")}</option>
+                  {/* The unit agrees with the amount typed beside it. */}
+                  <option value="hours">
+                    {t.plural("settings.ruleUnitHours", Number(amount) || 2)}
+                  </option>
+                  <option value="days">
+                    {t.plural("settings.ruleUnitDays", Number(amount) || 2)}
+                  </option>
                 </select>
                 <span className="text-sm text-[var(--muted)]">
                   {t(selected.whenKey)}
@@ -1640,19 +1645,13 @@ function RulesCard({
       case "out_of_hours":
         return t("settings.ruleWhenClosed");
       case "before_start":
-        return t("settings.ruleWhenBeforeFull").replace(
-          "{n}",
-          String(rule.offsetHours),
-        );
+        return t.plural("settings.ruleWhenBeforeFull", rule.offsetHours);
       case "after_end":
-        return t("settings.ruleWhenAfterEndFull").replace(
-          "{n}",
-          String(rule.offsetHours),
-        );
+        return t.plural("settings.ruleWhenAfterEndFull", rule.offsetHours);
       case "no_show":
-        return t("settings.ruleWhenNoShowFull").replace(
-          "{n}",
-          String(Math.round(rule.offsetHours / 24)),
+        return t.plural(
+          "settings.ruleWhenNoShowFull",
+          Math.round(rule.offsetHours / 24),
         );
     }
   };
@@ -1670,12 +1669,12 @@ function RulesCard({
               value={rule.offsetHours}
               min={1}
               max={168}
-              label={t("settings.ruleHoursBefore")}
+              label={t.plural("settings.ruleHoursBefore", rule.offsetHours)}
               onCommit={(hours) =>
                 void updateRule({ ruleId: rule._id, offsetHours: hours })
               }
             />
-            {t("settings.ruleHoursBefore")}
+            {t.plural("settings.ruleHoursBefore", rule.offsetHours)}
           </span>
         );
       case "after_end":
@@ -1685,12 +1684,12 @@ function RulesCard({
               value={rule.offsetHours}
               min={1}
               max={720}
-              label={t("settings.ruleHoursAfterEnd")}
+              label={t.plural("settings.ruleHoursAfterEnd", rule.offsetHours)}
               onCommit={(hours) =>
                 void updateRule({ ruleId: rule._id, offsetHours: hours })
               }
             />
-            {t("settings.ruleHoursAfterEnd")}
+            {t.plural("settings.ruleHoursAfterEnd", rule.offsetHours)}
           </span>
         );
       case "no_show":
@@ -1700,12 +1699,18 @@ function RulesCard({
               value={Math.round(rule.offsetHours / 24)}
               min={1}
               max={90}
-              label={t("settings.ruleDaysAfterNoShow")}
+              label={t.plural(
+                "settings.ruleDaysAfterNoShow",
+                Math.round(rule.offsetHours / 24),
+              )}
               onCommit={(days) =>
                 void updateRule({ ruleId: rule._id, offsetHours: days * 24 })
               }
             />
-            {t("settings.ruleDaysAfterNoShow")}
+            {t.plural(
+              "settings.ruleDaysAfterNoShow",
+              Math.round(rule.offsetHours / 24),
+            )}
           </span>
         );
       case "out_of_hours":

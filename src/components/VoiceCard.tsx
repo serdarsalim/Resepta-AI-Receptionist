@@ -558,9 +558,9 @@ export function VoiceCard({
                         className="ml-2 text-xs text-[var(--muted)] underline decoration-dotted underline-offset-2 hover:text-[var(--foreground)]"
                       >
                         {agent && agent.collects.length > 0
-                          ? t("settings.voiceCollectsCount").replace(
-                              "{n}",
-                              String(agent.collects.length),
+                          ? t.plural(
+                              "settings.voiceCollectsCount",
+                              agent.collects.length,
                             )
                           : t("settings.voiceDetails")}
                       </button>
@@ -663,32 +663,20 @@ export function VoiceCard({
                               return (
                                 <>
                                   <div>
-                                    {t("settings.voiceStatToday").replace(
-                                      "{n}",
-                                      String(s.today),
-                                    )}
+                                    {t("settings.voiceStatToday", { n: s.today })}
                                     {" · "}
-                                    {t("settings.voiceStatTotal").replace(
-                                      "{n}",
-                                      String(s.total),
-                                    )}
+                                    {t("settings.voiceStatTotal", { n: s.total })}
                                   </div>
                                   {s.lastAt !== null && (
                                     <div>
-                                      {t("settings.voiceStatLast").replace(
-                                        "{when}",
-                                        new Date(s.lastAt).toLocaleString(),
-                                      )}
+                                      {t("settings.voiceStatLast", { when: new Date(s.lastAt).toLocaleString() })}
                                     </div>
                                   )}
                                 </>
                               );
                             })()}
                             <div>
-                              {t("settings.voiceConnectedAt").replace(
-                                "{date}",
-                                new Date(row.connectedAt).toLocaleDateString(),
-                              )}
+                              {t("settings.voiceConnectedAt", { date: new Date(row.connectedAt).toLocaleDateString() })}
                             </div>
                           </div>
                         </div>
@@ -965,9 +953,9 @@ export function VoiceCard({
                             <td className="max-w-xs px-3 py-2 text-xs text-[var(--muted-strong)]">
                               {agent.collects.length > 0 && (
                                 <span className="inline-flex items-center gap-2">
-                                  {t("settings.voiceCollectsCount").replace(
-                                    "{n}",
-                                    String(agent.collects.length),
+                                  {t.plural(
+                                    "settings.voiceCollectsCount",
+                                    agent.collects.length,
                                   )}
                                   <InfoTip
                                     text={agent.collects.map(humanizeField).join("\n")}
@@ -1038,10 +1026,7 @@ export function VoiceCard({
                   >
                     {showArchived
                       ? t("settings.voiceHideArchived")
-                      : t("settings.voiceShowArchived").replace(
-                          "{n}",
-                          String(archived.length),
-                        )}
+                      : t("settings.voiceShowArchived", { n: archived.length })}
                   </button>
                 )}
               </>

@@ -137,7 +137,7 @@ export function BulkComposer({
     if (options.walletEmpty) return t("bulk.walletEmpty");
     if (reachable.length === 0) return t("bulk.noneEligible");
     if (customers.length > options.maxRecipients) {
-      return t("bulk.tooMany").replace("{n}", String(options.maxRecipients));
+      return t("bulk.tooMany", { n: options.maxRecipients });
     }
     if (channel === "email" && !options.emailReady) return t("bulk.emailNotReady");
     if (channel === "whatsapp") {
@@ -151,7 +151,7 @@ export function BulkComposer({
       // — no code change, no deploy.
       if (!options.waTemplateReady) return t("bulk.waTemplatePending");
       if (reachable.length > options.maxWaRecipients) {
-        return t("bulk.waTooMany").replace("{n}", String(options.maxWaRecipients));
+        return t("bulk.waTooMany", { n: options.maxWaRecipients });
       }
     }
     if (channel === "call" && !options.agents.some((agent) => agent.canDial)) {
@@ -179,9 +179,10 @@ export function BulkComposer({
     // and says the verb. The count is in the title because it is the fact
     // somebody is actually confirming.
     const ok = await confirm({
-      title: t(
+      title: t.plural(
         channel === "call" ? "bulk.confirmCall" : "bulk.confirmSend",
-      ).replace("{n}", String(reachable.length)),
+        reachable.length,
+      ),
       confirmLabel: t(`bulk.${channel}`),
       destructive: false,
     });
@@ -220,11 +221,11 @@ export function BulkComposer({
             twenty-nine and the difference should never be a surprise found
             afterwards in the history. */}
         <p className="text-sm">
-          {t("bulk.willReach").replace("{n}", String(reachable.length))}
+          {t.plural("bulk.willReach", reachable.length)}
           {skipped > 0 && (
             <span className="text-[var(--muted)]">
               {" "}
-              {t("bulk.willSkip").replace("{n}", String(skipped))}
+              {t("bulk.willSkip", { n: skipped })}
             </span>
           )}
         </p>
@@ -275,7 +276,7 @@ export function BulkComposer({
                 is the mistake this line exists to catch. */}
             {body.trim() && reachable[0] && (
               <p className="mt-2 rounded-lg bg-[var(--row-hover-bg)] px-3 py-2 text-xs text-[var(--muted-strong)]">
-                {t("bulk.previewFor").replace("{name}", reachable[0].firstName)}{" "}
+                {t("bulk.previewFor", { name: reachable[0].firstName })}{" "}
                 {body.replace(/\[first_name\]/g, reachable[0].firstName)}
               </p>
             )}
@@ -537,11 +538,12 @@ function RunDetail({
         <p className="text-sm font-medium">{run.label}</p>
         <p className="mt-1 text-xs text-[var(--muted)]">
           {t(`bulk.${run.channel}`)} · {formatAge(run.startedAt, language)} ·{" "}
-          {t("bulk.counts")
-            .replace("{done}", String(run.doneCount))
-            .replace("{total}", String(run.totalCount))
-            .replace("{failed}", String(run.failedCount))
-            .replace("{skipped}", String(run.skippedCount))}
+          {t("bulk.counts", {
+            done: run.doneCount,
+            total: run.totalCount,
+            failed: run.failedCount,
+            skipped: run.skippedCount,
+          })}
         </p>
         {/* What was actually written, kept because a run is looked at weeks
             later and "which one was this" is answered by the words, not by
@@ -651,7 +653,7 @@ function ItemOutcome({ item }: { item: RunItem }) {
     return (
       <span className={muted}>
         {item.durationSec > 0
-          ? t("bulk.itemAnswered").replace("{s}", String(item.durationSec))
+          ? t("bulk.itemAnswered", { s: item.durationSec })
           : t("bulk.itemNoAnswer")}
       </span>
     );

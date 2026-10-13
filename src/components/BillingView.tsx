@@ -120,10 +120,7 @@ export function BillingView() {
         <div className="flex items-center gap-2">
           <p className="text-sm text-[var(--muted-strong)]">{t("wallet.balance")}</p>
           <InfoTip
-            text={t("wallet.balanceHint").replace(
-              "{rate}",
-              usd(data.rateMicroUsdPerMinute),
-            )}
+            text={t("wallet.balanceHint", { rate: usd(data.rateMicroUsdPerMinute) })}
           />
         </div>
         <p
@@ -140,11 +137,9 @@ export function BillingView() {
             and this would only repeat it. */}
         {!empty && data.rateMicroUsdPerMinute > 0 && (
           <p className="mt-1 text-sm text-[var(--muted)] tabular-nums">
-            {t("wallet.runway").replace(
-              "{minutes}",
-              String(
-                Math.floor(data.balanceMicroUsd / data.rateMicroUsdPerMinute),
-              ),
+            {t.plural(
+              "wallet.runway",
+              Math.floor(data.balanceMicroUsd / data.rateMicroUsdPerMinute),
             )}
           </p>
         )}
@@ -161,7 +156,7 @@ export function BillingView() {
               >
                 {starting === amount
                   ? t("wallet.starting")
-                  : t("wallet.topUpWith").replace("{amount}", `$${amount}`)}
+                  : t("wallet.topUpWith", { amount: `$${amount}` })}
               </button>
             ))}
           </div>
@@ -298,10 +293,7 @@ function InvoiceBilling({
     <div className="mx-auto max-w-3xl space-y-4 page-stack">
       <Card>
         <p className="text-sm text-[var(--muted-strong)]">
-          {t("voiceBilling.rateLine").replace(
-            "{rate}",
-            usd(meter.rateMicroUsdPerMinute),
-          )}
+          {t("voiceBilling.rateLine", { rate: usd(meter.rateMicroUsdPerMinute) })}
         </p>
         <p className="mt-1 text-sm text-[var(--muted)]">
           {t("wallet.invoiceLine")}
@@ -405,10 +397,7 @@ function MessagingUsage() {
       </div>
       {data.chatRateMicroUsdPerTurn > 0 && (
         <p className="mt-1 text-sm text-[var(--muted)]">
-          {t("aiBilling.rateLine").replace(
-            "{rate}",
-            usdRate(data.chatRateMicroUsdPerTurn),
-          )}
+          {t("aiBilling.rateLine", { rate: usdRate(data.chatRateMicroUsdPerTurn) })}
         </p>
       )}
       {data.months.length > 0 && (

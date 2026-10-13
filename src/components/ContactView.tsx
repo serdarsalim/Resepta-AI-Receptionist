@@ -856,7 +856,7 @@ function CustomerAppointments({
           >
             {showPast
               ? t("appointments.hidePast")
-              : t("appointments.showPast").replace("{n}", String(past.length))}
+              : t("appointments.showPast", { n: past.length })}
           </button>
           {showPast && <div className="mt-1.5 space-y-2">{past.map(card)}</div>}
         </div>
