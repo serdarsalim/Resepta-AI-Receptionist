@@ -1296,22 +1296,43 @@ columns never become writable through variable configuration.
 ## The calendar and booking sheet after 2026-08-19 (the Google pass — read this before the 2026-07-29 entry in `journal/2026-07.md`)
 
 Serdar's brief: make the calendar and its popup read like Google Calendar,
-step by step, over one long session. What holds now:
+step by step, over one long session. Nudge then ported this calendar for its
+Meetings tab, measured it against Google side by side, and P5 of the port
+(2026-10-13) brought that month back. What holds now:
 
-- **Events wear their own hue: lavender.** `--event` (light `#7c5cf0`, dark
-  `#8b6ef5`) plus `--event-soft` / `--event-past` / `--event-past-fg` in
-  globals.css. NOT `--brand` (green means the product) and NOT `--accent`
-  (blue means "do something"). The brand green no longer appears on any
-  event surface.
+- **A booking wears its team member's colour; lavender is the default.**
+  `--event` (light `#7c5cf0`, dark `#8b6ef5`) plus `--event-fg`,
+  `--event-soft` / `--event-past` / `--event-past-fg` in globals.css, NOT
+  `--brand` (green means the product) and NOT `--accent` (blue means "do
+  something"). Each person has a colour from Google's event palette with
+  lavender first (`convex/lib/staffColors.ts`): `staff.color` when chosen,
+  otherwise RESOLVED, the first colour nobody in this business holds, oldest
+  row first, so nobody repaints when someone joins. A chip sets `--event` and
+  `--event-fg` inline (`lib/staffTint.ts`) and `.staff-tint` re-derives the
+  washes on the chip. Unassigned bookings, and the year view's dots, stay
+  lavender. Only an ACTIVE colleague's colour is taken when picking;
+  `staff.setColor` and `staff.remove` freeze every unset colour first, so a
+  change moves only the person it names. Picked from the dot before a name on
+  the Team card or the side panel (`StaffColorPicker`).
 - **Tense outranks status** (`blockStyle` in AppointmentsView). Upcoming =
-  solid lavender with white text, confirmed a shade deeper than scheduled;
+  solid with `--event-fg` text, confirmed a shade deeper than scheduled;
   past = the pale wash — decided by the block's END against the live clock,
   so a booking fades the minute it finishes, not at midnight. `no_show`
   stays red in both tenses. The draw-band is tense-aware the same way, so a
   slot drawn over yesterday is muted before it is saved.
-- **The now-line is red** (`--now-line`), Google's red, and red means ONLY
-  "now" — never danger. Today's circles (week header, month, year) are
-  `--accent` blue.
+- **The now-line is red** (`--now-line`, Google's `#ea4335`), and red means
+  ONLY "now", never danger: a 1.5px line and a 10px dot, with no clock badge
+  in the gutter (it sat on an hour label for twenty minutes of every hour).
+  Today's circles (week header, month, year) are `--accent` blue.
+- **Hour lines are 1px borders in Google's `#dde3ea`** (dark `#2e2e2e`), one
+  per hour, drawn after the closed shading so they show across it. They were
+  a repeating gradient, which smeared over two pixels at browser zoom; the
+  half-hour line is gone as clutter, and drags still snap to 15 minutes.
+- **The day header is a small weekday over a 22px date** in a 40px circle
+  (today filled accent, its weekday accent), sentence case, and the period
+  heading beside the arrows is 22px regular. Chips read who before when:
+  "Ayşe Yılmaz, 10:00" on a short chip, the name over "10:00 – 10:30" on a
+  tall one.
 - **Overlaps always render side by side.** The week view's "3 bookings"
   cluster chip is deleted — Serdar chose Google's behaviour: every
   overlapping booking draws in its own lane, truncates, and stays
@@ -1327,15 +1348,45 @@ step by step, over one long session. What holds now:
   2026-10-13 (P5), so an owner checking an Istanbul salon from Kuala Lumpur
   read "GMT+03" over Malaysian hours. The closed shading is still computed in
   the business's zone and projected onto the viewer's day.
-- **Header order is Google's**: Today as an always-visible outlined pill on
-  the left (`periodHasToday` is deleted — a pill that vanished made the row
-  twitch), arrows + heading next, the view picker as a matching outlined
-  pill on the right. **There is no "new appointment" button — don't
-  reintroduce it.** The grid is the button: click or drag a slot, or a
-  month cell. Serdar flip-flopped on this and landed on remove.
-- **The booking sheet is a 448px Google card**: rounded-3xl, shadow-only
-  edge (hairline border only in dark), X to close, blue pill Save that runs
+- **Header order is Google's**: the side panel's ☰, then Today as an
+  always-visible outlined pill (`periodHasToday` is deleted — a pill that
+  vanished made the row twitch), arrows + heading next, the view picker as a
+  matching outlined pill on the right. **There is no "new appointment" button
+  — don't reintroduce it.** The grid is the button: click or drag a slot, or
+  a month cell. Serdar flip-flopped on this and landed on remove.
+- **The side panel** (`CalendarPanel`, md and up): a small month (today
+  circled, the days on screen banded), the team as a colour-keyed tick list
+  (then anyone deactivated a booking in range names, then Unassigned), and
+  the services. The lists filter every view, the year's dots on the server
+  (`appointments.startsInRange` takes `staffIds` / `serviceIds`). Empty means
+  all; the last ticked row cannot be unticked. ☰ folds the panel away; while
+  it is closed, and on a phone, two toolbar pickers (`FilterPicker`) stand in,
+  so a filter is never out of sight. Panel state per browser, filters per
+  browser per business, both in localStorage.
+- **Day view's columns are the shown TEAM**, in the Team card's order, booked
+  that day or not (an empty column answers "who is free"), each headed by a
+  dot of their colour; Unassigned trails when something that day has nobody;
+  a business with no team is one plain column. A click in a person's column
+  opens the sheet with them picked. The drawn band lives in ONE column (a
+  `columnKey` on the drag and the band): in the column of the person the
+  open sheet has picked, so it follows the Team member select; a move never
+  crosses columns in day view. The grid's width is measured, not estimated.
+- **The booking sheet is a 448px Google card**: the shared `AnchoredSheet`
+  (also the blocked-time sheet's), a 16px radius on `--sheet-bg`, a step
+  darker than the grid so its fields read as white wells, shadow-only edge
+  (hairline border only in dark), X to close, blue pill Save that runs
   `reportValidity` so a missing phone is a browser bubble, not a dead click.
+  An existing booking has Google's bin beside the X, which asks in the sheet
+  ("If the cancellation notice is on, it goes to the customer") with Keep it
+  and a red Cancel appointment where Save was, and a square of its team
+  member's colour before the customer's name. Escape closes the topmost
+  thing: a confirm, or a menu marked `data-nested-menu`, before the sheet.
+- **Save never moves between Appointment and Blocked time.** Each sheet
+  reports its natural height (`onNaturalHeight`), the calendar keeps the
+  larger as a floor while the kind tabs are up, and both are drawn at least
+  that tall, the space opening above the footer. The drawn band follows the
+  booking sheet's date, times and team member (`onSlotChange`), and the kind
+  switch carries them across.
 - **One customer field, no Existing/New toggle.** It searches as you type;
   picking a match links that record and shows NOTHING else (no phone/consent
   readback — the record holds those). No pick means the typed text IS the
@@ -1344,20 +1395,28 @@ step by step, over one long session. What holds now:
   **Consent is always true for counter-created customers** — the checkbox
   was removed on Serdar's call; the contact record is where consent is
   revoked.
-- **Every popup row is two columns**: label (`w-24`) then field, all on one
-  left edge. Row icons were tried the Google way and deleted — with labels
-  present they were decoration, and half the rows had no natural glyph.
+- **Every popup row is two columns** (`SHEET_ROWS`, `SheetRow`): a label
+  column as wide as the longest label with a 5rem floor, which covers every
+  label of both sheets in all three languages ("Team member" is 4.97rem), so
+  the two sheets start their values at one x. Row icons were tried the
+  Google way and deleted — with labels present they were decoration.
 - **When is prose until clicked** ("Perşembe, 20 Ağustos  10:00 – 11:30"),
-  then swaps to `WhenPicker` (its own file): a date chip opening a mini
-  month popover, and start–end time chips that accept typed "930" / "9:30" /
-  "9" or a pick from 15-minute lists (end options carry their duration).
-  Duration is what WhenPicker REPORTS — the machinery still speaks minutes —
-  but the owner only ever handles times. Moving the start keeps the length;
-  an end at or before the start is refused, not reinterpreted (no
-  cross-midnight bookings). The native datetime-local input is gone; it
-  typed the year to 0025 with no way back.
-- The sheet-height dependency rule below still applies: `timeEditing` and
-  `picked` are in the placement effect's list now. Add anything new that
+  then swaps, on one line, to a `DateField` (a small Monday-first month whose
+  heading drills to months and years) and start and end `TimeSelect`s, which
+  take typed "930" / "9:30" / "1:15pm" or a pick from 15-minute lists (end
+  options carry their length, "1 hr 15 min"). The machinery still speaks
+  minutes, but the owner only ever handles times. Moving the start keeps the
+  length; an end at or before the start is refused, not reinterpreted (no
+  cross-midnight bookings).
+- **Blocked time is four rows** (`BlockSheet`): Reason, Repeats (the
+  segmented control: Once, Every week, Every day), Dates (a `DateRangeField`,
+  From handing on to To, the last day starting equal to the first) or Days
+  (seven toggles on one line), and Time (two `TimeSelect`s, All day beside
+  them). Every repeat keeps one row, so the sheet's height never changes
+  inside it.
+- The sheet-height dependency rule below still applies, as AnchoredSheet's
+  `measureKey`: `timeEditing`, `picked`, the line count, the error and the
+  cancel question are in the booking sheet's key. Add anything new that
   changes height.
 
 ## One person, several businesses (2026-08-24)

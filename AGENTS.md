@@ -109,15 +109,17 @@ style issue.
 
   Manual entry in the app stays for walk-ins; `appointments.source`
   distinguishes them and `externalUid` is cal.com's booking uid.
-- **Blocked time is deliberately not modelled.** `appointments.customerId` is
-  required, so there is no way to put a lunch break, a training day or a
-  closure on the calendar without inventing a fake customer. This was weighed
-  (optional `customerId` across ~41 dereference sites vs a separate `blocks`
-  table) and PARKED, on the reasoning that breaks are *availability* rather
-  than appointments and belong to cal.com once it is wired. Note
-  `enrichedAppointment.customer` is already `v.union(object, v.null())`, so the
-  read path would tolerate it. Do not build a parallel blocked-time system
-  without revisiting that call with Serdar.
+- **Blocked time is the business's `closures`, never a fake appointment**
+  (2026-08-31; this line said "not modelled" until P5 found it stale). A lunch
+  break, a holiday or a morning off is a closure row (weekdays, or a date with
+  an optional last day; a window or all day), drawn on the calendar where an
+  appointment would be (the Blocked time half of the sheet a drawn slot opens,
+  `BlockSheet`) and refused by the booking page and both agents. The owner's
+  own grid shades it and never refuses a drop on it. It is BUSINESS-wide: a
+  block drawn in one person's day-view column still shuts the whole business.
+  Per-person blocks (Nudge's `hostBlocks`) are an open call for Serdar; do not
+  add a staff field to closures without it. `appointments.customerId` stays
+  required: a block is availability, not an appointment.
 - **The Cloud lane's token is PLATFORM-level with a per-org override**
   (2026-08-20, the Meta Tech Provider shape). `waAccounts.accessToken` is
   optional; `resolveWaAccount` (`lib/platformConfig.ts`) hands every loader
@@ -998,7 +1000,20 @@ rule drew its channels emerald while the collapsed row drew them amber.
   them must hold ONE line inside a 24rem value column (the `ROW_GRID` note
   names this row as the reason that column is 24rem), and a 12px glyph plus
   its gap on every chip wraps the week onto two rows. Seven weekday names in
-  order is not a control anyone mistakes for a row of tags.
+  order is not a control anyone mistakes for a row of tags. The blocked-time
+  sheet's weekly days are the same kind of row (P5): emerald when on, an
+  empty well when off, one line.
+- **A team member's colour means WHO, and nothing else** (P5,
+  2026-10-13). Google's event palette with lavender first
+  (`lib/staffColors.ts`): a booking wears its person's colour, an unassigned
+  one the lavender every booking had, and the same colour is the dot before
+  the name on the Team card, the calendar's side panel and a day-view column.
+  It never marks a state. Tense and status still decide the shade (solid,
+  the scheduled mix, the pale past wash), and a no-show stays red whoever's
+  it is. Tomato is left out of the palette: red here is a no-show or "now".
+  A colour is unique among the ACTIVE team; `staff.setColor` and
+  `staff.remove` freeze every unset colour first, so a change moves only the
+  person it names. Never key a colour on a service.
 
 ## An inbox row says what was said (2026-08-21)
 

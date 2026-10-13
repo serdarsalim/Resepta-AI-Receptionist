@@ -183,6 +183,28 @@ upcoming booking is the solid with white text, a finished one the pale wash,
 decided by its end against the live clock. The now-line is `--now-line` red,
 Google's red, and red there means only "now"; today's circles are `--accent`.
 
+**Amended 2026-10-13 (P5): a booking wears its team member's colour, and
+lavender is the default.** Each person has a colour from Google Calendar's
+event palette with lavender first (`convex/lib/staffColors.ts`), so a
+business with one person, or nobody's colour chosen, looks exactly as above;
+an unassigned booking is always lavender. The palette leaves out Google's
+Tomato, because red stays "now" (and a no-show). A person's colour means who
+and nothing else: the shade is still decided by tense and status on top of
+it, `.staff-tint` re-deriving the washes from the chip's own `--event`.
+
+### The calendar quotes Google, measured (2026-10-13)
+
+Taken back from Nudge's Meetings tab, where Serdar compared the two side by
+side. Every rule is a 1px border in Google's `#dde3ea` (a gradient line
+smears at browser zoom), hours only, drawn over the closed shading; dark
+uses `#2e2e2e`, because the old mix was the closed shading's own colour and
+every line vanished across closed time. The day header is a small weekday
+over a 22px date, the period heading 22px regular, the now-line 1.5px with a
+10px dot and no clock. Not quoted: Google's capital letters on the weekday,
+because no uppercase anywhere outranks the reference. The popover is a 16px
+radius on `--sheet-bg` (`#eef2f7` / `#202124`), a step darker than the grid,
+so its fields read as white wells.
+
 ## What we deliberately did not take from the reference
 
 - **Its exact palette.** Meta's blue-grey system on a gradient page. Lifting

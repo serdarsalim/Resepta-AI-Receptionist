@@ -190,12 +190,13 @@ const CATEGORIES: Category[] = [
         title: "Create and manage appointments",
         summary: "Add walk-ins or phone bookings and work from day, week, month, year, or list views.",
         steps: [
-          "Open Calendar and choose the view that matches the work you are doing.",
-          "Select an empty time or use the new-appointment action to add a booking manually.",
-          "Choose the customer, service, team member, date, and duration.",
+          "Open Calendar and choose the view that matches the work you are doing. The panel on the left jumps to any date and shows or hides each team member and service. The menu button above it folds the panel away.",
+          "Select an empty time to add a booking. In Day view each team member has a column, and a time selected in someone's column books them.",
+          "Choose the customer, service, team member, date, and start and end times.",
+          "Each team member's bookings wear their own color. To change it, open Business and select the dot before their name on the Team card.",
           "Move, resize, complete, cancel, or mark the appointment as a no-show as the day changes.",
         ],
-        keywords: ["appointment", "calendar", "walk in", "reschedule", "cancel", "no show"],
+        keywords: ["appointment", "calendar", "walk in", "reschedule", "cancel", "no show", "colour", "color", "filter", "team"],
       },
       {
         id: "booking-page",
