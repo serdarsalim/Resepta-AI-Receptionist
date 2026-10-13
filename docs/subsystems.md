@@ -2151,7 +2151,10 @@ control for a feature they do not have.
 `SegmentedControl` was extracted from BusinessView's field-source picker so
 the settings row and the thread strip cannot drift into looking like different
 decisions. A segmented control rather than a switch whenever **off is a state
-rather than the absence of the control**.
+rather than the absence of the control**. Since 2026-10-13 it is the only
+segmented control in the app (eight hand-made copies were folded into it), on
+its own `--segment-*` tokens so it shows in dark mode; the thread strip wears
+its xs size.
 
 The thread strip is ONE control. The bar it replaces was a status sentence
 *plus* a Take over button — two controls changing one state from opposite

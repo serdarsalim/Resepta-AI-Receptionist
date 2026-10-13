@@ -59,8 +59,9 @@ picker selection) and description. A published key never follows a label edit; r
 orphans every answer collected under the old name.
 
 **Unsaved edits survive leaving, closing the tab and reloading**, kept per agent
-in this browser's localStorage. An amber pill says they are not live. Discard
-is the only thing that throws them away.
+in this browser's localStorage. The page's save bar (`EditorSaveBar`) says
+they are not live with an amber dot and "Unsaved". Discard is the only thing
+that throws them away.
 
 ## The call record
 
