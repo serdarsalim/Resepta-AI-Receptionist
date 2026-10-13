@@ -273,6 +273,15 @@ export default defineSchema({
     // cannot sell a good at all.
     pickupEnabled: v.optional(v.boolean()),
     deliveryEnabled: v.optional(v.boolean()),
+    // How soon after the moment of booking an appointment may start, in whole
+    // hours (lib/minNotice). Every customer-facing door obeys it: the booking
+    // page, the manage page, the phone agent and the WhatsApp assistant. The
+    // team's own calendar does not; its verdict only says so. Unset = 1, the
+    // floor the booking page had fixed in code until 2026-10-13; 0 = none.
+    minNoticeHours: v.optional(v.number()),
+    // How the notice is SHOWN on the Business card: "2 hours" or "1 day".
+    // minNoticeHours stays the rule (a day is 24 clock hours); unset = hours.
+    minNoticeUnit: v.optional(v.union(v.literal("hours"), v.literal("days"))),
     // The local part of this org's address on the shared inbound domain
     // (RESEND_INBOUND_DOMAIN): "guzellik" becomes guzellik@mail.example.com.
     // Routing an inbound email to an ORG happens on this, not on the domain,

@@ -30,6 +30,7 @@ import { InlineEditValue } from "./RecordField";
 import { TagPillsEditor } from "./TagPillsEditor";
 import { keyFromLabel, normaliseKey } from "../../convex/lib/keys";
 import { slugifyInboundAddress } from "../../convex/lib/inboundAddress";
+import { MAX_MIN_NOTICE_HOURS, type NoticeUnit } from "../../convex/lib/minNotice";
 
 // Business: how this business is SHAPED. Its identity, who works here, what it
 // sells, and what a customer record holds. Settings next door is the other
@@ -89,6 +90,7 @@ const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
   { card: "general", key: "settings.language" },
   { card: "general", key: "settings.industry" },
   { card: "general", key: "settings.bookingPage" },
+  { card: "general", key: "settings.minNotice" },
   { card: "general", key: "settings.currency" },
   { card: "general", key: "settings.priceDecimals" },
   { card: "general", key: "settings.revenueEnabled" },
@@ -341,6 +343,81 @@ function BookingRow() {
           )}
         </div>
     </>
+  );
+}
+
+// The minimum notice as a number and its unit, Nudge's pair (d76a2ad8). The
+// rule is stored in hours; the unit is only how it reads. A day is 24 clock
+// hours, and switching the unit keeps the number on screen ("2 hours" becomes
+// "2 days"), which is what someone reaching for the other unit means. The
+// value in force shows in the box even when nothing was ever saved: an unset
+// business runs on one hour, and an empty field would say it runs on none.
+function MinNoticeRow({
+  hours,
+  unit,
+  onSave,
+}: {
+  hours: number;
+  unit: NoticeUnit;
+  onSave: (patch: { minNoticeHours: number; minNoticeUnit?: NoticeUnit }) => void;
+}) {
+  const { t } = useLanguage();
+  const shown = unit === "days" ? Math.round(hours / 24) : hours;
+  const max = unit === "days" ? MAX_MIN_NOTICE_HOURS / 24 : MAX_MIN_NOTICE_HOURS;
+  return (
+    <span className="flex items-center gap-2">
+      <input
+        // Remounted when the stored value moves, so a clamp on the server
+        // (or the other unit) shows what was actually kept.
+        key={`notice-${hours}-${unit}`}
+        type="number"
+        min={0}
+        max={max}
+        step={1}
+        inputMode="numeric"
+        aria-label={t("settings.minNotice")}
+        className={`${FIELD} w-20`}
+        defaultValue={shown}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+        onBlur={(e) => {
+          const raw = e.target.value.trim();
+          const typed = Math.round(Number(raw));
+          // An emptied box, or nonsense, is a slip, not "no notice": put the
+          // number back. Zero has to be typed.
+          if (raw === "" || !Number.isFinite(typed)) {
+            e.target.value = String(shown);
+            return;
+          }
+          const next = Math.max(0, Math.min(max, typed));
+          if (next === shown) {
+            e.target.value = String(shown);
+            return;
+          }
+          onSave({ minNoticeHours: unit === "days" ? next * 24 : next });
+        }}
+      />
+      <select
+        aria-label={t("settings.minNoticeUnit")}
+        className={`${FIELD} w-auto`}
+        value={unit}
+        onChange={(e) => {
+          const next: NoticeUnit = e.target.value === "days" ? "days" : "hours";
+          if (next === unit) return;
+          onSave({
+            minNoticeUnit: next,
+            minNoticeHours: Math.min(
+              MAX_MIN_NOTICE_HOURS,
+              next === "days" ? shown * 24 : shown,
+            ),
+          });
+        }}
+      >
+        <option value="hours">{t.plural("settings.noticeHours", shown)}</option>
+        <option value="days">{t.plural("settings.noticeDays", shown)}</option>
+      </select>
+    </span>
   );
 }
 
@@ -756,6 +833,16 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
             hint={t("settings.bookingPageHint")}
           />
           <BookingRow />
+          {/* The minimum notice (lib/minNotice), under the booking page
+              because that is the door most customers meet it at. Shown with
+              the page off too: the phone agent and the WhatsApp assistant obey
+              it as well. */}
+          <RowLabel label={t("settings.minNotice")} hint={t("settings.minNoticeHint")} />
+          <MinNoticeRow
+            hours={settings.org.minNoticeHours}
+            unit={settings.org.minNoticeUnit}
+            onSave={(patch) => void update(patch)}
+          />
           {/* Under the booking page, because that is the surface these two
               narrow — and only for a business that sells products, since
               pickup and delivery are questions about handing an object over.

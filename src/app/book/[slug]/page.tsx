@@ -178,7 +178,10 @@ export default function BookingPage({
   // colour needing a day's notice needs it whatever else rides along. Anything
   // else and the day strip would offer days the write refuses.
   const leadMinutes = picked.reduce((max, row) => Math.max(max, row.leadMinutes ?? 0), 0);
-  const minMs = Date.now() + leadMinutes * 60_000;
+  // The business's own minimum notice floors it the same way freeStarts does
+  // on the server: a two-day notice must not open the strip on today.
+  const minMs =
+    Date.now() + Math.max(leadMinutes, (page?.minNoticeHours ?? 0) * 60) * 60_000;
   const minDate = page ? dayIn(page.timezone, minMs) : "";
   // A date picked for a previous selection may sit before this one's lead
   // floor; string-compare works because both are ISO.

@@ -856,6 +856,13 @@ The invariants, and where they live:
   self-serve reschedule) — the owner's own calendar may always take a rush
   job. The voiceBook refusal is a sentence naming the remedy; the booking
   page gets reason `"lead-time"`, not a lying `"slot-taken"`.
+- **The business's minimum notice is the same control for everything**
+  (`orgs.minNoticeHours`, `lib/minNotice`, 2026-10-13): how soon after the
+  moment of booking a visit may start, set in hours or days beside the booking
+  page switch on Business's General card. Unset is one hour, the booking
+  page's old fixed floor; 0 is none. It binds the same customer-facing paths
+  as lead time, both assistants included, and a good takes the larger of the
+  two. The owner's calendar is not bound by it; its verdict only says so.
 - **On the grid a goods order is a dashed 20px pin**: moves, never resizes
   (`dragResult` preserves a moved zero-length row). The lane packer lends
   pins 15 visual minutes (`laneMinutes`) so simultaneous orders sit side by

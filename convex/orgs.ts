@@ -15,6 +15,7 @@ import {
   slugMatchesName,
 } from "./lib/publicSlug";
 import { resolvePublicPhone } from "./lib/publicPhone";
+import { clampNoticeHours, minNoticeHoursOf, noticeUnitOf } from "./lib/minNotice";
 import { isWordingLocked } from "./lib/templateTexts";
 
 export const DEFAULT_REMINDER_OFFSETS = [24, 2];
@@ -68,6 +69,11 @@ export const current = query({
       // them through `?? true` so an unanswered org shows two live switches.
       pickupEnabled: v.optional(v.boolean()),
       deliveryEnabled: v.optional(v.boolean()),
+      // The minimum notice IN FORCE (lib/minNotice), so the Business card
+      // shows the one hour an unset org runs on rather than an empty box, and
+      // the unit it is shown in.
+      minNoticeHours: v.number(),
+      minNoticeUnit: v.union(v.literal("hours"), v.literal("days")),
       // Shows the Balance tab (prepaid only) — the wallet itself is
       // wallet.overview's answer, this is just "does the destination exist".
       billingMode: v.optional(
@@ -244,6 +250,8 @@ export const current = query({
         priceDecimals: org.priceDecimals,
         pickupEnabled: org.pickupEnabled,
         deliveryEnabled: org.deliveryEnabled,
+        minNoticeHours: minNoticeHoursOf(org),
+        minNoticeUnit: noticeUnitOf(org),
         billingMode: org.billingMode,
         demoMode: org.demoMode,
         logoUrl: org.logoStorageId
@@ -362,6 +370,11 @@ export const update = mutation({
     priceDecimals: v.optional(v.boolean()),
     pickupEnabled: v.optional(v.boolean()),
     deliveryEnabled: v.optional(v.boolean()),
+    // Whole hours, clamped to 0..MAX_MIN_NOTICE_HOURS (lib/minNotice). The
+    // unit is how the Business card shows it; a client switching units sends
+    // both, already converted.
+    minNoticeHours: v.optional(v.number()),
+    minNoticeUnit: v.optional(v.union(v.literal("hours"), v.literal("days"))),
     // The owner's half of the chat agent. chatAgentMode is deliberately NOT
     // here: that one is the entitlement gate and stays operator-only, so a
     // business can decide how its agent behaves but not whether it has one.
@@ -431,6 +444,10 @@ export const update = mutation({
       if (args.pickupEnabled !== undefined) patch.pickupEnabled = args.pickupEnabled;
       if (args.deliveryEnabled !== undefined) patch.deliveryEnabled = args.deliveryEnabled;
     }
+    if (args.minNoticeHours !== undefined) {
+      patch.minNoticeHours = clampNoticeHours(args.minNoticeHours);
+    }
+    if (args.minNoticeUnit !== undefined) patch.minNoticeUnit = args.minNoticeUnit;
     // Refused rather than silently stored when the operator has not brought
     // this org's agent live: the control is not on screen in that state, so a
     // call carrying it is a stale client, and a stored preference for a

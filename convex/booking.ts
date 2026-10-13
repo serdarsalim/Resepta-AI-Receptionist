@@ -22,6 +22,7 @@ import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { assignPublicSlug, slugMatchesName } from "./lib/publicSlug";
 import { MAX_LINES_PER_BOOKING, MAX_UPCOMING_PER_PHONE } from "./lib/bookingLimits";
 import { CHANGES_PER_DAY, changesToday, withChange } from "./lib/agentChange";
+import { NOTICE_SLACK_MS, minNoticeHoursOf, minNoticeMs } from "./lib/minNotice";
 import { confirmByOf, lifecycleChannels } from "./lib/lifecycleSend";
 import {
   scheduleConfirmationIfConfigured,
@@ -52,10 +53,10 @@ import { DEFAULT_CURRENCY } from "./lib/money";
 
 // Half-hour grid, the granularity every salon's paper book already uses.
 const SLOT_STEP_MINUTES = 30;
-// A stranger booking themselves gets no closer than an hour out: someone has
-// to be able to see it coming. The voice lane has a human (the agent) in the
-// loop and books tighter; this page does not.
-const MIN_NOTICE_MS = 60 * 60_000;
+// A stranger booking themselves gets no closer than the business's minimum
+// notice (orgs.minNoticeHours, lib/minNotice): someone has to be able to see
+// it coming. It was a fixed hour here until 2026-10-13; that hour is now the
+// default, and the assistants obey the same setting.
 // Same far-future guard as the voice lane.
 const MAX_AHEAD_MS = 400 * 24 * 60 * 60_000;
 // One phone number holds at most MAX_UPCOMING_PER_PHONE open bookings
@@ -316,6 +317,10 @@ export const page = query({
       // pick between one option. Resolved server-side (unset means on) so the
       // page reads two plain booleans.
       fulfillment: v.object({ pickup: v.boolean(), delivery: v.boolean() }),
+      // The business's minimum notice in force, hours (lib/minNotice). The
+      // day strip starts on the first day it allows, rather than offering
+      // days the slot grid then answers with nothing.
+      minNoticeHours: v.number(),
     }),
     v.null(),
   ),
@@ -358,6 +363,7 @@ export const page = query({
         pickup: org.pickupEnabled ?? true,
         delivery: org.deliveryEnabled ?? true,
       },
+      minNoticeHours: minNoticeHoursOf(org),
     };
   },
 });
@@ -378,8 +384,8 @@ export async function freeStarts(
   opts?: {
     ignoreId?: Id<"appointments">;
     customerId?: Id<"customers">;
-    // Goods lead time, ms. Folded into the notice floor so a cake that needs
-    // a day's warning never shows tomorrow-morning times.
+    // Goods lead time, ms. Folded into the business's notice floor so a cake
+    // that needs a day's warning never shows tomorrow-morning times.
     leadMs?: number;
   },
 ): Promise<number[]> {
@@ -419,6 +425,9 @@ export async function freeStarts(
     // loop below runs it against every grid line.
     const closures = await loadClosures(ctx, org._id);
     const civilParts = { y: civil.y, m0: civil.m0, d: civil.d, weekday };
+    // The business's minimum notice, or a good's lead time when that is
+    // longer: a cake that needs a day's warning never shows tomorrow morning.
+    const floorMs = now + Math.max(minNoticeMs(org), opts?.leadMs ?? 0);
 
     const starts: number[] = [];
     // First grid line at or after opening — 09:15 opening offers 09:30, not
@@ -450,7 +459,7 @@ export async function freeStarts(
       } catch {
         continue;
       }
-      if (startMs < now + Math.max(MIN_NOTICE_MS, opts?.leadMs ?? 0)) continue;
+      if (startMs < floorMs) continue;
       // Checked on the SPAN, so a 60-minute service at 12:30 is withheld from
       // a 13:00 lunch break rather than offered and then refused by the write
       // guard — the grid and fitsOpenHours must agree, or the page offers a
@@ -652,15 +661,17 @@ export const book = mutation({
     const startMs = asap ? now : args.startMs;
     if (startMs === undefined) return { ok: false, reason: "not-found" };
     if (!asap) {
-      const noticeMs = Math.max(MIN_NOTICE_MS, picked.leadMs);
-      if (startMs < now + noticeMs - 60_000) {
+      const orgNoticeMs = minNoticeMs(org);
+      const noticeMs = Math.max(orgNoticeMs, picked.leadMs);
+      if (startMs < now + noticeMs - NOTICE_SLACK_MS) {
         // The minute of slack forgives a slot picked just before the boundary
         // crossed it — refusing a booking the page offered seconds ago reads
         // as the product breaking. lead-time is its own reason so the page can
         // say "order a day ahead" instead of pretending the slot filled up.
         return {
           ok: false,
-          reason: startMs < now + MIN_NOTICE_MS - 60_000 ? "slot-taken" : "lead-time",
+          reason:
+            startMs < now + orgNoticeMs - NOTICE_SLACK_MS ? "slot-taken" : "lead-time",
         };
       }
       if (startMs > now + MAX_AHEAD_MS) return { ok: false, reason: "not-found" };
@@ -913,11 +924,15 @@ export const reschedule = mutation({
       appointment.durationMinutes ??
       appointment.items?.reduce((sum, item) => sum + item.durationMinutes, 0) ??
       30;
-    const noticeMs = Math.max(MIN_NOTICE_MS, await goodsLeadMs(ctx, appointment));
-    if (args.startMs < now + noticeMs - 60_000) {
+    // The business's minimum notice binds a customer's own move exactly as
+    // it binds their booking (lib/minNotice).
+    const orgNoticeMs = minNoticeMs(org);
+    const noticeMs = Math.max(orgNoticeMs, await goodsLeadMs(ctx, appointment));
+    if (args.startMs < now + noticeMs - NOTICE_SLACK_MS) {
       return {
         ok: false,
-        reason: args.startMs < now + MIN_NOTICE_MS - 60_000 ? "slot-taken" : "lead-time",
+        reason:
+          args.startMs < now + orgNoticeMs - NOTICE_SLACK_MS ? "slot-taken" : "lead-time",
       };
     }
     if (args.startMs > now + MAX_AHEAD_MS) return { ok: false, reason: "not-found" };

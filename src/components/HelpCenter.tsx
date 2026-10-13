@@ -211,7 +211,7 @@ const CATEGORIES: Category[] = [
           "Set your opening hours first. Without them the page tells customers to call you instead of showing times it cannot honestly offer.",
           "Customers can leave a note when they book. It lands on their customer record, so you read it in the same place as everything else about them.",
         ],
-        note: "The page shows the times that are genuinely free, using your opening hours and how many people are on the roster. Bookings need at least an hour's notice.",
+        note: "The page shows the times that are genuinely free, using your opening hours and how many people are on the roster. Bookings need at least your minimum notice, set under Business: an hour unless you change it.",
         keywords: [
           "booking page",
           "online booking",

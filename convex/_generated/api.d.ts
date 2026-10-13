@@ -70,6 +70,7 @@ import type * as lib_mediaKind from "../lib/mediaKind.js";
 import type * as lib_members from "../lib/members.js";
 import type * as lib_metaSig from "../lib/metaSig.js";
 import type * as lib_metaTemplate from "../lib/metaTemplate.js";
+import type * as lib_minNotice from "../lib/minNotice.js";
 import type * as lib_money from "../lib/money.js";
 import type * as lib_newCustomer from "../lib/newCustomer.js";
 import type * as lib_nonAnswer from "../lib/nonAnswer.js";
@@ -205,6 +206,7 @@ declare const fullApi: ApiFromModules<{
   "lib/members": typeof lib_members;
   "lib/metaSig": typeof lib_metaSig;
   "lib/metaTemplate": typeof lib_metaTemplate;
+  "lib/minNotice": typeof lib_minNotice;
   "lib/money": typeof lib_money;
   "lib/newCustomer": typeof lib_newCustomer;
   "lib/nonAnswer": typeof lib_nonAnswer;

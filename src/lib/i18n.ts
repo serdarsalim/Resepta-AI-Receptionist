@@ -4320,6 +4320,24 @@ const dictionary = {
     en: "The public page where customers pick a service and a time; the appointment lands straight on your calendar. Your opening hours have to be set. The booking link in your messages points at this page — switched off, no link is sent.",
     de: "Die öffentliche Seite, auf der Ihre Kundschaft Leistung und Uhrzeit wählt; der Termin landet direkt in Ihrem Kalender. Dafür müssen Ihre Öffnungszeiten hinterlegt sein. Der Buchungslink in Ihren Nachrichten zeigt auf diese Seite — ist sie aus, wird kein Link gesendet.",
   },
+  // The business's minimum notice (lib/minNotice), a number and its unit on
+  // the General card. The unit words are plural pairs read with the number
+  // in the box, so it says "1 hour" and "2 hours".
+  "settings.minNotice": {
+    tr: "En az önceden haber süresi",
+    en: "Minimum notice",
+    de: "Mindestvorlauf",
+  },
+  "settings.minNoticeHint": {
+    tr: "Online randevu sayfası, telefon asistanı ve WhatsApp asistanı bundan daha yakın bir saate randevu vermez, var olan bir randevuyu da oraya taşımaz. Ekibiniz takvimden yine her saate randevu ekleyebilir. 0 girerseniz sınır kalmaz.",
+    en: "The booking page, the phone agent and the WhatsApp assistant never book or move an appointment to a time sooner than this. Your team can still book any time from the calendar. Enter 0 for no minimum.",
+    de: "Buchungsseite, Telefonassistent und WhatsApp-Assistent buchen oder verschieben nie auf eine Zeit, die näher liegt. Ihr Team kann im Kalender weiterhin jede Zeit buchen. Mit 0 gibt es keine Untergrenze.",
+  },
+  "settings.minNoticeUnit": { tr: "Birim", en: "Unit", de: "Einheit" },
+  "settings.noticeHours.one": { tr: "saat", en: "hour", de: "Stunde" },
+  "settings.noticeHours.other": { tr: "saat", en: "hours", de: "Stunden" },
+  "settings.noticeDays.one": { tr: "gün", en: "day", de: "Tag" },
+  "settings.noticeDays.other": { tr: "gün", en: "days", de: "Tage" },
   "settings.calcomApiKey": {
     tr: "cal.com API anahtarı",
     en: "cal.com API key",
