@@ -197,16 +197,15 @@ Serdar's brief, built overnight: a world-class first-run. What holds now:
     was written for steps that hold similar amounts, and one input vs eight
     industry options is not that, so a fixed card left the name step crammed
     at the top of a void.
-- **Sign-in is a DIALOG over the landing** (`SignInDialog.tsx`, same day):
-  every Get-started/Sign-in CTA opens it in place instead of shipping the
-  reader to a bare page. The /signin ROUTE stays alive as the fallback
-  (middle-click, shared links, auth redirects) rendering the same
-  `SignInCard`; the privacy/terms links live INSIDE the card because
-  Google's consent-screen review wants them wherever the OAuth flow starts,
-  and it starts in the dialog now. The Google button wears Google's own G on
-  a bordered button, not an anonymous accent block. The product mark is
-  shared from `BrandMark.tsx` (landing header, dialog, /signin, wizard
-  chrome — one glyph, four surfaces). `app.tagline` says "AI front desk",
+- **Sign-in is the /signin page** (`SignInCard.tsx`). It was also a dialog
+  over the landing from this day until the landing left for the marketing
+  repo (2026-08-24); the dialog and the leftover landing component were
+  deleted on 2026-10-13, so the card on /signin is the one place the OAuth
+  flow starts. The privacy/terms links live INSIDE the card because Google's
+  consent-screen review wants them wherever that flow starts. The Google
+  button wears Google's own G on a bordered button, not an anonymous accent
+  block. The product mark is shared from `BrandMark.tsx` (/signin and the
+  wizard chrome). `app.tagline` says "AI front desk",
   matching lib/brand's DEFAULT_TITLE; it read "WhatsApp appointment
   reminders" long after the product outgrew it.
 - **Industry presets are ORG DATA, seeded once** (`lib/industryPresets.ts`, a
@@ -1584,9 +1583,12 @@ here:
   were done. A demo visitor goes back to the demo instead. `.then`, never
   `.finally`: a sign-out that failed has left the session standing, and
   navigating away from it lies to whoever is walking away from a shared laptop.
-- **`src/components/Landing.tsx` is now unreferenced.** Left in place
-  deliberately until the marketing repo has taken what it wants from it.
-  `src/lib/landing.ts` is still live — SignInDialog reads its copy.
+- **The landing's leftovers are gone (2026-10-13).** `src/components/Landing.tsx`
+  had no importer since this split, and `src/lib/landing.ts` was read only by
+  it and by the sign-in dialog it opened. Both were deleted with the dialog;
+  they still advertised Google Calendar sync and $49/$99/$199 plans the
+  product does not have. Git history keeps both if the marketing repo still
+  wants anything from them.
 - **`src/app/sitemap.ts` and `robots.ts` still advertise the apex origin.** They
   are describing somebody else's site now. Fix them when you next touch that
   area.

@@ -5,12 +5,11 @@ import { useRouter } from "next/navigation";
 import { useConvexAuth } from "convex/react";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { BrandMark } from "@/components/BrandMark";
-import { SignInCard } from "@/components/SignInDialog";
+import { SignInCard } from "@/components/SignInCard";
 
-// Sign-in normally happens in the dialog the landing's CTAs open
-// (SignInDialog.tsx) — this route is the standalone fallback: a middle-click,
-// a shared link, an auth redirect. Same card, wearing the brand instead of a
-// backdrop.
+// Where sign-in happens: src/proxy.ts sends a signed-out visitor here from
+// any app page, and auth redirects land here too. The card itself is
+// SignInCard.tsx, wearing the brand above it.
 //
 // No language picker here. LanguageProvider already resolves the language
 // from localStorage, then navigator.language, so a Turkish browser lands on

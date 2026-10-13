@@ -3,26 +3,22 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useQuery } from "convex/react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { useState } from "react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { LANDING } from "@/lib/landing";
 import { LEGAL_UI } from "@/lib/legal";
-import { BrandMark } from "./BrandMark";
 
-// Sign-in as a POPUP over the landing (Serdar, 2026-08-21), not a bare page
-// you are shipped off to: clicking "Get started" should keep the page you
-// were reading underneath and float the one decision on top. The /signin
-// ROUTE stays alive — middle-click, a shared link and auth redirects still
-// land somewhere real — rendering this same card full-page.
+// The sign-in card: the one decision, rendered by /signin (src/app/signin).
+// It used to float as a dialog over the landing page too (Serdar,
+// 2026-08-21). The landing moved to the marketing site's own repo on
+// 2026-08-24 and its leftover component here was deleted on 2026-10-13 with
+// the dialog only it opened, so /signin is the one place sign-in starts.
 //
 // The Google button wears Google's own G, on a plain bordered button rather
 // than an anonymous blue block: the badge is the thing a visitor recognises,
 // and it is also what Google's consent-screen review expects the entry point
 // to look like. The privacy/terms links live INSIDE the card for the same
-// review: they must be present wherever the OAuth flow starts, and the flow
-// starts in this dialog now.
+// review: they must be present wherever the OAuth flow starts.
 
 function GoogleG() {
   return (
@@ -124,79 +120,5 @@ export function SignInCard() {
         </Link>
       </nav>
     </div>
-  );
-}
-
-export function SignInDialog({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
-  const { language } = useLanguage();
-  const copy = LANDING[language];
-
-  // Escape closes and the page behind stops scrolling — the drawer's rules,
-  // because this is the same kind of floating surface.
-  useEffect(() => {
-    if (!open) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = previous;
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-    >
-      {/* The landing stays visible underneath — that is the point of the
-          popup — so the veil dims rather than replaces it. */}
-      <button
-        type="button"
-        aria-label={copy.signInClose}
-        onClick={onClose}
-        className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
-      />
-      <div className="relative w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl">
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={copy.signInClose}
-          className="absolute right-3 top-3 rounded-lg p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <path
-              d="M4 4l8 8M12 4l-8 8"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
-        <div className="mb-5 flex flex-col items-center text-center">
-          <BrandMark />
-          <h2 className="mt-3 text-lg font-semibold tracking-tight">
-            {copy.signInTitle}
-          </h2>
-          <p className="mt-1 max-w-[30ch] text-sm text-[var(--muted)]">
-            {copy.signInSub}
-          </p>
-        </div>
-        <SignInCard />
-      </div>
-    </div>,
-    document.body,
   );
 }
