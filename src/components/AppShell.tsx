@@ -984,17 +984,34 @@ function UserMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={t("menu.account")}
+        // Always titled, the folded rail included (Nudge 70e62b45): a long
+        // address is cut off with an ellipsis on the row, so the hover is the
+        // one place the whole of it can be read before opening anything.
+        title={name && email ? `${name} · ${email}` : name || email}
+        // A resting SURFACE so the row reads as a control, not a caption
+        // (Nudge 615321e2, Serdar there: "since this is a button we could make
+        // it look like a button"). Nudge tints it with 4% ink; here it is the
+        // workspace switcher's --pane-field, because Serdar read an ink wash
+        // on this pane as a row somebody was already touching (globals.css).
+        // The two controls on the rail that open a menu now share one
+        // material and one up/down chevron. Open holds the hover step. The
+        // folded rail keeps the bare circle: there the row is an avatar.
         className={
           variant === "row" && !collapsed
-            ? "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-black/[0.045] dark:hover:bg-white/[0.05]"
+            ? `flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors ${
+                open
+                  ? "bg-[var(--pane-field-hover)]"
+                  : "bg-[var(--pane-field)] hover:bg-[var(--pane-field-hover)]"
+              }`
             : "group flex h-8 w-8 items-center justify-center rounded-full"
         }
       >
         {variant === "row" && !collapsed ? (
           <>
             <Avatar size="sm" name={name} email={email} />
-            {/* Name over address, both truncating: a sidebar is 15rem wide and
-                an email is however long somebody's employer made it. */}
+            {/* Name over address, both truncating: the rail is 13rem wide and
+                an email is however long somebody's employer made it. The end
+                truncates, so the domain gives way before the name does. */}
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium">
                 {name || email}
@@ -1005,6 +1022,15 @@ function UserMenu({
                 </span>
               )}
             </span>
+            {/* Says "this opens a menu", as the switcher's does at the top of
+                the rail (Linear, Slack and Vercel's account rows do the same).
+                Dropped with the text when the rail folds. */}
+            <ChevronsUpDownIcon
+              width={14}
+              height={14}
+              strokeWidth={1.75}
+              className="shrink-0 text-[var(--muted)]"
+            />
           </>
         ) : (
           <Avatar
@@ -1061,11 +1087,12 @@ function UserMenu({
                 accepts. The radios keep their existing roles.
 
                 Icon over label because the menu is 224px — a column is ~66px,
-                which German ("Automatisch") will not share with a glyph. */}
-            <div className="border-t border-[var(--border)] px-3 pb-2 pt-1.5">
-              <div className="pb-1.5 text-[11px] font-medium text-[var(--muted-strong)]">
-                {t("menu.appearance")}
-              </div>
+                which German ("Automatisch") will not share with a glyph.
+
+                No "Appearance" heading over it (Nudge 85f5060e, Serdar
+                there): Light, Dark and Auto with a sun and a moon say what
+                they are. The word stays as the group's aria-label. */}
+            <div className="border-t border-[var(--border)] px-3 py-2">
               {/* The shared segmented control, stacked because every option
                   carries an icon. It drew its own track with a ring and a
                   --background thumb to survive dark mode, where --muted-bg IS

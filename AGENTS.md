@@ -762,6 +762,12 @@ the conversation taking the rest inside its own 56rem measure. A row in the
 Inbox opens the record, so the two right-hand panes are one pane a click
 apart; change the split there, never in one view.
 
+**The rail's two menu controls look alike**: the business switcher at the top
+and the account row at the foot wear `--pane-field` at rest with the up/down
+chevron, so each reads as a button rather than a caption (Nudge's account row
+took a 4% ink tint for this; ink on this pane read as a pressed row here). The
+account row is always titled name · address.
+
 ## Voice numbers, caller identity, and the variables doctrine (2026-08-18)
 
 A marathon session; the durable rules it produced:

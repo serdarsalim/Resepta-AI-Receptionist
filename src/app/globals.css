@@ -80,12 +80,15 @@
      stay in step. The shell's content pane read it too until it went flush
      (2026-10-13) and stopped being a card at all. */
   --card-shadow: none;
-  /* A control sitting ON the sidebar pane — today just the workspace switcher.
-     It is NOT a --foreground wash: the nav rows hover at 4.5% black and go
-     active at 8% foreground, so a wash in that range on the same pane reads as
-     a row somebody is already touching, which is exactly what Serdar saw
-     ("rn it looks like i am hovering or clicking it"). White is not a hover
-     state anywhere in this app, so it cannot be mistaken for one.
+  /* A control sitting ON the sidebar pane: the workspace switcher at the top
+     of the rail and, since 2026-10-13, the account row at its foot. Nudge
+     gave its account row a 4% ink tint for the same job; this is Resepta's
+     material for it, because it is NOT a --foreground wash: the nav rows
+     hover at 4.5% black and go active at 8% foreground, so a wash in that
+     range on the same pane reads as a row somebody is already touching,
+     which is exactly what Serdar saw on the switcher ("rn it looks like i am
+     hovering or clicking it"). White is not a hover state anywhere in this
+     app, so it cannot be mistaken for one.
 
      At rest it is LIGHTER than the pane and on hover DARKER than it. That flip
      is deliberate: on a surface already at white there is no lighter left to
