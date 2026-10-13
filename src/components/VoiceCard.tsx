@@ -10,6 +10,7 @@ import { localeFor } from "@/lib/datetime";
 import { type SiteUrl } from "@/lib/siteUrl";
 import { InfoTip } from "./InfoTip";
 import { Sheet } from "./Sheet";
+import { SegmentedControl } from "./SegmentedControl";
 import { CheckSwitch } from "./CheckSwitch";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { CheckMark, ITEM_CLASS, PANEL_CLASS } from "./DataTable";
@@ -759,36 +760,20 @@ export function VoiceCard({
           onClose={closeAdd}
         >
           {canCreate && canConnect && !activeProvisioning && (
-            <div
-              role="tablist"
-              className="mb-4 inline-flex rounded-lg bg-[var(--muted-bg)] p-1 text-xs"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={addMode === "create"}
-                onClick={() => setAddMode("create")}
-                className={`rounded-md px-3 py-1.5 font-medium ${
-                  addMode === "create"
-                    ? "bg-[var(--card)] shadow-sm"
-                    : "text-[var(--muted)] hover:text-[var(--foreground)]"
-                }`}
-              >
-                {t("voiceCreate.new")}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={addMode === "connect"}
-                onClick={() => setAddMode("connect")}
-                className={`rounded-md px-3 py-1.5 font-medium ${
-                  addMode === "connect"
-                    ? "bg-[var(--card)] shadow-sm"
-                    : "text-[var(--muted)] hover:text-[var(--foreground)]"
-                }`}
-              >
-                {t("voiceCreate.existing")}
-              </button>
+            // The shared segmented control, as tabs: it swaps the form below.
+            // The card thumb on a muted track it used to draw was the pair
+            // that vanishes in dark, where the two are one colour.
+            <div className="mb-4">
+              <SegmentedControl
+                semantics="tabs"
+                ariaLabel={t("settings.voiceConnect")}
+                value={addMode}
+                onChange={setAddMode}
+                segments={[
+                  { id: "create", label: t("voiceCreate.new") },
+                  { id: "connect", label: t("voiceCreate.existing") },
+                ]}
+              />
             </div>
           )}
 

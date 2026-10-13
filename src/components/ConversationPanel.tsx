@@ -2666,7 +2666,8 @@ function AgentThreadStrip({
         )}
         <span className="min-w-0 flex-1" />
         <SegmentedControl
-          size="sm"
+          size="xs"
+          ariaLabel={t("agent.inThisChat")}
           value={state.effective}
           onChange={onMode}
           segments={[

@@ -600,6 +600,14 @@ like until 2026-08-12.
 like a strip (the message-channel pills in Reminders, feed filters) are NOT
 tabs and keep their own treatment.
 
+**A one-of-N choice drawn as a track is `SegmentedControl`, never a copy**
+(2026-10-13). Eight hand-made ones were folded into it, and every one drew its
+track with `--muted-bg`, which in dark IS `--card`: the track vanished and the
+picked cell was near-black on near-black. It runs on its own token pair
+(`--segment-track` / `--segment-thumb`), keeps every cell font-medium so a
+click never changes a cell's width, and says what it is through `semantics`
+(radio, tabs that swap content, or menuitemradio inside a menu).
+
 ## Every scrolling page ends with room below the last card
 
 Canonical version is in Mana, `50_Knowledge/design-language.md` (2026-08-12),

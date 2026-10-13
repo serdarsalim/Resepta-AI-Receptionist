@@ -18,6 +18,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { Extension } from "@tiptap/core";
 import { EmojiPicker } from "./EmojiPicker";
 import { VariableInsertDropdown } from "./VariableInsertDropdown";
+import { SegmentedControl } from "./SegmentedControl";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 
@@ -317,6 +318,7 @@ export function EmailBodyEditor({
   previewPane?: React.ReactNode;
   previewLabel?: string;
 }) {
+  const { t } = useLanguage();
   const [mode, setMode] = useState<"visual" | "html" | "preview">("visual");
   // Last value we persisted (or received) — guards no-op saves on blur.
   const savedRef = useRef(value);
@@ -435,29 +437,29 @@ export function EmailBodyEditor({
       }`}
     >
       <div className="flex shrink-0 items-center justify-end border-b border-[var(--border)] bg-[var(--muted-bg)]/50 px-2 py-1">
-        <div className="flex overflow-hidden rounded-md border border-[var(--border)] text-xs">
-          {(previewPane
+        {/* The shared segmented control, as tabs: three views of one body.
+            It was a bordered group with the picked view filled accent, the
+            colour this app keeps for "do something", and the one segmented
+            choice that wore it. */}
+        <SegmentedControl
+          size="xs"
+          semantics="tabs"
+          ariaLabel={t("editor.modes")}
+          value={mode}
+          onChange={switchMode}
+          segments={(previewPane
             ? (["visual", "html", "preview"] as const)
             : (["visual", "html"] as const)
-          ).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => switchMode(m)}
-              className={`px-2 py-0.5 ${
-                mode === m
-                  ? "bg-[var(--accent)] text-[var(--accent-fg)]"
-                  : "text-[var(--muted)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              {m === "visual"
-                ? "Visual"
+          ).map((m) => ({
+            id: m,
+            label:
+              m === "visual"
+                ? t("editor.modeVisual")
                 : m === "html"
-                  ? "HTML"
-                  : (previewLabel ?? "Preview")}
-            </button>
-          ))}
-        </div>
+                  ? t("editor.modeHtml")
+                  : (previewLabel ?? t("settings.rulePreview")),
+          }))}
+        />
       </div>
       {mode === "preview" ? (
         <div className="p-3">{previewPane}</div>

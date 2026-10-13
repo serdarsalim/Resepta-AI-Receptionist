@@ -12,6 +12,7 @@ import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { InfoTip } from "./InfoTip";
 import { CheckSwitch } from "./CheckSwitch";
 import { Sheet } from "./Sheet";
+import { SegmentedControl } from "./SegmentedControl";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
 
 // Chromeless text cells and fixed grid tracks, ported from Nudge's variables
@@ -1455,32 +1456,24 @@ function VariableRow({
                 the cost Nudge accepted for the same clarity. */}
             {/* One row, four segments (Serdar's call): the type is a small
                 closed choice and a vertical list gave it a column's worth of
-                gravity. Selected segment wears the card surface. */}
-            <div className="grid grid-cols-4 gap-0.5 rounded-md bg-[var(--muted-bg)] p-0.5">
-              {(
+                gravity. The shared segmented control, equal cells; a label
+                that does not fit its quarter ("Evet veya hayır") truncates
+                and keeps the whole word in its title. */}
+            <SegmentedControl
+              size="xs"
+              fill
+              ariaLabel={t("voiceVariables.type")}
+              value={row.type}
+              onChange={(type) => onChange({ type })}
+              segments={(
                 [
                   ["string", t("voiceVariables.text")],
                   ["number", t("voiceVariables.number")],
                   ["boolean", t("voiceVariables.yesNo")],
                   ["enum", t("voiceVariables.options")],
                 ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="option"
-                  aria-selected={row.type === value}
-                  onClick={() => onChange({ type: value })}
-                  className={`truncate rounded px-1.5 py-1 text-center text-[11px] transition-colors ${
-                    row.type === value
-                      ? "bg-[var(--card)] font-medium shadow-sm"
-                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+              ).map(([id, label]) => ({ id, label, hint: label }))}
+            />
 
             {/* Confirm-first is the one thing the group cannot express: a
                 variant of during-call capture, not a phase of its own. */}

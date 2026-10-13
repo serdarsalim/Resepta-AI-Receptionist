@@ -367,23 +367,18 @@ function LockedPreview({
         // The app's segmented switch (native radios auditioned here for an
         // afternoon; Serdar: "ugly"): a muted track, the picked face riding
         // it as a card — the same control the rule editor's preview toggle
-        // already taught.
-        <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--muted-bg)] p-0.5 text-xs">
-          {shown.map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setPick(option)}
-              className={`rounded-full px-2.5 py-1 transition-colors ${
-                lane === option
-                  ? "bg-[var(--card)] font-medium text-[var(--foreground)] shadow-sm"
-                  : "text-[var(--muted)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              {option === "email" ? t("settings.ruleEmail") : t("channel.whatsapp")}
-            </button>
-          ))}
-        </span>
+        // already taught. The shared one since 2026-10-13.
+        <SegmentedControl
+          size="xs"
+          semantics="tabs"
+          ariaLabel={t("settings.rulePreview")}
+          value={lane}
+          onChange={setPick}
+          segments={shown.map((option) => ({
+            id: option,
+            label: option === "email" ? t("settings.ruleEmail") : t("channel.whatsapp"),
+          }))}
+        />
       )}
       {lane === "email" ? (
         <div className="overflow-hidden rounded-lg border border-[var(--border)]">
@@ -834,24 +829,18 @@ function RuleEditor({
           choose and the row would be a control with one option. */}
       <div className="flex items-center justify-end gap-2 empty:hidden">
         {lanes.length > 1 && (
-          <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--muted-bg)] p-0.5 text-xs">
-            {lanes.map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => setLanePref(option)}
-                className={`rounded-full px-2.5 py-1 transition-colors ${
-                  lane === option
-                    ? "bg-[var(--card)] font-medium text-[var(--foreground)] shadow-sm"
-                    : "text-[var(--muted)] hover:text-[var(--foreground)]"
-                }`}
-              >
-                {option === "email"
-                  ? t("settings.ruleEmail")
-                  : t("channel.whatsapp")}
-              </button>
-            ))}
-          </span>
+          <SegmentedControl
+            size="xs"
+            semantics="tabs"
+            ariaLabel={t("settings.rulePreview")}
+            value={lane}
+            onChange={setLanePref}
+            segments={lanes.map((option) => ({
+              id: option,
+              label:
+                option === "email" ? t("settings.ruleEmail") : t("channel.whatsapp"),
+            }))}
+          />
         )}
       </div>
       {lane === "email" ? (
@@ -2349,6 +2338,7 @@ export function ChatAgentCard({
         />
         <div>
           <SegmentedControl
+            ariaLabel={t("settings.chatAgent")}
             value={behavior}
             disabled={!isOwner}
             onChange={(mode) => update({ chatAgentBehavior: mode })}
@@ -2382,6 +2372,7 @@ export function ChatAgentCard({
               hint={t("settings.chatAgentHandoverHint")}
             />
             <SegmentedControl
+              ariaLabel={t("settings.chatAgentHandover")}
               value={stopOnHandover ? "stop" : "keep"}
               disabled={!isOwner}
               onChange={(next) =>

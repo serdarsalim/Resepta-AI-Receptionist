@@ -17,6 +17,7 @@ import { WorkspaceInviteBanner } from "./WorkspaceInviteBanner";
 import { HeaderSearchProvider, useHeaderSearchSlot } from "@/lib/HeaderSearch";
 import { useHeaderPanesSlot, HeaderPanesProvider } from "@/lib/HeaderPanes";
 import { FeedIcon } from "./FeedIcon";
+import { SegmentedControl } from "./SegmentedControl";
 import { SearchInput } from "./DataTable";
 import { CustomerJump } from "./CustomerJump";
 
@@ -1125,46 +1126,26 @@ function UserMenu({
               <div className="pb-1.5 text-[11px] font-medium text-[var(--muted-strong)]">
                 {t("menu.appearance")}
               </div>
-              {/* Ring on the track because in dark --muted-bg IS --card, so an
-                  unringed track is invisible on this surface. Same reason the
-                  selected segment is --background and not the --card the app's
-                  other segmented controls use: --card would vanish into the
-                  track, on the one control whose job is switching dark mode. */}
-              <div
-                role="group"
-                aria-label={t("menu.appearance")}
-                className="grid grid-cols-3 gap-0.5 rounded-lg bg-[var(--muted-bg)] p-0.5 ring-1 ring-inset ring-[var(--border)]"
-              >
-                {THEME_OPTIONS.map(({ value, key, Icon }) => {
-                  const active = mounted && theme === value;
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={active}
-                      onClick={() => chooseTheme(value)}
-                      className={`flex flex-col items-center gap-1 rounded-md px-0.5 py-1.5 transition-colors ${
-                        active
-                          ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
-                          : "text-[var(--muted)] hover:text-[var(--foreground)]"
-                      }`}
-                    >
-                      <span className="inline-flex h-[18px] w-[18px] items-center justify-center">
-                        <Icon />
-                      </span>
-                      {/* Measured, not guessed: German "Automatisch" wants
-                          57px of the 55px a px-1 column gives it. px-0.5 and
-                          tracking-tight buy it back with ~4px to spare, which
-                          is the margin a font fallback needs. truncate is the
-                          backstop if a future language beats German. */}
-                      <span className="w-full truncate text-center text-[10px] leading-none tracking-tight">
-                        {t(key)}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              {/* The shared segmented control, stacked because every option
+                  carries an icon. It drew its own track with a ring and a
+                  --background thumb to survive dark mode, where --muted-bg IS
+                  --card; the segment tokens do that job for every copy now.
+                  Before mount nothing is picked, so the server render and the
+                  stored theme cannot disagree. */}
+              <SegmentedControl
+                semantics="menu"
+                fill
+                ariaLabel={t("menu.appearance")}
+                value={mounted ? theme : "none"}
+                onChange={(next) => {
+                  if (next !== "none") chooseTheme(next);
+                }}
+                segments={THEME_OPTIONS.map(({ value, key, Icon }) => ({
+                  id: value,
+                  label: t(key),
+                  icon: <Icon />,
+                }))}
+              />
             </div>
             {/* The Fleet entry left this menu on 2026-08-20: the operator
                 already has the Admin item in the sidebar (below Business),

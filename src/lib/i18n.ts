@@ -2195,6 +2195,12 @@ const dictionary = {
     de: "Keine passende Variable.",
   },
   "editor.insertEmoji": { tr: "Emoji ekle", en: "Insert emoji", de: "Emoji einfügen" },
+  // The email editor's three views of one body (EmailBodyEditor). They were
+  // English literals in every language until 2026-10-13; HTML is a word in
+  // all three. The preview tab's label is usually the caller's own.
+  "editor.modeVisual": { tr: "Görsel", en: "Visual", de: "Visuell" },
+  "editor.modeHtml": { tr: "HTML", en: "HTML", de: "HTML" },
+  "editor.modes": { tr: "Düzenleme görünümü", en: "Editor view", de: "Editoransicht" },
   "editor.bold": { tr: "Kalın", en: "Bold", de: "Fett" },
   "editor.italic": { tr: "İtalik", en: "Italic", de: "Kursiv" },
   "editor.underline": { tr: "Altı çizili", en: "Underline", de: "Unterstrichen" },

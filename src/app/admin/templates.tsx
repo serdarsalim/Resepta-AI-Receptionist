@@ -15,6 +15,7 @@ import { categoryFor } from "../../../convex/lib/metaTemplate";
 import { renderTokens } from "../../../convex/lib/renderTokens";
 import { previewSampleValues } from "@/lib/previewSamples";
 import { EmailBodyEditor } from "@/components/EmailBodyEditor";
+import { SegmentedControl } from "@/components/SegmentedControl";
 import { sanitizeEmailHtml } from "@/lib/sanitizeHtml";
 import { plainToHtml, htmlToText } from "@/lib/emailText";
 import { Section, ago } from "./parts";
@@ -236,27 +237,24 @@ function WordingSection() {
                       unsaved edits wears a dot, so switching away never
                       reads as losing them. */}
                   {isOpen && (
-                  <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-[var(--muted-bg)] p-0.5 text-xs">
-                    {(["whatsapp", "email"] as const).map((option) => (
-                      <button
-                        key={option}
-                        type="button"
-                        onClick={() =>
-                          setLanePick((prev) => ({ ...prev, [key]: option }))
-                        }
-                        className={`rounded-full px-2.5 py-1 transition-colors ${
-                          lane === option
-                            ? "bg-[var(--card)] font-medium text-[var(--foreground)] shadow-sm"
-                            : "text-[var(--muted)] hover:text-[var(--foreground)]"
-                        }`}
-                      >
-                        {option === "whatsapp" ? "WhatsApp" : "Email"}
-                        {(option === "whatsapp" ? dirty : emailDirty) && (
+                    // The shared segmented control; a lane holding unsaved
+                    // edits carries its amber dot inside its cell.
+                    <SegmentedControl
+                      size="xs"
+                      semantics="tabs"
+                      ariaLabel="Lane"
+                      value={lane}
+                      onChange={(option) =>
+                        setLanePick((prev) => ({ ...prev, [key]: option }))
+                      }
+                      segments={(["whatsapp", "email"] as const).map((option) => ({
+                        id: option,
+                        label: option === "whatsapp" ? "WhatsApp" : "Email",
+                        mark: (option === "whatsapp" ? dirty : emailDirty) ? (
                           <span className="ml-1 text-amber-500">•</span>
-                        )}
-                      </button>
-                    ))}
-                  </span>
+                        ) : undefined,
+                      }))}
+                    />
                   )}
                 </div>
                 {isOpen && lane === "whatsapp" && (

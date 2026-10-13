@@ -22,6 +22,13 @@
   --muted-strong: #4d4d4d;
   --muted: #737373;
   --muted-bg: #f5f5f5;
+  /* SegmentedControl: the track recesses, the picked cell lifts (Nudge
+     b43691f4). Their own pair because dark --muted-bg equals --card, which
+     made the track vanish into the card and left the picked cell a shade of
+     near-black on near-black. */
+  --segment-track: #f5f5f5;
+  --segment-thumb: #ffffff;
+  --segment-thumb-border: #dcdcdc;
   /* A page heading is the darkest thing on its page, never a softened slate.
      #334155 was blue-tinted AND lighter than --foreground, so every title sat
      below the body text under it. */
@@ -161,6 +168,11 @@
   --muted-strong: #cccccc;
   --muted: #a3a3a3;
   --muted-bg: #171717;
+  /* The track goes DOWN to the pane's own black and the thumb comes UP past
+     the card, so both read on a #171717 card or menu. */
+  --segment-track: #0c0c0c;
+  --segment-thumb: #2e2e2e;
+  --segment-thumb-border: #404040;
   --page-title: var(--foreground);
   --brand: #10b981;
   /* Muted less than the light theme's. The same desaturation that calms a

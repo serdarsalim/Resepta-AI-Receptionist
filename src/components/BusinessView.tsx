@@ -20,6 +20,7 @@ import { Card } from "./Card";
 import { BusinessHoursCard } from "./RemindersView";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { Sheet } from "./Sheet";
+import { SegmentedControl } from "./SegmentedControl";
 import { CheckSwitch } from "./CheckSwitch";
 import { FIELD, ROW_GRID, RowLabel } from "./RowLabel";
 import { presetLanguage } from "../../convex/lib/industryPresets";
@@ -1916,29 +1917,18 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
             <span id={sourceLabelId} className="block">
               {t("fields.source")}
             </span>
-            {/* Segmented control, same track as the Day/Week/List one: rounded
-                --muted-bg track, selected segment on --background so it stays
-                visible in dark mode. No border on a segment. */}
-            <div
-              role="group"
-              aria-labelledby={sourceLabelId}
-              className="mt-1 inline-flex rounded-lg bg-[var(--muted-bg)] p-0.5"
-            >
-              {FIELD_SOURCES.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  aria-pressed={source === option.id}
-                  onClick={() => setSource(option.id)}
-                  className={`rounded-md px-3 py-1 transition-colors ${
-                    source === option.id
-                      ? "bg-[var(--background)] font-medium text-[var(--foreground)]"
-                      : "text-[var(--muted)] hover:text-[var(--foreground)]"
-                  }`}
-                >
-                  {t(option.key)}
-                </button>
-              ))}
+            {/* The shared segmented control (this picker is where it was
+                first lifted from). */}
+            <div className="mt-1">
+              <SegmentedControl
+                labelledBy={sourceLabelId}
+                value={source}
+                onChange={setSource}
+                segments={FIELD_SOURCES.map((option) => ({
+                  id: option.id,
+                  label: t(option.key),
+                }))}
+              />
             </div>
           </div>
           {type === "select" && (
