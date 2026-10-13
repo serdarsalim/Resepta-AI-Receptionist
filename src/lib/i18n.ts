@@ -4148,11 +4148,24 @@ const dictionary = {
     en: "Every day",
     de: "Jeden Tag",
   },
-  // The optional last day of a one-off block — the ten-day holiday as one row.
+  // The last day of a one-off block — the ten-day holiday as one row.
   "closures.lastDay": {
     tr: "Son gün",
     en: "Last day",
     de: "Letzter Tag",
+  },
+  // The block sheet's row labels (one question per row, Nudge's layout) and
+  // the date range's own names for its two ends.
+  "closures.repeats": { tr: "Tekrar", en: "Repeats", de: "Wiederholung" },
+  "closures.dates": { tr: "Tarih", en: "Dates", de: "Zeitraum" },
+  "closures.days": { tr: "Günler", en: "Days", de: "Tage" },
+  "closures.time": { tr: "Saat", en: "Time", de: "Uhrzeit" },
+  "closures.firstDay": { tr: "İlk gün", en: "First day", de: "Erster Tag" },
+  // Under the month while the range waits for its end.
+  "closures.pickLastDay": {
+    tr: "Son günü seçin",
+    en: "Pick the last day",
+    de: "Letzten Tag wählen",
   },
   "closures.errRange": {
     tr: "Bitiş tarihi başlangıçtan önce olamaz.",
