@@ -1,7 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -12,10 +11,16 @@ import {
   timeValueToMinutes,
   weekdayNames,
 } from "@/lib/datetime";
-import { placeBeside, type Placement, type Rect } from "@/lib/anchoredSheet";
+import type { Rect } from "@/lib/anchoredSheet";
 import { FIELD } from "./RowLabel";
 import { CheckSwitch } from "./CheckSwitch";
 import { useConfirm } from "./ConfirmDialog";
+import { SegmentedControl } from "./SegmentedControl";
+import {
+  AnchoredSheet,
+  SHEET_PILL_PRIMARY,
+  SheetCloseButton,
+} from "./AnchoredSheet";
 
 // The calendar's OTHER kind of thing to draw: time the business is shut inside
 // its own hours. A lunch break, a holiday, a morning off — drawn on the grid
@@ -30,12 +35,11 @@ import { useConfirm } from "./ConfirmDialog";
 // anything new. The label typed here is the closure's `reason`, which the
 // agents can already say out loud ("we're closed for the holiday that day").
 //
-// Same popover chrome as AppointmentModal: anchored beside the drawn slot when
-// there is room, full-width bottom sheet on a phone. The two sheets swap into
-// the same spot when the kind tabs switch, so choosing "blocked time" reads as
-// the form changing, not a new window opening.
-
-const PANEL_W = 448;
+// Same popover chrome as AppointmentModal, the one AnchoredSheet: anchored
+// beside the drawn slot when there is room, full-width bottom sheet on a
+// phone. The two sheets swap into the same spot when the kind tabs switch, so
+// choosing "blocked time" reads as the form changing, not a new window
+// opening.
 
 // What the sheet opens against. Everything here is in the BUSINESS's own
 // civil terms — a closure is "13:00 in the salon", never a UTC instant — so
@@ -63,9 +67,12 @@ function weekdayOf(date: string): number {
   return new Date(`${date}T00:00:00Z`).getUTCDay();
 }
 
-// The tab row both create-sheets wear, in the app's chip grammar. Google
-// Calendar's quick-create tabs (Event | Task): one gesture on the grid, and
-// the first row of the popup asks what you meant.
+// The first row of a sheet opened on empty grid: an appointment, or time the
+// business is shut? Google Calendar's Event | Task quick-create, which Nudge
+// ported from here and then moved onto its segmented control; this was the
+// last hand-rolled pair of pills doing a segmented control's job (emerald
+// pills, with the picked one also the only bold one, so it changed width on
+// every click). Tabs, to a screen reader: the choice swaps the form under it.
 export function SheetKindTabs({
   kind,
   onKind,
@@ -75,26 +82,16 @@ export function SheetKindTabs({
 }) {
   const { t } = useLanguage();
   return (
-    <div role="tablist" className="flex flex-wrap gap-1.5">
-      {(["appointment", "block"] as const).map((option) => (
-        <button
-          key={option}
-          type="button"
-          role="tab"
-          aria-selected={kind === option}
-          onClick={() => {
-            if (option !== kind) onKind(option);
-          }}
-          className={`rounded-full px-3 py-1 text-sm transition-colors ${
-            kind === option
-              ? "bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
-              : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-          }`}
-        >
-          {t(option === "appointment" ? "calendar.tabAppointment" : "calendar.tabBlock")}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl<"appointment" | "block">
+      semantics="tabs"
+      ariaLabel={t("calendar.kindLabel")}
+      value={kind}
+      onChange={onKind}
+      segments={[
+        { id: "appointment", label: t("calendar.tabAppointment") },
+        { id: "block", label: t("calendar.tabBlock") },
+      ]}
+    />
   );
 }
 
@@ -103,6 +100,8 @@ export function BlockSheet({
   anchor,
   tabs,
   onClose,
+  heightFloor,
+  onNaturalHeight,
 }: {
   draft: BlockDraft;
   // The drawn slot (or the chip) this sheet belongs to, in viewport
@@ -112,6 +111,9 @@ export function BlockSheet({
   // when editing an existing block — a saved closure is not half of a choice.
   tabs?: React.ReactNode;
   onClose: () => void;
+  // The floor shared with the booking sheet while the kind tabs are up.
+  heightFloor?: number;
+  onNaturalHeight?: (px: number) => void;
 }) {
   const { t, language } = useLanguage();
   const dayNames = weekdayNames(language, "long");
@@ -119,8 +121,6 @@ export function BlockSheet({
   const update = useMutation(api.closures.update);
   const remove = useMutation(api.closures.remove);
   const [confirm, confirmDialog] = useConfirm();
-
-  const panelRef = useRef<HTMLDivElement>(null);
 
   const [reason, setReason] = useState(draft.reason ?? "");
   const [allDay, setAllDay] = useState(
@@ -201,53 +201,6 @@ export function BlockSheet({
       : "skip",
   );
 
-  // Same placement dance as AppointmentModal: measured after layout so the
-  // panel's REAL height decides whether it slides up, re-run on everything
-  // that changes that height. Below MIN_ANCHORED_WIDTH placeBeside answers
-  // null and the sheet falls back to the centred card.
-  const [placement, setPlacement] = useState<Placement | null>(null);
-  useLayoutEffect(() => {
-    if (!anchor) {
-      setPlacement(null);
-      return;
-    }
-    const measure = () => {
-      const el = panelRef.current;
-      if (!el) return;
-      const next = placeBeside(
-        anchor,
-        { width: PANEL_W, height: el.offsetHeight },
-        { width: window.innerWidth, height: window.innerHeight },
-      );
-      setPlacement((current) =>
-        current &&
-        next &&
-        current.top === next.top &&
-        current.left === next.left &&
-        current.side === next.side
-          ? current
-          : next,
-      );
-    };
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-    // cadence swaps a prose line for a row of day chips, error and the count
-    // line appear mid-edit: each one moves Save, so each re-measures.
-  }, [anchor, cadence, error, rangeError, inside]);
-
-  // Escape closes this sheet only — capture phase, stopped, so the calendar's
-  // own key handling never sees it. Same pattern as AppointmentModal.
-  useLayoutEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.stopPropagation();
-      onClose();
-    };
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
-
   const save = async () => {
     setError(null);
     setSaving(true);
@@ -277,44 +230,47 @@ export function BlockSheet({
     month: "long",
   }).format(new Date(`${draft.date}T00:00:00`));
 
-  return createPortal(
-    <div
-      className={
-        placement
-          ? "fixed inset-0 z-50"
-          : "fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
-      }
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      role="presentation"
-    >
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal={placement ? undefined : true}
-        aria-label={t(draft.closureId ? "closures.edit" : "closures.add")}
-        style={
-          placement
-            ? { position: "fixed", top: placement.top, left: placement.left, width: PANEL_W }
-            : undefined
-        }
-        className={
-          placement
-            ? "max-h-[90vh] overflow-y-auto rounded-3xl border border-transparent bg-[var(--card)] p-5 shadow-2xl dark:border-[var(--border)]"
-            : "max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-transparent bg-[var(--card)] p-5 shadow-xl dark:border-[var(--border)] sm:rounded-3xl"
-        }
-      >
-        <div className="mb-1 flex items-start justify-between gap-2">
-          {tabs ?? <span />}
+  return (
+    <AnchoredSheet
+      anchor={anchor}
+      label={t(draft.closureId ? "closures.edit" : "closures.add")}
+      onClose={onClose}
+      measureKey={`${cadence}:${error ?? ""}:${rangeError ?? ""}:${inside ?? ""}`}
+      heightFloor={heightFloor}
+      onNaturalHeight={onNaturalHeight}
+      footer={
+        <div className="mt-3 flex items-center justify-between gap-2">
+          {draft.closureId ? (
+            <button
+              type="button"
+              onClick={async () => {
+                if (!(await confirm({ title: t("closures.removeConfirm") }))) return;
+                const id = draft.closureId;
+                if (!id) return;
+                await remove({ closureId: id });
+                onClose();
+              }}
+              className="text-sm text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
+            >
+              {t("common.delete")}
+            </button>
+          ) : (
+            <span />
+          )}
           <button
             type="button"
-            aria-label={t("common.close")}
-            onClick={onClose}
-            className="rounded-full p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            disabled={!ready || saving}
+            onClick={() => void save()}
+            className={SHEET_PILL_PRIMARY}
           >
-            <XIcon />
+            {t("common.save")}
           </button>
+        </div>
+      }
+    >
+        <div className="mb-3 flex min-h-8 items-start justify-between gap-2">
+          {tabs ?? <span />}
+          <SheetCloseButton label={t("common.close")} onClick={onClose} />
         </div>
 
         <div className="space-y-4">
@@ -462,46 +418,7 @@ export function BlockSheet({
               : "")}
         </p>
 
-        <div className="mt-3 flex items-center justify-between gap-2">
-          {draft.closureId ? (
-            <button
-              type="button"
-              onClick={async () => {
-                if (!(await confirm({ title: t("closures.removeConfirm") }))) return;
-                const id = draft.closureId;
-                if (!id) return;
-                await remove({ closureId: id });
-                onClose();
-              }}
-              className="text-sm text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
-            >
-              {t("common.delete")}
-            </button>
-          ) : (
-            <span />
-          )}
-          <button
-            type="button"
-            disabled={!ready || saving}
-            onClick={() => void save()}
-            className="rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            {t("common.save")}
-          </button>
-        </div>
         {confirmDialog}
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
-// AppointmentModal's X, verbatim: the two sheets swap into one spot, so their
-// chrome has to be indistinguishable.
-function XIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M18 6 6 18M6 6l12 12" />
-    </svg>
+    </AnchoredSheet>
   );
 }

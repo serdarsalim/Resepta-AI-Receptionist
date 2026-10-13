@@ -12,26 +12,32 @@ import {
   parseMoney,
 } from "@/lib/money";
 import { formatDayHeading, formatTime } from "@/lib/datetime";
-import { buttonClass, fieldClass, iconButtonClass } from "./Control";
+import { fieldClass, iconButtonClass } from "./Control";
 import { PhoneInput } from "./PhoneField";
 import { WhenPicker } from "./WhenPicker";
-import { placeBeside, type Placement, type Rect } from "@/lib/anchoredSheet";
+import {
+  AnchoredSheet,
+  SHEET_PILL_DANGER,
+  SHEET_PILL_PRIMARY,
+  SHEET_PILL_QUIET,
+  SHEET_ROWS,
+  SheetCloseButton,
+  SheetIconButton,
+  SheetRow,
+  TrashIcon,
+} from "./AnchoredSheet";
+import type { Rect } from "@/lib/anchoredSheet";
 import type { Id } from "../../convex/_generated/dataModel";
 
-// The appointment sheet, opened by clicking a slot or a block on the grid.
+// The appointment sheet, opened by clicking a slot or a block on the grid,
+// or from a customer's record.
 //
-// Portalled to document.body with position:fixed, per the rule this codebase
-// has broken most often: an absolutely positioned panel inside the calendar
-// would be clipped by the grid's own scroll container the moment it opened.
-// The modal also traps focus and closes on Escape, because the grid behind it
-// is a field of buttons and tabbing into them would be a trap of its own.
-
-// Google's popover width, near enough. The sheet could afford to come down
-// from 32rem once the labels moved into their own left column and the wide
-// two-panel customer picker died — the fields left over are one column of
-// answers, and width past what they need just pushes the calendar further
-// out from under the popup.
-const PANEL_W = 448;
+// Its chrome is AnchoredSheet, shared with the blocked-time sheet: portalled
+// to document.body with position:fixed, per the rule this codebase has broken
+// most often (an absolutely positioned panel inside the calendar would be
+// clipped by the grid's own scroll container the moment it opened), focus
+// trapped, Escape closing it. The two sheets swap into one spot, so one copy
+// of that chrome is the only way they stay indistinguishable.
 
 export type ModalDraft = {
   appointmentId?: Id<"appointments">;
@@ -79,6 +85,8 @@ export function AppointmentModal({
   onOpenCustomer,
   anchor,
   tabs,
+  heightFloor,
+  onNaturalHeight,
 }: {
   draft: ModalDraft;
   services: {
@@ -118,10 +126,17 @@ export function AppointmentModal({
   // one in the same spot. Absent everywhere else: an edit is not a choice,
   // and a contact record has no grid to draw blocks on.
   tabs?: React.ReactNode;
+  // The floor this sheet shares with the blocked-time sheet while the kind
+  // tabs are up, and where it reports its own height (AnchoredSheet).
+  heightFloor?: number;
+  onNaturalHeight?: (px: number) => void;
 }) {
   const { t, language } = useLanguage();
-  const panelRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  // The bin's question, asked in the sheet itself (Nudge c49864af): cancelling
+  // sends the customer the cancellation notice, so one click on an icon must
+  // not be the whole decision.
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
 
   const [startAt, setStartAt] = useState(draft.startAt);
   const [durationMinutes, setDurationMinutes] = useState(draft.durationMinutes);
@@ -187,58 +202,25 @@ export function AppointmentModal({
     };
   }, [listOpen]);
 
-  // Where to sit, when the caller told us what we belong to. Measured after
-  // layout so the panel's real height decides whether it has to slide up,
-  // rather than a guess baked in at design time — the sheet is a different
-  // height with a customer picked than without, and different again in three
-  // languages.
-  const [placement, setPlacement] = useState<Placement | null>(null);
-  useLayoutEffect(() => {
-    if (!anchor) {
-      setPlacement(null);
-      return;
-    }
-    const measure = () => {
-      const el = panelRef.current;
-      if (!el) return;
-      const next = placeBeside(
-        anchor,
-        { width: PANEL_W, height: el.offsetHeight },
-        { width: window.innerWidth, height: window.innerHeight },
-      );
-      // Compared before storing: the observer below fires on every size change
-      // and a fresh object each time would re-render for nothing.
-      setPlacement((current) =>
-        current &&
-        next &&
-        current.top === next.top &&
-        current.left === next.left &&
-        current.side === next.side
-          ? current
-          : next,
-      );
-    };
-    measure();
-    // A window resize can turn a window that had room beside the block into one
-    // that does not, and it does NOT re-render, so it needs its own listener.
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-    // EVERY dependency here is something that changes the panel's HEIGHT, which
-    // is what decides whether it has to slide up to stay on screen.
-    //
-    // picked swaps the phone fields for the readback card; adding a service
-    // line grew the sheet without re-placing it once, so the bottom ran off
-    // the screen — lines.length is the fix for that one; error and canForce
-    // are here because a conflict banner is the other thing that appears
-    // mid-edit and pushes Save down.
-    //
-    // A ResizeObserver on the panel would cover all of these and anything added
-    // later, and is the better design. It is not used because its callbacks are
-    // never delivered in this app: a fresh observer on this panel does not fire
-    // even the initial notification observe() guarantees, while offsetHeight
-    // demonstrably changes. That is worth understanding before relying on it.
-    // Until then this list must grow when anything new changes the height.
-  }, [anchor, picked, timeEditing, lines.length, error, canForce]);
+  // EVERY entry here is something that changes the sheet's HEIGHT, which is
+  // what decides whether it has to slide up to stay on screen (AnchoredSheet
+  // re-measures when this changes). `picked` drops the phone row; adding a
+  // service line grew the sheet without re-placing it once, so the bottom ran
+  // off the screen; an error or a conflict banner appears mid-edit and pushes
+  // Save down; the cancel question swaps the footer. A ResizeObserver would
+  // cover all of these and anything added later, and is the better design,
+  // but its callbacks are never delivered in this app: a fresh observer on
+  // this panel did not fire even the initial notification observe()
+  // guarantees, while offsetHeight demonstrably changed. Until that is
+  // understood, this list must grow when anything new changes the height.
+  const measureKey = [
+    picked ?? "",
+    timeEditing,
+    lines.length,
+    error ?? "",
+    canForce ?? false,
+    confirmingCancel,
+  ].join("|");
 
   // Only fetched once there is something to match. A booking whose customer
   // is already fixed, or where nothing has been typed yet, never loads the
@@ -323,36 +305,6 @@ export function AppointmentModal({
     searchRef.current?.focus();
   }, []);
 
-  // Escape closes; Tab cycles inside the panel. Both on the panel rather than
-  // the document so a second modal could never fight this one.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const panel = panelRef.current;
-      if (!panel) return;
-      const focusable = panel.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
-
   // The new-customer fields are uncontrolled and read on submit, because
   // PhoneInput composes the dial code and the number itself — the same
   // component and the same contract the old inline form used.
@@ -404,353 +356,324 @@ export function AppointmentModal({
     onSubmit(values);
   };
 
-  return createPortal(
-    <div
-      // Anchored, the backdrop stops being a scrim and becomes only a place to
-      // click to dismiss. NO dim: the whole point of a popover on a calendar is
-      // that the week stays readable behind it, so you can see the slot you are
-      // booking against the ones around it. Dimming turns it back into a modal
-      // that happens to sit off-centre.
-      className={
-        placement
-          ? "fixed inset-0 z-50"
-          : "fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
-      }
-      // Backdrop click closes. mousedown, not click, so a drag that started
-      // inside the panel and ended on the backdrop does not close it.
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      role="presentation"
-    >
-      <div
-        ref={panelRef}
-        role="dialog"
-        // Anchored it is NOT modal: the calendar behind stays legible and
-        // meaningful, and claiming otherwise to a screen reader would be a lie
-        // about what is on screen.
-        aria-modal={placement ? undefined : true}
-        aria-label={editing ? t("appointments.edit") : t("appointments.new")}
-        style={
-          placement
-            ? { position: "fixed", top: placement.top, left: placement.left, width: PANEL_W }
-            : undefined
-        }
-        // Full-width sheet on a phone, centred card above it. A salon owner
-        // books from the counter phone more often than from a desk. Anchored,
-        // it keeps the same width it always had: the form did not get smaller
-        // just because it moved.
-        // Google's popover chrome: big radius, deep shadow, no drawn border —
-        // the shadow IS the edge. Dark mode keeps a hairline because a shadow
-        // is invisible on near-black (same rule as --card-shadow).
-        className={
-          placement
-            ? "max-h-[90vh] overflow-y-auto rounded-3xl border border-transparent bg-[var(--card)] p-5 shadow-2xl dark:border-[var(--border)]"
-            : "max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-transparent bg-[var(--card)] p-5 shadow-xl dark:border-[var(--border)] sm:rounded-3xl"
-        }
+  // The foot of the sheet. Normally Cancel and Save; while the bin's question
+  // is up, the question and its two answers instead, in the same pills, so the
+  // red one is exactly where Save was.
+  const footer = confirmingCancel ? (
+    <div className="mt-4 space-y-3">
+      <div className="text-sm">
+        <p className="font-medium">{t("appointments.cancelConfirmTitle")}</p>
+        <p className="text-[var(--muted-strong)]">{t("appointments.cancelConfirmBody")}</p>
+      </div>
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => setConfirmingCancel(false)}
+          className={SHEET_PILL_QUIET}
+        >
+          {t("appointments.keep")}
+        </button>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => onDelete?.()}
+          className={SHEET_PILL_DANGER}
+        >
+          {t("appointments.cancelAppointment")}
+        </button>
+      </div>
+    </div>
+  ) : (
+    <div className="mt-4 flex items-center justify-end gap-2">
+      <button type="button" onClick={onClose} className={SHEET_PILL_QUIET}>
+        {t("common.cancel")}
+      </button>
+      {/* Google's Save: an accent pill, and the only filled control on the
+          card. Accent, not brand — Save is an action, and actions are blue
+          everywhere else in this app. */}
+      <button
+        type="button"
+        onClick={submit}
+        disabled={pending || customerIncomplete}
+        className={SHEET_PILL_PRIMARY}
       >
-        {/* No printed heading — Google's popup leads with the title field and
-            lets the X carry "this is dismissible". The dialog still announces
-            itself through aria-label above. The kind tabs, when the calendar
-            passed them, take the heading's spot: what this sheet IS is the
-            first question, same as Google's Event | Task row. */}
-        <div className={tabs ? "mb-1 flex items-start justify-between gap-2" : "mb-1 flex justify-end"}>
-          {tabs}
-          <button
-            type="button"
-            aria-label={t("common.close")}
-            onClick={onClose}
-            className="rounded-full p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-          >
-            <XIcon />
-          </button>
-        </div>
+        {pending ? t("common.loading") : t("common.save")}
+      </button>
+    </div>
+  );
 
-        <form ref={formRef} className="space-y-4" onSubmit={(e) => { e.preventDefault(); submit(); }}>
-          {draft.customerId ? (
-            // Same [icon][label][field] geometry as every other row; the
-            // icon slot is an empty spacer here. The name is a fact, printed
-            // where the input would be — and still the way to the record.
-            <div className="flex items-center gap-3 text-xs font-medium">
-              <span className="w-24 shrink-0">{t("customers.name")}</span>
-              {onOpenCustomer ? (
-                <button
-                  type="button"
-                  onClick={() => onOpenCustomer(draft.customerId!)}
-                  className="min-w-0 flex-1 truncate text-left text-sm font-normal underline-offset-2 transition-colors hover:text-[var(--accent)] hover:underline"
-                >
-                  {draft.customerName}
-                </button>
-              ) : (
-                <span className="min-w-0 flex-1 truncate text-sm font-normal">
-                  {draft.customerName}
-                </span>
-              )}
-            </div>
-          ) : (
-            <>
-              {/* ONE field, searching as you type — the Google move. A match
-                  picked from the list books that customer; no pick means the
-                  typed text IS the new customer's name, and the phone field
-                  below is already waiting. This replaces an Existing/New
-                  toggle over two stacked panels: a filing question the owner
-                  had to answer before they could type a letter, about a
-                  distinction the backend never needed stated. */}
-              <div className="space-y-3">
-                  {/* The matches OVERLAY the form instead of sitting in it. An
-                      always-open list is a control that charges ~300px of
-                      permanent modal height to show five names you are going
-                      to scroll past anyway, and it pushed Save below the fold
-                      on a laptop. As a dropdown it costs one field's height
-                      until the moment you are actually reading it.
-
-                      Portalled and fixed, not absolute. The panel is
-                      overflow-y-auto, so an absolute child clips against it the
-                      moment the sheet is tall enough to scroll — which it is on
-                      a short window, or with a conflict banner showing. It
-                      currently happens not to clip, and "happens not to" is
-                      what this repo keeps shipping and regretting. */}
-                  <label
-                    className="flex items-center gap-3 text-xs font-medium"
-                    htmlFor="modal-customer"
-                  >
-                    <span className="w-24 shrink-0">{t("customers.name")}</span>
-                    <input
-                      id="modal-customer"
-                      type="search"
-                      autoComplete="off"
-                      role="combobox"
-                      aria-expanded={listOpen}
-                      aria-controls="modal-customer-list"
-                      required
-                      // Every field in this sheet is the scale's sm (32px):
-                      // they inherited their size from whatever wrapped them,
-                      // so the name was 12px text in a label, the service
-                      // select 16px in a div, and the price box 42px tall.
-                      className={`${fieldClass("sm")} min-w-0 flex-1`}
-                      placeholder={t("appointments.findCustomerHint")}
-                      value={customerQuery}
-                      ref={searchRef}
-                      onFocus={() => setListOpen(true)}
-                      // Closing on blur would fire before a click on an option
-                      // lands, so the options refuse to take focus at all (see
-                      // onMouseDown below) and this only ever runs on a real
-                      // move away from the field.
-                      onBlur={() => setListOpen(false)}
-                      onKeyDown={(e) => {
-                        // Escape shuts the list, not the whole sheet. The
-                        // modal's own handler is on the document in the
-                        // capture phase, so this has to say so explicitly.
-                        if (e.key === "Escape" && listOpen) {
-                          e.stopPropagation();
-                          setListOpen(false);
-                        }
-                      }}
-                      onChange={(e) => {
-                        setCustomerQuery(e.target.value);
-                        setListOpen(true);
-                        // Typing again abandons the previous pick. Leaving it
-                        // set would let the sheet book a person whose name is
-                        // no longer anywhere on screen.
-                        if (picked) setPicked(undefined);
-                      }}
-                    />
-                    {listOpen && customerQuery.trim() !== "" && listPos && createPortal(
-                      <ul
-                        id="modal-customer-list"
-                        style={{
-                          position: "fixed",
-                          top: listPos.top,
-                          left: listPos.left,
-                          width: listPos.width,
-                        }}
-                        className="z-[100] max-h-56 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
-                      >
-                        {customerOptions === undefined ? (
-                          <li className="px-3 py-2 text-xs text-[var(--muted)]">
-                            {t("common.loading")}
-                          </li>
-                        ) : (
-                          <>
-                            {customerMatches.map((customer) => (
-                              <li key={customer._id}>
-                                <button
-                                  type="button"
-                                  // Keeps focus in the input so onBlur does
-                                  // not tear the list down before the click
-                                  // lands.
-                                  onMouseDown={(e) => e.preventDefault()}
-                                  onClick={() => {
-                                    setPicked(customer._id);
-                                    setCustomerQuery(
-                                      `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
-                                    );
-                                    setListOpen(false);
-                                  }}
-                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--row-hover-bg)]"
-                                >
-                                  <span className="min-w-0 flex-1 truncate">
-                                    {`${customer.firstName} ${customer.lastName ?? ""}`.trim()}
-                                  </span>
-                                  <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">
-                                    {customer.phone}
-                                  </span>
-                                </button>
-                              </li>
-                            ))}
-                            {/* The way out of the list without a match — and
-                                the teaching row: it says out loud what plain
-                                typing was already going to do. Landing focus
-                                on the phone field, because that is the one
-                                fact still missing. */}
-                            <li>
-                              <button
-                                type="button"
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => {
-                                  setListOpen(false);
-                                  document.getElementById("modal-phone")?.focus();
-                                }}
-                                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-[var(--accent)] transition-colors hover:bg-[var(--row-hover-bg)] ${
-                                  customerMatches.length > 0
-                                    ? "border-t border-[var(--border)]"
-                                    : ""
-                                }`}
-                              >
-                                <span className="truncate">
-                                  {`+ ${t("appointments.createCustomer", { name: customerQuery.trim() })}`}
-                                </span>
-                              </button>
-                            </li>
-                          </>
-                        )}
-                      </ul>,
-                      document.body,
-                    )}
-                  </label>
-
-                {/* Phone and consent exist only while a customer is being
-                    CREATED. A picked customer already has both on their
-                    record — repeating them here was answering a question
-                    nobody asked, so a resolved pick leaves nothing but the
-                    name, the way Google's popup carries just a title. */}
-                {!picked && (
-                  <>
-                    {/* Label left, field right — the settings-form shape every
-                        row below shares from here on. */}
-                    <label
-                      className="flex items-center gap-3 text-xs font-medium"
-                      htmlFor="modal-phone"
-                    >
-                      <span className="w-24 shrink-0">{t("customers.phone")}</span>
-                      <PhoneInput
-                        id="modal-phone"
-                        name="phone"
-                        // Only rendered while the customer is being created,
-                        // so required is unconditional; reportValidity in
-                        // submit() is what surfaces it.
-                        required
-                        size="sm"
-                        className="min-w-0 flex-1"
-                      />
-                    </label>
-                  </>
-                )}
-              </div>
-            </>
+  return (
+    <AnchoredSheet
+      anchor={anchor}
+      label={editing ? t("appointments.edit") : t("appointments.new")}
+      onClose={onClose}
+      measureKey={measureKey}
+      heightFloor={heightFloor}
+      onNaturalHeight={onNaturalHeight}
+      footer={footer}
+    >
+      {/* No printed heading — Google's popup leads with the title field and
+          lets the X carry "this is dismissible". The dialog still announces
+          itself through its aria-label. The kind tabs, when the calendar
+          passed them, take the heading's spot: what this sheet IS is the
+          first question, same as Google's Event | Task row. An existing
+          booking carries Google's bin beside the X instead (Nudge c49864af):
+          "Cancel appointment" sat at the foot beside "Cancel", two words
+          apart from the button that only closes the sheet. */}
+      <div className="mb-3 flex min-h-8 items-start justify-between gap-2">
+        {tabs ?? <span />}
+        <span className="flex shrink-0 items-center gap-0.5">
+          {onDelete && (
+            <SheetIconButton
+              label={t("appointments.cancelAppointment")}
+              pressed={confirmingCancel}
+              disabled={pending}
+              onClick={() => setConfirmingCancel((open) => !open)}
+            >
+              <TrashIcon />
+            </SheetIconButton>
           )}
+          <SheetCloseButton label={t("common.close")} onClick={onClose} />
+        </span>
+      </div>
 
-          {/* No glyph column. Icons were tried the Google way and lost: with
-              labels on every row the glyphs were decoration, half the rows
-              had no natural symbol and wore an empty spacer, and 20px of
-              icon shouted over 12px of label. Two columns, every row. */}
-          <div>
-            {timeEditing ? (
-              /* Google's editor: a date chip that opens a mini month, and
-                 start–end time chips that type OR pick. Duration is what the
-                 booking machinery speaks, so WhenPicker reports one — but
-                 the owner only ever handles times. This replaces a native
-                 datetime-local (which typed the year to 0025 with no way
-                 back) and a raw minutes box. */
-              <div className="flex min-w-0 items-start gap-3 text-xs font-medium">
-                {/* pt-2: a 16px label line centred on the 32px chip beside
-                    it, the same offset every label in this column takes. */}
-                <span className="w-24 shrink-0 pt-2">{t("appointments.when")}</span>
-                <WhenPicker
-                  startAt={startAt}
-                  durationMinutes={durationMinutes}
-                  showEnd={!goodsOnly}
-                  onChange={(nextStart, nextDuration) => {
-                    setStartAt(nextStart);
-                    setDurationMinutes(nextDuration);
-                  }}
-                />
-              </div>
+      <form
+        ref={formRef}
+        className={SHEET_ROWS}
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        {draft.customerId ? (
+          // The name is a fact here, printed where the input would be, and
+          // still the way to the record.
+          <SheetRow label={t("customers.name")}>
+            {onOpenCustomer ? (
+              <button
+                type="button"
+                onClick={() => onOpenCustomer(draft.customerId!)}
+                className="block max-w-full truncate text-left underline-offset-2 transition-colors hover:text-[var(--accent)] hover:underline"
+              >
+                {draft.customerName}
+              </button>
             ) : (
-              /* Google's time row: the value is prose — the day, then the
-                 span as start – end, the duration only implied. The "When"
-                 label sits in the shared label column in BOTH states, so
-                 clicking to edit swaps only the value; a label that appeared
-                 out of nowhere made the whole column jump. */
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="w-24 shrink-0 text-xs font-medium">
-                  {t("appointments.when")}
-                </span>
-                {/* py-1.5: one line of it is 32px, the height of the chips
-                    it turns into, so clicking to edit moves nothing. */}
-                <button
-                  type="button"
-                  onClick={() => setTimeEditing(true)}
-                  className="min-w-0 flex-1 rounded-lg px-3 py-1.5 text-left text-sm transition-colors hover:bg-[var(--control-hover)]"
-                >
-                  <span className="flex flex-wrap items-baseline gap-x-3">
-                    <span>{formatDayHeading(startAt, language)}</span>
-                    <span className="tabular-nums">
-                      {goodsOnly
-                        ? formatTime(startAt, language)
-                        : `${formatTime(startAt, language)} – ${formatTime(
-                            startAt + durationMinutes * 60_000,
-                            language,
-                          )}`}
-                    </span>
-                  </span>
-                </button>
-              </div>
+              <span className="block truncate">{draft.customerName}</span>
             )}
-          </div>
+          </SheetRow>
+        ) : (
+          <>
+            {/* ONE field, searching as you type — the Google move. A match
+                picked from the list books that customer; no pick means the
+                typed text IS the new customer's name, and the phone field
+                below is already waiting. This replaces an Existing/New toggle
+                over two stacked panels: a filing question the owner had to
+                answer before they could type a letter, about a distinction
+                the backend never needed stated.
 
-          {/* How a goods order reaches its customer — pickup or delivery,
-              ASAP or the time above, the address when one was given. A
-              readout, not a control: the customer answered this on the
-              booking page and the sheet only reports it. */}
-          {draft.fulfillment && (
-            <div className="flex min-w-0 items-start gap-3">
-              <span className="w-24 shrink-0 pt-2 text-xs font-medium">
-                {t("appointments.fulfillment")}
+                The matches OVERLAY the form instead of sitting in it: an
+                always-open list charged ~300px of permanent sheet height to
+                show five names. Portalled and fixed, not absolute: the panel
+                is overflow-y-auto, so an absolute child clips against it the
+                moment the sheet is tall enough to scroll. data-nested-menu:
+                while it is open, Escape closes the list and not the sheet. */}
+            <SheetRow label={t("customers.name")} htmlFor="modal-customer">
+              <input
+                id="modal-customer"
+                type="search"
+                autoComplete="off"
+                role="combobox"
+                aria-expanded={listOpen}
+                aria-controls="modal-customer-list"
+                required
+                // Every field in this sheet is the scale's sm (32px).
+                className={`${fieldClass("sm")} w-full`}
+                placeholder={t("appointments.findCustomerHint")}
+                value={customerQuery}
+                ref={searchRef}
+                onFocus={() => setListOpen(true)}
+                // Closing on blur would fire before a click on an option
+                // lands, so the options refuse to take focus at all (see
+                // onMouseDown below) and this only ever runs on a real move
+                // away from the field.
+                onBlur={() => setListOpen(false)}
+                onKeyDown={(e) => {
+                  // Escape shuts the list, not the whole sheet: the sheet's
+                  // own handler stands aside while a nested menu is open.
+                  if (e.key === "Escape" && listOpen) {
+                    e.stopPropagation();
+                    setListOpen(false);
+                  }
+                }}
+                onChange={(e) => {
+                  setCustomerQuery(e.target.value);
+                  setListOpen(true);
+                  // Typing again abandons the previous pick. Leaving it set
+                  // would let the sheet book a person whose name is no longer
+                  // anywhere on screen.
+                  if (picked) setPicked(undefined);
+                }}
+              />
+              {listOpen &&
+                customerQuery.trim() !== "" &&
+                listPos &&
+                createPortal(
+                  <ul
+                    id="modal-customer-list"
+                    data-nested-menu
+                    style={{
+                      position: "fixed",
+                      top: listPos.top,
+                      left: listPos.left,
+                      width: listPos.width,
+                    }}
+                    className="z-[100] max-h-56 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
+                  >
+                    {customerOptions === undefined ? (
+                      <li className="px-3 py-2 text-xs text-[var(--muted)]">
+                        {t("common.loading")}
+                      </li>
+                    ) : (
+                      <>
+                        {customerMatches.map((customer) => (
+                          <li key={customer._id}>
+                            <button
+                              type="button"
+                              // Keeps focus in the input so onBlur does not
+                              // tear the list down before the click lands.
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => {
+                                setPicked(customer._id);
+                                setCustomerQuery(
+                                  `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
+                                );
+                                setListOpen(false);
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--row-hover-bg)]"
+                            >
+                              <span className="min-w-0 flex-1 truncate">
+                                {`${customer.firstName} ${customer.lastName ?? ""}`.trim()}
+                              </span>
+                              <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">
+                                {customer.phone}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                        {/* The way out of the list without a match — and the
+                            teaching row: it says out loud what plain typing
+                            was already going to do. Landing focus on the phone
+                            field, because that is the one fact still missing. */}
+                        <li>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setListOpen(false);
+                              document.getElementById("modal-phone")?.focus();
+                            }}
+                            className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-[var(--accent)] transition-colors hover:bg-[var(--row-hover-bg)] ${
+                              customerMatches.length > 0 ? "border-t border-[var(--border)]" : ""
+                            }`}
+                          >
+                            <span className="truncate">
+                              {`+ ${t("appointments.createCustomer", { name: customerQuery.trim() })}`}
+                            </span>
+                          </button>
+                        </li>
+                      </>
+                    )}
+                  </ul>,
+                  document.body,
+                )}
+            </SheetRow>
+
+            {/* The phone exists only while a customer is being CREATED. A
+                picked customer already has one on their record; repeating it
+                here was answering a question nobody asked, so a resolved pick
+                leaves nothing but the name. */}
+            {!picked && (
+              <SheetRow label={t("customers.phone")} htmlFor="modal-phone">
+                <PhoneInput
+                  id="modal-phone"
+                  name="phone"
+                  // Only rendered while the customer is being created, so
+                  // required is unconditional; reportValidity in submit() is
+                  // what surfaces it.
+                  required
+                  size="sm"
+                  className="w-full"
+                />
+              </SheetRow>
+            )}
+          </>
+        )}
+
+        {/* No glyph column. Icons were tried the Google way and lost: with
+            labels on every row the glyphs were decoration. Two columns, every
+            row. The "When" label sits in the shared label column in BOTH
+            states, so clicking to edit swaps only the value. */}
+        <SheetRow label={t("appointments.when")} alignTop={timeEditing}>
+          {timeEditing ? (
+            /* Google's editor: a date chip that opens a mini month, and
+               start–end time chips that type OR pick. Duration is what the
+               booking machinery speaks, so WhenPicker reports one — but the
+               owner only ever handles times. */
+            <WhenPicker
+              startAt={startAt}
+              durationMinutes={durationMinutes}
+              showEnd={!goodsOnly}
+              onChange={(nextStart, nextDuration) => {
+                setStartAt(nextStart);
+                setDurationMinutes(nextDuration);
+              }}
+            />
+          ) : (
+            /* Google's time row: the value is prose — the day, then the span
+               as start – end, the duration only implied. py-1.5: one line of
+               it is 32px, the height of the fields it turns into, so clicking
+               to edit moves nothing. */
+            <button
+              type="button"
+              onClick={() => setTimeEditing(true)}
+              className="w-full min-w-0 rounded-lg px-3 py-1.5 text-left text-sm transition-colors hover:bg-[var(--control-hover)]"
+            >
+              <span className="flex flex-wrap items-baseline gap-x-3">
+                <span>{formatDayHeading(startAt, language)}</span>
+                <span className="tabular-nums">
+                  {goodsOnly
+                    ? formatTime(startAt, language)
+                    : `${formatTime(startAt, language)} – ${formatTime(
+                        startAt + durationMinutes * 60_000,
+                        language,
+                      )}`}
+                </span>
               </span>
-              <span className="min-w-0 flex-1 px-3 py-2 text-sm">
-                {[
-                  t(
-                    draft.fulfillment.kind === "pickup"
-                      ? "booking.pickup"
-                      : "booking.delivery",
-                  ),
-                  draft.fulfillment.asap ? t("booking.asap") : "",
-                  draft.fulfillment.address ?? "",
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </span>
-            </div>
+            </button>
           )}
+        </SheetRow>
 
-          {/* One row per service delivered. A cut plus a beard trim is one
-              visit with two lines, not two bookings on top of each other. */}
-          <div className="flex gap-3">
-            <span className="w-24 shrink-0 pt-2 text-xs font-medium">
-              {t("appointments.service")}
+        {/* How a goods order reaches its customer — pickup or delivery, ASAP
+            or the time above, the address when one was given. A readout, not
+            a control: the customer answered this on the booking page. */}
+        {draft.fulfillment && (
+          <SheetRow label={t("appointments.fulfillment")}>
+            <span className="block px-3 py-1.5">
+              {[
+                t(draft.fulfillment.kind === "pickup" ? "booking.pickup" : "booking.delivery"),
+                draft.fulfillment.asap ? t("booking.asap") : "",
+                draft.fulfillment.address ?? "",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </span>
-            <div className="min-w-0 flex-1 space-y-1.5">
+          </SheetRow>
+        )}
+
+        {/* One row per service delivered. A cut plus a beard trim is one
+            visit with two lines, not two bookings on top of each other. */}
+        <SheetRow label={t("appointments.service")} alignTop>
+          <div className="space-y-1.5">
             {lines.map((line, index) => (
               <div key={index} className="flex items-center gap-2">
                 <select
@@ -778,32 +701,26 @@ export function AppointmentModal({
                     value={line.quantity}
                     onChange={(e) =>
                       setLines((prev) =>
-                        prev.map((l, i) =>
-                          i === index ? { ...l, quantity: e.target.value } : l,
-                        ),
+                        prev.map((l, i) => (i === index ? { ...l, quantity: e.target.value } : l)),
                       )
                     }
                   />
                 )}
                 {/* Prefilled from the service, editable on the spot. Typing a
-                    different number IS the discount — there is no override
-                    toggle, because the field already permits the edit. Unit
-                    price on a goods line; the total below does the ×. */}
+                    different number IS the discount. Unit price on a goods
+                    line; the total below does the ×. */}
                 <input
                   type="number"
                   min={0}
                   step="0.01"
                   // Wide enough for a four-digit price with cents — 5600.00
-                  // clipped at w-24. The select is the flexible one, so this
-                  // is where the room comes from.
+                  // clipped at w-24. The select is the flexible one.
                   className={`${fieldClass("sm")} w-28 shrink-0`}
                   value={line.price}
                   placeholder={currencySymbol(currency, language)}
                   onChange={(e) =>
                     setLines((prev) =>
-                      prev.map((l, i) =>
-                        i === index ? { ...l, price: e.target.value } : l,
-                      ),
+                      prev.map((l, i) => (i === index ? { ...l, price: e.target.value } : l)),
                     )
                   }
                 />
@@ -812,16 +729,14 @@ export function AppointmentModal({
                 <button
                   type="button"
                   aria-label={t("common.delete")}
-                  onClick={() =>
-                    setLines((prev) => prev.filter((_, i) => i !== index))
-                  }
+                  onClick={() => setLines((prev) => prev.filter((_, i) => i !== index))}
                   className={iconButtonClass("danger", "sm")}
                 >
                   ×
                 </button>
               </div>
             ))}
-            <div className="flex items-center gap-3">
+            <div className="flex min-h-8 items-center gap-3">
               <button
                 type="button"
                 onClick={() =>
@@ -839,111 +754,63 @@ export function AppointmentModal({
                 </span>
               )}
             </div>
-            </div>
           </div>
+        </SheetRow>
 
-          {/* Each its own row — who does the work and what to remember about
-              it are different kinds of fact, and pairing them squeezed both. */}
-          <label className="flex min-w-0 items-center gap-3 text-xs font-medium">
-            <span className="w-24 shrink-0">{staffLabel}</span>
-              <select
-                className={`${fieldClass("sm")} min-w-0 flex-1`}
-                value={staffId}
-                onChange={(e) => setStaffId(e.target.value)}
-              >
-                <option value="">—</option>
-                {staff
-                  .filter((person) => person.active || person._id === draft.staffId)
-                  .map((person) => (
-                    <option key={person._id} value={person._id}>
-                      {person.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
+        {/* Each its own row — who does the work and what to remember about it
+            are different kinds of fact, and pairing them squeezed both. */}
+        <SheetRow label={staffLabel} htmlFor="modal-staff">
+          <select
+            id="modal-staff"
+            className={`${fieldClass("sm")} w-full`}
+            value={staffId}
+            onChange={(e) => setStaffId(e.target.value)}
+          >
+            <option value="">—</option>
+            {staff
+              .filter((person) => person.active || person._id === draft.staffId)
+              .map((person) => (
+                <option key={person._id} value={person._id}>
+                  {person.name}
+                </option>
+              ))}
+          </select>
+        </SheetRow>
 
-          <label className="flex min-w-0 items-start gap-3 text-xs font-medium">
-            <span className="w-24 shrink-0 pt-2">{t("appointments.notes")}</span>
-            {/* One row, and it grows as you type rather than reserving
-                space for words nobody has written. Most bookings carry no
-                note at all. Multiline sm: one row of it is exactly the 32px
-                of the fields above it. */}
-            <textarea
-              rows={1}
-              className={`${fieldClass("sm", { multiline: true })} min-w-0 flex-1 resize-y`}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </label>
-          {/* Enter submits, which is what a booking form should do. */}
-          <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
-        </form>
+        <SheetRow label={t("appointments.notes")} htmlFor="modal-notes" alignTop>
+          {/* One row, and it grows as you type rather than reserving space
+              for words nobody has written. Multiline sm: one row of it is
+              exactly the 32px of the fields above it. */}
+          <textarea
+            id="modal-notes"
+            rows={1}
+            className={`${fieldClass("sm", { multiline: true })} block w-full resize-y`}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </SheetRow>
+        {/* Enter submits, which is what a booking form should do. */}
+        <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
+      </form>
 
-        {error && (
-          <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-            <p>{error}</p>
-            {/* cal.com refused for a reason the owner is entitled to overrule —
-                the chair is double-booked, or it is outside the hours cal.com
-                knows about. Offered only when that is what happened. */}
-            {canForce && (
-              <button
-                type="button"
-                onClick={onForce}
-                disabled={pending}
-                className="mt-2 rounded-lg px-2 py-1 font-medium text-amber-900 underline underline-offset-2 dark:text-amber-200"
-              >
-                {t("appointments.bookAnyway")}
-              </button>
-            )}
-          </div>
-        )}
-
-        <div className="mt-4 flex items-center justify-between gap-2">
-          {onDelete ? (
-            // md, the 36px the two pills on the right of this row already
-            // are; the pills keep their Google shape and their own classes.
+      {error && (
+        <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+          <p>{error}</p>
+          {/* cal.com refused for a reason the owner is entitled to overrule —
+              the chair is double-booked, or it is outside the hours cal.com
+              knows about. Offered only when that is what happened. */}
+          {canForce && (
             <button
               type="button"
-              onClick={onDelete}
+              onClick={onForce}
               disabled={pending}
-              className={buttonClass("danger", "md")}
+              className="mt-2 rounded-lg px-2 py-1 font-medium text-amber-900 underline underline-offset-2 dark:text-amber-200"
             >
-              {t("appointments.cancelAppointment")}
+              {t("appointments.bookAnyway")}
             </button>
-          ) : (
-            <span />
           )}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-full px-4 py-2 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-            >
-              {t("common.cancel")}
-            </button>
-            {/* Google's Save: an accent pill, and the only filled control on
-                the card. Accent, not brand — Save is an action, and actions
-                are blue everywhere else in this app. */}
-            <button
-              type="button"
-              onClick={submit}
-              disabled={pending || customerIncomplete}
-              className="rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              {pending ? t("common.loading") : t("common.save")}
-            </button>
-          </div>
         </div>
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
-function XIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M18 6 6 18M6 6l12 12" />
-    </svg>
+      )}
+    </AnchoredSheet>
   );
 }

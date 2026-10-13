@@ -510,6 +510,20 @@ const dictionary = {
     en: "Cancel appointment",
     de: "Termin stornieren",
   },
+  // The bin's question in the booking sheet (Nudge c49864af). It names the
+  // rule by its own name in the Automations list, because that rule is what
+  // the customer receives.
+  "appointments.cancelConfirmTitle": {
+    tr: "Bu randevu iptal edilsin mi?",
+    en: "Cancel this appointment?",
+    de: "Diesen Termin stornieren?",
+  },
+  "appointments.cancelConfirmBody": {
+    tr: "İptal bildirimi açıksa müşteriye gönderilir.",
+    en: "If the cancellation notice is on, it goes to the customer.",
+    de: "Ist die Stornomitteilung aktiv, geht sie an den Kunden.",
+  },
+  "appointments.keep": { tr: "Kalsın", en: "Keep it", de: "Behalten" },
   "appointments.moveFailed": {
     tr: "Takvim bu değişikliği kabul etmedi, randevu eski yerinde kaldı.",
     en: "The calendar refused this change, so the appointment stayed where it was.",
@@ -4110,6 +4124,12 @@ const dictionary = {
     tr: "Kapalı saat",
     en: "Blocked time",
     de: "Schließzeit",
+  },
+  // The kind switch's accessible name: what the two tabs above choose between.
+  "calendar.kindLabel": {
+    tr: "Ne eklenecek",
+    en: "What to add",
+    de: "Was hinzufügen",
   },
   // The block sheet's recurrence chips: once on the drawn date, weekly on
   // chosen days, or daily (weekdays 0-6 under the hood — not a new row shape).

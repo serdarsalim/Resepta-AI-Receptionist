@@ -142,6 +142,10 @@
      literally did not exist there. var(--foreground) re-resolves under .dark,
      so one definition serves both modes. */
   --closed-bg: color-mix(in srgb, var(--foreground) 6%, transparent);
+  /* The calendar's popovers (AnchoredSheet), Google Calendar's way: a tinted
+     sheet a step darker than the white grid it floats over, so the fields
+     on it read as white wells (Nudge ac51b3c9, Serdar 2026-10-09). */
+  --sheet-bg: #eef2f7;
   /* WhatsApp's own bubble shadow, near enough: one hairline, no border. Ours
      carried a full 1px border AND Tailwind's shadow-sm, so every incoming
      bubble drew its edge twice and read heavier than anything around it. */
@@ -231,6 +235,8 @@
      its card (1.27 against 1.25). The old --border mix was the same colour as
      the closed-hours shading, so every rule vanished across closed time. */
   --grid-line: #2e2e2e;
+  /* Lifted off the near-black card rather than sunk into it. */
+  --sheet-bg: #202124;
   --bubble-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.4);
   --thread-bg: #101010;
   --scrollbar-thumb: rgba(255, 255, 255, 0.16);
