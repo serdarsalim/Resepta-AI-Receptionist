@@ -11,6 +11,7 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import { formatAge, formatDateTime, formatDay } from "@/lib/datetime";
 import { CheckSwitch } from "./CheckSwitch";
 import { useConfirm } from "./ConfirmDialog";
+import { buttonClass } from "./Control";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
 import { FeedFilterPills } from "./FeedFilterPills";
 import { DEFAULT_CURRENCY, formatMoney } from "@/lib/money";
@@ -824,10 +825,12 @@ function CustomerAppointments({
             is indistinguishable from the "show history" toggle directly below
             it — which is a disclosure, not an action. Blue belongs to the
             toggles here; a box belongs to the actions. Nudge's + Add deal. */}
+        {/* xs, the 28px the ⋯ beside it already is (RowMenu). It was 26px,
+            a height its padding happened to add up to. */}
         <button
           type="button"
           onClick={onAdd}
-          className="shrink-0 rounded-md border border-[var(--border)] px-2.5 py-1 text-xs font-medium transition-colors hover:bg-[var(--row-hover-bg)]"
+          className={buttonClass("outline", "xs")}
         >
           + {t("appointments.addForCustomer")}
         </button>

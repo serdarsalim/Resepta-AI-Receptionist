@@ -22,6 +22,7 @@ import { usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { InfoTip } from "@/components/InfoTip";
+import { buttonClass, fieldClass } from "@/components/Control";
 import type { Search } from "@/lib/useTableState";
 
 // The console's plane, and the reason /admin now looks like the product it
@@ -600,7 +601,7 @@ export function Row({
           key or a domain genuinely needs it. */}
       <div className="min-w-0">
         {money ? (
-          <div className="inline-flex w-28 items-center rounded-lg border border-[var(--border)] px-2 py-1 focus-within:border-[var(--muted-strong)]">
+          <div className={`${fieldClass("sm")} inline-flex w-28 items-center focus-within:border-[var(--muted-strong)]`}>
             <span className="shrink-0 pr-1 text-sm text-[var(--muted)]">$</span>
             <input
               value={draft ?? current ?? ""}
@@ -617,7 +618,7 @@ export function Row({
             onChange={(e) => type(e.target.value)}
             onBlur={save}
             placeholder={placeholder}
-            className="w-full rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 text-sm"
+            className={`${fieldClass("sm")} w-full`}
           />
         )}
         <FieldError message={error} />
@@ -657,7 +658,7 @@ export function PercentRow({
         <InfoTip text={hint} />
       </div>
       <div className="min-w-0">
-        <div className="inline-flex w-28 items-center rounded-lg border border-[var(--border)] px-2 py-1 focus-within:border-[var(--muted-strong)]">
+        <div className={`${fieldClass("sm")} inline-flex w-28 items-center focus-within:border-[var(--muted-strong)]`}>
           <input
             value={draft ?? current}
             onChange={(e) => setDraft(e.target.value)}
@@ -750,7 +751,7 @@ export function ModelRow({
           }}
           placeholder={placeholder}
           autoComplete="off"
-          className="w-full rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 font-mono text-sm"
+          className={`${fieldClass("sm")} w-full font-mono`}
         />
         {open && matches.length > 0 && (
           <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg">
@@ -871,7 +872,7 @@ export function KeyModelRow({
             }}
             placeholder={masked ?? undefined}
             aria-label={`${label} API key`}
-            className="w-full min-w-0 rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 font-mono text-sm"
+            className={`${fieldClass("sm")} w-full min-w-0 font-mono`}
           />
           <FieldError message={keyError} />
         </div>
@@ -905,7 +906,7 @@ export function KeyModelRow({
             placeholder={modelPlaceholder}
             autoComplete="off"
             aria-label={`${label} model`}
-            className="w-full rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 font-mono text-sm"
+            className={`${fieldClass("sm")} w-full font-mono`}
           />
           {open && matches.length > 0 && (
             <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg">
@@ -939,17 +940,22 @@ export function KeyModelRow({
             the label column it wrapped "Anthropic (Claude)" in two). A fixed
             width keeps both rows' pills in one column, and keeps the inputs
             the same width whichever row is the default. */}
+        {/* h-8, the 32px of the two fields beside it (Control.tsx): the
+            pair was 22px and floated mid-row next to them. Still a pill, the
+            shape of a state you pick, and still text-xs so "set default"
+            fits the fixed column. Top-aligned like the fields, so a field
+            error under them no longer drags the pill down to its middle. */}
         {onMakeDefault !== undefined && (
-          <span className="flex w-20 shrink-0 justify-start self-center">
+          <span className="flex w-20 shrink-0 justify-start">
             {isDefault ? (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+              <span className="inline-flex h-8 items-center rounded-full bg-amber-100 px-2 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
                 default
               </span>
             ) : (
               <button
                 type="button"
                 onClick={() => void onMakeDefault()}
-                className="whitespace-nowrap rounded-full border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                className="inline-flex h-8 items-center whitespace-nowrap rounded-full border border-[var(--border)] px-2 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--control-hover)] hover:text-[var(--foreground)]"
               >
                 set default
               </button>
@@ -1024,13 +1030,13 @@ export function SecretRow({
               });
             }}
             placeholder={masked ?? undefined}
-            className="w-full min-w-0 rounded-lg border border-[var(--border)] bg-transparent px-2 py-1 font-mono text-sm"
+            className={`${fieldClass("sm")} w-full min-w-0 font-mono`}
           />
           {onClear && masked && (
             <button
               type="button"
               onClick={() => void clearField.commit("")}
-              className="shrink-0 rounded-lg border border-[var(--border)] px-2 py-1 text-xs font-medium text-[var(--muted-strong)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+              className={buttonClass("quiet", "sm")}
             >
               {clearLabel}
             </button>
