@@ -1439,6 +1439,12 @@ export default defineSchema({
     // two facts lived in unrelated tables and the UI showed them as two lists
     // that both called themselves "Ekip".
     userId: v.optional(v.id("users")),
+    // Their colour on the calendar, a key of lib/staffColors.ts, picked on
+    // the Team card or the calendar's side panel. Unset is the norm: it is
+    // RESOLVED among this business's own staff (the first palette colour
+    // nobody here has, oldest row first), never stored, so no backfill and no
+    // repaint when someone joins. Chosen colours are unique per business.
+    color: v.optional(v.string()),
   }).index("by_org", ["orgId"]),
 
   // Time the business is shut INSIDE its own opening hours. Two kinds of thing

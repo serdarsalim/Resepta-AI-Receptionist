@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
+import { loadStaffColors } from "./lib/staffColors";
 import { isDemo } from "./demo";
 import { requireUser } from "./lib/orgAuth";
 import { recordActivity } from "./lib/activity";
@@ -89,6 +90,10 @@ export const roster = query({
       name: v.string(),
       staffId: v.optional(v.id("staff")),
       active: v.optional(v.boolean()),
+      // A bookable person's RESOLVED calendar colour (lib/staffColors.ts),
+      // the dot before their name. Absent on a login with no staff row: they
+      // are never on the calendar, so they have nothing to be told apart by.
+      color: v.optional(v.string()),
       // Whether removing this person would leave appointments with no name on
       // them. Reported rather than enforced, so the confirmation can say what
       // it costs instead of the mutation refusing after the fact.
@@ -113,6 +118,7 @@ export const roster = query({
         .withIndex("by_org", (q) => q.eq("orgId", orgId))
         .collect()
     ).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+    const colors = await loadStaffColors(ctx, orgId);
 
     const rows = [];
     const linked = new Set<string>();
@@ -136,6 +142,7 @@ export const roster = query({
         name: staff.name,
         staffId: staff._id,
         active: staff.active,
+        color: colors.get(staff._id),
         hasAppointments: booked !== null,
         userId: membership ? membership.userId : undefined,
         email: account?.email,
@@ -153,6 +160,7 @@ export const roster = query({
         name: account.name ?? account.email ?? "",
         staffId: undefined,
         active: undefined,
+        color: undefined,
         hasAppointments: undefined,
         userId: membership.userId,
         email: account.email,

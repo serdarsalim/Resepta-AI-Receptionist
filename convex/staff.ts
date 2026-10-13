@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
+import { isStaffColorKey, loadStaffColors } from "./lib/staffColors";
 
 // Who delivers the appointment. Replaces the free-text appointments.staffName:
 // the week view groups its columns on that value, so a trailing space made a
@@ -12,6 +13,9 @@ const staffRow = v.object({
   name: v.string(),
   active: v.boolean(),
   order: v.number(),
+  // The RESOLVED colour key (lib/staffColors.ts), never absent: what the
+  // calendar draws this person's bookings in, chosen or not.
+  color: v.string(),
 });
 
 export const list = query({
@@ -23,6 +27,7 @@ export const list = query({
       .query("staff")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .collect();
+    const colors = await loadStaffColors(ctx, orgId);
     return rows
       .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
       .map((row) => ({
@@ -30,6 +35,7 @@ export const list = query({
         name: row.name,
         active: row.active,
         order: row.order,
+        color: colors.get(row._id) ?? "lavender",
       }));
   },
 });
@@ -72,6 +78,34 @@ export const rename = mutation({
     // which is the reason this table exists.
     if (name) await ctx.db.patch(args.staffId, { name });
     return null;
+  },
+});
+
+// A person's calendar colour, from the dot before their name on the Team card
+// or the calendar's side panel. Owner-only, like every other edit to a person.
+// A colour somebody else in this business holds, chosen or resolved, is
+// refused: telling two people's bookings apart is the colour's only job, and
+// the picker already greys those out, so this is the backstop for a stale
+// screen. A refusal is returned, not thrown, so the picker can say which.
+export const setColor = mutation({
+  args: { staffId: v.id("staff"), color: v.string() },
+  returns: v.union(
+    v.object({ ok: v.literal(true) }),
+    v.object({ ok: v.literal(false), code: v.union(v.literal("bad-color"), v.literal("color-taken")) }),
+  ),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOwner(ctx);
+    const row = await ctx.db.get(args.staffId);
+    if (!row || row.orgId !== orgId) throw new Error("not-found");
+    if (!isStaffColorKey(args.color)) return { ok: false as const, code: "bad-color" as const };
+    const colors = await loadStaffColors(ctx, orgId);
+    for (const [other, key] of colors) {
+      if (other !== args.staffId && key === args.color) {
+        return { ok: false as const, code: "color-taken" as const };
+      }
+    }
+    await ctx.db.patch(args.staffId, { color: args.color });
+    return { ok: true as const };
   },
 });
 

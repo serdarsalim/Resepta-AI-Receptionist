@@ -88,6 +88,7 @@ import type * as lib_renderTokens from "../lib/renderTokens.js";
 import type * as lib_richText from "../lib/richText.js";
 import type * as lib_sendFailure from "../lib/sendFailure.js";
 import type * as lib_speech from "../lib/speech.js";
+import type * as lib_staffColors from "../lib/staffColors.js";
 import type * as lib_templateTexts from "../lib/templateTexts.js";
 import type * as lib_thread from "../lib/thread.js";
 import type * as lib_txBudget from "../lib/txBudget.js";
@@ -222,6 +223,7 @@ declare const fullApi: ApiFromModules<{
   "lib/richText": typeof lib_richText;
   "lib/sendFailure": typeof lib_sendFailure;
   "lib/speech": typeof lib_speech;
+  "lib/staffColors": typeof lib_staffColors;
   "lib/templateTexts": typeof lib_templateTexts;
   "lib/thread": typeof lib_thread;
   "lib/txBudget": typeof lib_txBudget;
