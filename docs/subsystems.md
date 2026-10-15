@@ -43,6 +43,11 @@ wins. Moved out of AGENTS.md on 2026-09-03, text as it stood then.
   processing and Meta callback stay in place; both apps can send independently.
   Enabling a second automatic assistant is a separate configuration decision.
   Current route: Autotakt `+90 224 322 05 71` → Takt (`abundant-eel-649`).
+  An additional route copies `+43 5372 23555` (phone `1324083350787919`, WABA
+  `2227815671344503`) to Takt too. Its Meta phone registration is still pending
+  with an expired verification code as of 2026-10-15. It has no `waAccounts`
+  row in Resepta: this is forwarding through the platform app, not a claim that
+  an appointment workspace there has the Austrian number assigned.
 - **Attachments, both directions (2026-08-26).** Meta hangs every media type
   under a key named after `message.type` with the SAME shape — `{ id, mime_type,
   caption?, filename? }` — so `webhook.ts` reads it generically rather than
