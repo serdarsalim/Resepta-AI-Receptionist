@@ -40,6 +40,7 @@ import { queueOrgAlert } from "./lib/alerts";
 import { formatAppointmentTime } from "./lib/format";
 import { minNoticeHoursOf, minNoticeMs, noticeSpan } from "./lib/minNotice";
 import { languageFromAcceptHeader, unsubscribePage } from "./lib/unsubscribePage";
+import { payloadForMirror, webhookMirrors } from "./lib/waWebhookMirrors";
 import {
   NEAREST_FREE_NOTE,
   REPEAT_WINDOW_MS,
@@ -103,6 +104,23 @@ http.route({
       payload = JSON.parse(rawBody);
     } catch {
       return new Response("ok", { status: 200 });
+    }
+    // Preserve this app's existing receiver and processing. Copies are opt-in
+    // per number, signature-verified above, and durable before Meta gets 200.
+    try {
+      for (const mirror of webhookMirrors(process.env.WA_WEBHOOK_MIRRORS)) {
+        const copy = payloadForMirror(payload, mirror);
+        if (copy) await ctx.scheduler.runAfter(0, internal.webhook.deliverMirror, {
+          phoneNumberId: mirror.phoneNumberId,
+          wabaId: mirror.wabaId,
+          url: mirror.url,
+          body: JSON.stringify(copy),
+          attempt: 0,
+        });
+      }
+    } catch (err) {
+      console.error("whatsapp mirror enqueue failed", err);
+      return new Response("retry", { status: 503 });
     }
     try {
       await ctx.runMutation(internal.webhook.handleWhatsappEvent, { payload });

@@ -163,6 +163,9 @@ style issue.
   rules send on — email-only skips the WhatsApp attempt including its failure
   rows, and logs visible failures when the email half is missing instead
   (`email-not-configured`, `no-email-address`).
+- **A number shared with Nudge keeps Resepta's Meta callback.** Only explicit
+  `WA_WEBHOOK_MIRRORS` routes copy its scoped events, signed and retried; never
+  forward another business's batch. See `docs/subsystems.md` → Message model.
 
 ## Delivery is a queue, not a fire-and-forget
 

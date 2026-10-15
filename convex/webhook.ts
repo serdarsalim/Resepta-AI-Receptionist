@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, type MutationCtx } from "./_generated/server";
+import { internalAction, internalMutation, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { applyWamidStatus, logInboundRow } from "./messages";
@@ -10,6 +10,8 @@ import { queueOrgAlert } from "./lib/alerts";
 import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recordCustomerCreated } from "./lib/newCustomer";
+import { hmacSha256Hex } from "./lib/metaSig";
+import { webhookMirrors } from "./lib/waWebhookMirrors";
 import {
   agentAnswersCustomer,
   agentGenerates,
@@ -21,6 +23,47 @@ import {
 // not Meta's rule over there, but the same customer-facing fact: nobody wants
 // the identical bot reply twice in one evening.
 export const SESSION_WINDOW_MS = 24 * 3600_000;
+
+// Both apps deduplicate Meta message IDs, so a failed/ambiguous delivery can
+// safely retry. Re-read the route every time: removing it stops queued copies.
+export const deliverMirror = internalAction({
+  args: {
+    phoneNumberId: v.string(), wabaId: v.string(), url: v.string(),
+    body: v.string(), attempt: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const enabled = webhookMirrors(process.env.WA_WEBHOOK_MIRRORS).some((route) =>
+      route.phoneNumberId === args.phoneNumberId && route.wabaId === args.wabaId && route.url === args.url);
+    if (!enabled) return null;
+    const secret = process.env.WA_APP_SECRET;
+    if (!secret) throw new Error("wa-app-secret-unset");
+    let failure = "network";
+    try {
+      const response = await fetch(args.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Hub-Signature-256": `sha256=${await hmacSha256Hex(secret, args.body)}`,
+        },
+        body: args.body,
+        redirect: "error",
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (response.ok) return null;
+      failure = `http-${response.status}`;
+    } catch {
+      // Never log the payload or customer details.
+    }
+    const delays = [10_000, 60_000, 300_000, 900_000, 3600_000, 10800_000];
+    if (args.attempt >= delays.length) throw new Error(`wa-webhook-mirror-exhausted:${failure}`);
+    console.warn(`whatsapp mirror retry ${args.attempt + 1}: ${failure}`);
+    await ctx.scheduler.runAfter(delays[args.attempt], internal.webhook.deliverMirror, {
+      ...args, attempt: args.attempt + 1,
+    });
+    return null;
+  },
+});
 
 // Bare-text fallbacks. Button taps are the primary path; these cover a customer
 // who types instead of tapping.

@@ -106,6 +106,7 @@ import type * as lib_voiceVariables from "../lib/voiceVariables.js";
 import type * as lib_waCloud from "../lib/waCloud.js";
 import type * as lib_waLane from "../lib/waLane.js";
 import type * as lib_waPricing from "../lib/waPricing.js";
+import type * as lib_waWebhookMirrors from "../lib/waWebhookMirrors.js";
 import type * as mcp from "../mcp.js";
 import type * as mcpKeys from "../mcpKeys.js";
 import type * as media from "../media.js";
@@ -243,6 +244,7 @@ declare const fullApi: ApiFromModules<{
   "lib/waCloud": typeof lib_waCloud;
   "lib/waLane": typeof lib_waLane;
   "lib/waPricing": typeof lib_waPricing;
+  "lib/waWebhookMirrors": typeof lib_waWebhookMirrors;
   mcp: typeof mcp;
   mcpKeys: typeof mcpKeys;
   media: typeof media;

@@ -33,6 +33,16 @@ wins. Moved out of AGENTS.md on 2026-09-03, text as it stood then.
   a row in the SAME org already holds the message's wamid. Before that every
   retry was a second bubble, a second staff alert and a second agent turn.
   `by_wamid` spans all orgs, so the org is matched in code.
+- **A number may also receive in Nudge (2026-10-15).** Operator env
+  `WA_WEBHOOK_MIRRORS` is an optional JSON array of `{phoneNumberId,wabaId,url}`.
+  After signature verification, `/whatsapp/webhook` durably schedules a copy
+  containing only the matched number's messages/statuses and its WABA's
+  template review events. Other businesses' entries never cross over. The copy
+  is signed with the existing app secret and retries failures at 10s, 1m, 5m,
+  15m, 1h and 3h. Removing a route also stops its queued retries. Resepta's
+  processing and Meta callback stay in place; both apps can send independently.
+  Enabling a second automatic assistant is a separate configuration decision.
+  Current route: Autotakt `+90 224 322 05 71` → Takt (`abundant-eel-649`).
 - **Attachments, both directions (2026-08-26).** Meta hangs every media type
   under a key named after `message.type` with the SAME shape — `{ id, mime_type,
   caption?, filename? }` — so `webhook.ts` reads it generically rather than
