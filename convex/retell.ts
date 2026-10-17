@@ -917,6 +917,7 @@ export const agentEditorContext = internalQuery({
       templateVersion: agent.templateVersion ?? null,
       personaName: agent.personaName ?? null,
       canEndCall: agent.canEndCall ?? true,
+      voicemail: agent.voicemail ?? null,
       llmModel: agent.llmModel ?? null,
       llmHighPriority: agent.llmHighPriority ?? null,
       platformVoiceModel: resolvePlatformVoiceModel(await platformValue(ctx, "voiceModel")),
@@ -938,6 +939,39 @@ export const agentEditorContext = internalQuery({
         previous: agent.boostedKeywords ?? null,
       },
     };
+  },
+});
+
+// The voicemail choice the agent page just published, recorded only after the
+// provider accepted it (the markBoostedKeywords contract), so syncTemplate
+// re-applies what the agent is really carrying.
+export const setAgentVoicemail = internalMutation({
+  args: {
+    retellAgentId: v.string(),
+    voicemail: v.object({
+      action: v.union(
+        v.literal("off"),
+        v.literal("hangup"),
+        v.literal("static_text"),
+        v.literal("prompt"),
+      ),
+      text: v.optional(v.string()),
+    }),
+  },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId, voicemail }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent) return null;
+    await ctx.db.patch(agent._id, {
+      voicemail: {
+        action: voicemail.action,
+        ...(voicemail.text?.trim() ? { text: voicemail.text.trim() } : {}),
+      },
+    });
+    return null;
   },
 });
 

@@ -857,6 +857,23 @@ export default defineSchema({
     // not hand the tool back to a salon that turned it off, but the tool
     // ITSELF lives at the provider — see setEndCallEnabled.
     canEndCall: v.optional(v.boolean()),
+    // What the agent does when a call it placed reaches an answering machine,
+    // as chosen on the agent page (P7, 2026-10-17): hang up, leave the exact
+    // words, leave a message from instructions, or not detect it at all.
+    // Unset means the template's hang-up. Written only after the provider
+    // accepted the publish, and read back by syncTemplate so the update
+    // banner never puts hang-up back over a message the business chose.
+    voicemail: v.optional(
+      v.object({
+        action: v.union(
+          v.literal("off"),
+          v.literal("hangup"),
+          v.literal("static_text"),
+          v.literal("prompt"),
+        ),
+        text: v.optional(v.string()),
+      }),
+    ),
     // Operator's per-agent model override, one of lib/voiceModels. Unset means
     // the platform default (the template's model), which is what every agent
     // starts as — so the common case stays one string in code rather than a

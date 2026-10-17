@@ -33,6 +33,15 @@ import {
   type VoiceAgentLanguage,
 } from "./lib/voiceAgentTemplate";
 import { mergeBoostedKeywords } from "./lib/boostedKeywords";
+import {
+  deleteDraftVersion,
+  draftVersionFor,
+  latestFromDoc,
+  listAgentVersions,
+  llmPath,
+  publishedVersionOf,
+} from "./lib/retellDraft";
+import { publishVersionBody, versionNoteValidator, type VersionNote } from "./lib/versionNote";
 
 const API = "https://api.retellai.com";
 
@@ -121,6 +130,8 @@ type EditorContext = {
   templateVersion: number | null;
   personaName: string | null;
   canEndCall: boolean;
+  // The voicemail choice made on the agent page; null = the template's.
+  voicemail: VoicemailChoice | null;
   llmModel: string | null;
   llmHighPriority: boolean | null;
   // The fleet defaults, already validated by agentEditorContext. Each sits
@@ -482,7 +493,7 @@ export const read = action({
     let llm: LlmDoc | null = null;
     if (engine.type === "retell-llm" && engine.llm_id) {
       llm = (await (
-        await call(key, "GET", `get-retell-llm/${encodeURIComponent(engine.llm_id)}`)
+        await call(key, "GET", llmPath(engine.llm_id, engine.version))
       ).json()) as LlmDoc;
     }
 
@@ -496,6 +507,19 @@ export const read = action({
       agentId: agent.agent_id,
       name: agent.agent_name ?? agentId,
       version: agent.version ?? null,
+      // The latest version is a draft when the provider says it is not
+      // published: a publish that stopped half way, a staged test, an edit in
+      // the provider's console. The page offers to publish or discard it.
+      isDraft: agent.is_published === false,
+      // What callers hear while a draft sits above it. Only looked up when
+      // there is a draft; otherwise it is `version`.
+      liveVersion:
+        agent.is_published === false
+          ? await publishedVersionOf(retellCaller(key), agentId, latestFromDoc(agent)).catch(
+              () => null,
+            )
+          : (agent.version ?? null),
+      voicemail: voicemailChoiceOf(agent),
       voiceId: agent.voice_id ?? null,
       voices,
       language: agent.language ?? null,
@@ -583,64 +607,257 @@ export const read = action({
 // A published LLM refuses a bare PATCH ("Cannot update published LLM", 400),
 // exactly as a published agent refuses one with 422. LLM versions mirror the
 // agent's and cannot be created on their own — there is no
-// create-retell-llm-version — so the only writable draft comes from the agent
-// side: clone the agent, read the LLM version THAT draft points at, patch that
-// version, publish the draft.
+// create-retell-llm-version — so the only writable copy comes from the agent
+// side: the agent's draft (lib/retellDraft), the LLM version THAT draft points
+// at, patch both, publish the draft.
 //
 // Learned the hard way in Nudge: patching the LLM directly works exactly once
 // per agent, while it is still a draft, and silently breaks forever after the
 // first publish.
-async function publishViaDraft(
-  key: string,
+//
+// ONE core for every edit the agent page makes (P7 of the Nudge port,
+// 2026-10-17). The page used to publish its variables and then its prompt as
+// two separate versions, so one Publish left two entries in the history and a
+// window where a caller heard the new variables with the old script. Now the
+// page sends the whole edit set once: everything lands on one draft, the
+// draft goes live as ONE version with ONE note, and the mirrors Resepta keeps
+// (the prompt the chat lane composes over, the variables registry, the
+// recogniser's words, the voicemail choice) are written only after the
+// provider accepted the publish. The prompt and variables doors below, the
+// office MCP's among them, are thin wrappers over it.
+
+type RetellCallFn = (method: string, path: string, body?: unknown) => Promise<Response>;
+
+function retellCaller(key: string): RetellCallFn {
+  return (method, path, body) => call(key, method, path, body);
+}
+
+// What a missed call's answering machine gets. "off" sends an explicit null:
+// the presence of voicemail_option is what arms detection, so omitting the key
+// would change nothing and the switch would appear to work while doing so.
+const voicemailChoice = v.object({
+  action: v.union(
+    v.literal("off"),
+    v.literal("hangup"),
+    v.literal("static_text"),
+    v.literal("prompt"),
+  ),
+  // The exact words (static_text) or the instructions (prompt). Unused for
+  // hangup and off.
+  text: v.optional(v.string()),
+});
+
+type VoicemailChoice = {
+  action: "off" | "hangup" | "static_text" | "prompt";
+  text?: string;
+};
+
+// The provider's voicemail_option for a choice, keeping any detection_prompt
+// the live agent carries: that definition of what COUNTS as voicemail can only
+// be written in the provider's dashboard, and a PATCH that omits it drops it.
+function voicemailOptionFor(
+  choice: VoicemailChoice,
+  live: AgentDoc,
+): AgentDoc["voicemail_option"] {
+  if (choice.action === "off") return null;
+  let action: { type: string; text?: string };
+  if (choice.action === "hangup") {
+    action = { type: "hangup" };
+  } else {
+    // An empty message is worse than none: the agent answers the machine,
+    // says nothing, and the recording is silence. The page refuses it too.
+    const text = (choice.text ?? "").trim();
+    if (!text) throw new Error("voicemail-text-missing");
+    action = { type: choice.action, text };
+  }
+  const detection = live.voicemail_option?.detection_prompt;
+  return { action, ...(detection ? { detection_prompt: detection } : {}) };
+}
+
+// The live agent's voicemail_option read back as a choice. Absent and null
+// both mean detection is off.
+function voicemailChoiceOf(live: AgentDoc): VoicemailChoice {
+  const type = live.voicemail_option?.action?.type;
+  if (!live.voicemail_option || !type) return { action: "off" };
+  if (type === "static_text" || type === "prompt") {
+    return { action: type, text: live.voicemail_option.action?.text ?? "" };
+  }
+  return { action: "hangup" };
+}
+
+type AgentEdits = {
+  generalPrompt?: string;
+  beginMessage?: string;
+  // Omitted means "leave the voice alone".
+  voiceId?: string;
+  variables?: VariableRow[];
+  voicemail?: VoicemailChoice;
+  // The version the editor read. A different latest version means somebody
+  // changed the agent in the meantime, and publishing over it would undo them.
+  baseVersion?: number;
+};
+
+type AppliedEdits = {
+  version: number;
+  // False only for a stage: the draft holds the edits and nothing is live.
+  published: boolean;
+  previousPrompt: string;
+};
+
+async function applyAgentEdits(
+  ctx: ActionCtx,
+  context: EditorContext,
   agentId: string,
-  llmId: string,
-  patch: Record<string, unknown>,
-  // Fields that live on the AGENT doc rather than the LLM — voice is the one
-  // that matters here. Folded into the same draft so "how it speaks" and "what
-  // it says" land as ONE published version: two writes would mean a window
-  // where a caller hears the new voice reading the old script.
-  agentPatch?: Record<string, unknown>,
-  // The recogniser's words (keywordPatch), merged against this same live
-  // read so they land in the same version as the prompt.
-  keywords?: KeywordPlan,
-): Promise<{ version: number | null; keywords: string[] | null }> {
+  edits: AgentEdits,
+  opts: {
+    // Write on the draft and stop: nothing goes live, no mirror moves. The
+    // browser test (P8) dials what this leaves behind.
+    stage?: boolean;
+    note?: VersionNote;
+  } = {},
+): Promise<AppliedEdits> {
+  const key = context.apiKey!;
   const id = encodeURIComponent(agentId);
+  const rc = retellCaller(key);
   const live = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
-  if (live.version === undefined) throw new Error("Agent has no version to clone.");
-  const boosted = keywords ? keywordPatch(live, keywords) : { patch: {}, ours: null };
+  if (edits.baseVersion !== undefined && live.version !== edits.baseVersion) {
+    throw new Error("This agent changed in Retell. Refresh before publishing.");
+  }
+  const latest = latestFromDoc(live);
+  const engine = live.response_engine ?? {};
+  const llmId = engine.type === "retell-llm" ? engine.llm_id : undefined;
+  const wantsPrompt = edits.generalPrompt !== undefined || edits.beginMessage !== undefined;
+  if (wantsPrompt && !llmId) throw new Error("This agent has no editable prompt.");
+  const liveLlm = llmId
+    ? ((await (await call(key, "GET", llmPath(llmId, engine.version))).json()) as LlmDoc)
+    : null;
 
-  const draft = (await (
-    await call(key, "POST", `create-agent-version/${id}`, { base_version: live.version })
-  ).json()) as { version?: number };
-  if (draft.version === undefined) throw new Error("Retell returned no draft version.");
+  const llmPatch: Record<string, unknown> = {};
+  const agentPatch: Record<string, unknown> = {};
+  let nextVariables: VariableRow[] | null = null;
+  if (wantsPrompt) {
+    if (edits.generalPrompt !== undefined) llmPatch.general_prompt = edits.generalPrompt;
+    if (edits.beginMessage !== undefined) llmPatch.begin_message = edits.beginMessage;
+    llmPatch.general_tools = withRuntimeSaveTool(liveLlm?.general_tools);
+  }
+  if (edits.variables) {
+    const plan = planVariables(context, edits.variables, live, liveLlm);
+    if (llmId) {
+      llmPatch.default_dynamic_variables = plan.defaultDynamicVariables;
+      // The variables' tool list already starts from the live tools and keeps
+      // the runtime save tool, so it supersedes the prompt's copy above.
+      llmPatch.general_tools = plan.generalTools;
+    }
+    agentPatch.post_call_analysis_data = plan.postCallAnalysis;
+    nextVariables = plan.next;
+  }
+  if (Object.keys(llmPatch).length > 0) {
+    llmPatch.mcps = await runtimeMcpConfig(ctx, agentId, context, liveLlm ?? {});
+  }
+  if (edits.voiceId?.trim()) agentPatch.voice_id = edits.voiceId.trim();
+  if (edits.voicemail) agentPatch.voicemail_option = voicemailOptionFor(edits.voicemail, live);
+  // The recogniser's words (keywordPatch), merged against this same live read
+  // so they land in the same version as the prompt.
+  const boosted = keywordPatch(live, context.keywords);
+  Object.assign(agentPatch, boosted.patch);
 
-  const draftAgent = (await (
-    await call(key, "GET", `get-agent/${id}?version=${draft.version}`)
-  ).json()) as AgentDoc;
-  const llmVersion = draftAgent.response_engine?.version;
-
-  await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
-    ...(llmVersion !== undefined ? { version: llmVersion } : {}),
-    ...patch,
-  });
-  const agentFields = { ...(agentPatch ?? {}), ...boosted.patch };
-  if (Object.keys(agentFields).length > 0) {
-    await call(key, "PATCH", `update-agent/${id}`, {
-      version: draft.version,
-      ...agentFields,
+  const draft = await draftVersionFor(rc, agentId, latest);
+  if (llmId && Object.keys(llmPatch).length > 0) {
+    // Which LLM version the DRAFT points at, read from the draft rather than
+    // assumed to equal the live agent's.
+    const draftAgent = (await (
+      await call(key, "GET", `get-agent/${id}?version=${draft.version}`)
+    ).json()) as AgentDoc;
+    const llmVersion = draftAgent.response_engine?.version;
+    await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
+      ...(llmVersion !== undefined ? { version: llmVersion } : {}),
+      ...llmPatch,
     });
   }
-  await call(key, "POST", `publish-agent-version/${id}`, { version: draft.version });
-  return { version: draft.version, keywords: boosted.ours };
+  if (Object.keys(agentPatch).length > 0) {
+    await call(key, "PATCH", `update-agent/${id}`, { version: draft.version, ...agentPatch });
+  }
+  const previousPrompt = liveLlm?.general_prompt ?? "";
+  if (opts.stage) return { version: draft.version, published: false, previousPrompt };
+
+  await call(
+    key,
+    "POST",
+    `publish-agent-version/${id}`,
+    publishVersionBody(draft.version, opts.note),
+  );
+
+  // Mirrors, each only after the publish it describes succeeded.
+  if (llmId && Object.keys(llmPatch).length > 0 && siteUrl()) {
+    await ctx.runMutation(internal.retell.markRuntimeConnected, { retellAgentId: agentId });
+  }
+  if (edits.generalPrompt !== undefined) {
+    // The chat lane reads its copy of this text on every turn — see the
+    // mirror's schema note on retellAgents.generalPrompt.
+    await ctx.runMutation(internal.retell.stampPromptMirror, {
+      retellAgentId: agentId,
+      generalPrompt: edits.generalPrompt,
+      promptVersion: draft.version,
+    });
+  }
+  if (nextVariables) {
+    await ctx.runMutation(internal.retell.replaceAgentVariables, {
+      retellAgentId: agentId,
+      retellVersion: draft.version,
+      variables: nextVariables,
+    });
+  }
+  if (edits.voicemail) {
+    // Read back by syncTemplate, so the update banner cannot put "hang up"
+    // back over a message the business chose to leave.
+    await ctx.runMutation(internal.retell.setAgentVoicemail, {
+      retellAgentId: agentId,
+      voicemail: edits.voicemail,
+    });
+  }
+  await stampKeywords(ctx, agentId, boosted.ours);
+  return { version: draft.version, published: true, previousPrompt };
 }
+
+// The page's one Publish: every edit it holds, as one version with one note.
+// `stage` is for the browser test, which dials the draft before anybody
+// publishes it.
+export const publishAgent = action({
+  args: {
+    agentId: v.string(),
+    baseVersion: v.optional(v.number()),
+    generalPrompt: v.optional(v.string()),
+    beginMessage: v.optional(v.string()),
+    voiceId: v.optional(v.string()),
+    variables: v.optional(v.array(voiceVariableInput)),
+    voicemail: v.optional(voicemailChoice),
+    versionNote: v.optional(versionNoteValidator),
+    stage: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    ok: v.boolean(),
+    version: v.number(),
+    published: v.boolean(),
+  }),
+  handler: async (
+    ctx,
+    { agentId, versionNote, stage, ...edits },
+  ): Promise<{ ok: boolean; version: number; published: boolean }> => {
+    const context = await editorContext(ctx, agentId);
+    const applied = await applyAgentEdits(ctx, context, agentId, edits, {
+      stage,
+      note: versionNote,
+    });
+    return { ok: true, version: applied.version, published: applied.published };
+  },
+});
 
 export const publishPrompt = action({
   args: {
     agentId: v.string(),
     generalPrompt: v.string(),
     beginMessage: v.optional(v.string()),
-    // Omitted means "leave the voice alone" — the undo path republishes an old
-    // prompt and must not drag a stale voice back with it.
+    // Omitted means "leave the voice alone".
     voiceId: v.optional(v.string()),
   },
   returns: v.object({
@@ -650,44 +867,153 @@ export const publishPrompt = action({
   }),
   handler: async (ctx, { agentId, generalPrompt, beginMessage, voiceId }) => {
     const context = await editorContext(ctx, agentId);
-    const key = context.apiKey!;
-    const agent = (await (
-      await call(key, "GET", `get-agent/${encodeURIComponent(agentId)}`)
-    ).json()) as AgentDoc;
-    const llmId = agent.response_engine?.llm_id;
-    if (!llmId) throw new Error("This agent has no editable prompt.");
-
-    const before = (await (
-      await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
-    ).json()) as LlmDoc;
-
-    const published = await publishViaDraft(key, agentId, llmId, {
-      general_prompt: generalPrompt,
-      ...(beginMessage !== undefined ? { begin_message: beginMessage } : {}),
-      mcps: await runtimeMcpConfig(ctx, agentId, context, before),
-      general_tools: withRuntimeSaveTool(before.general_tools),
-    },
-    voiceId?.trim() ? { voice_id: voiceId.trim() } : undefined,
-    context.keywords);
-    const version = published.version;
-    if (siteUrl()) {
-      await ctx.runMutation(internal.retell.markRuntimeConnected, {
-        retellAgentId: agentId,
-      });
-    }
-    // The chat lane reads its copy of this text on every turn — see the
-    // mirror's schema note on retellAgents.generalPrompt.
-    await ctx.runMutation(internal.retell.stampPromptMirror, {
-      retellAgentId: agentId,
+    const applied = await applyAgentEdits(ctx, context, agentId, {
       generalPrompt,
-      promptVersion: version,
+      beginMessage,
+      voiceId,
     });
-    await stampKeywords(ctx, agentId, published.keywords);
-    // Returned so the caller can offer "undo" without a second round trip. The
-    // LLM is patched in place, so there is no earlier version to point at.
-    return { ok: true, version, previousPrompt: before.general_prompt ?? "" };
+    return { ok: true, version: applied.version, previousPrompt: applied.previousPrompt };
   },
 });
+
+// A draft left on the provider (a staged browser test, a publish that failed
+// half way, an edit made in the provider's console) goes live as it stands.
+export const publishDraft = action({
+  args: { agentId: v.string(), versionNote: v.optional(versionNoteValidator) },
+  returns: v.object({ ok: v.boolean(), version: v.number() }),
+  handler: async (ctx, { agentId, versionNote }): Promise<{ ok: boolean; version: number }> => {
+    const context = await editorContext(ctx, agentId);
+    const key = context.apiKey!;
+    const id = encodeURIComponent(agentId);
+    const live = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
+    const latest = latestFromDoc(live);
+    if (latest.isPublished) throw new Error("nothing-to-publish");
+    await call(
+      key,
+      "POST",
+      `publish-agent-version/${id}`,
+      publishVersionBody(latest.version, versionNote),
+    );
+    // The chat lane's copy of the prompt follows what just went live. A
+    // failure here must not report the publish as failed: the script is live.
+    try {
+      const engine = live.response_engine ?? {};
+      if (engine.type === "retell-llm" && engine.llm_id) {
+        const llm = (await (
+          await call(key, "GET", llmPath(engine.llm_id, engine.version))
+        ).json()) as LlmDoc;
+        await ctx.runMutation(internal.retell.stampPromptMirror, {
+          retellAgentId: agentId,
+          generalPrompt: llm.general_prompt ?? "",
+          promptVersion: latest.version,
+        });
+      }
+    } catch (error) {
+      console.warn(`publish-draft-mirror-failed: ${String(error).slice(0, 200)}`);
+    }
+    return { ok: true, version: latest.version };
+  },
+});
+
+// Throw the draft away: delete the unpublished latest version, so the agent's
+// latest is its live version again. Refused on an agent that has never been
+// published: its only version IS the draft, and deleting it would delete the
+// agent's whole configuration.
+export const discardDraft = action({
+  args: { agentId: v.string() },
+  returns: v.object({ ok: v.boolean(), deleted: v.union(v.number(), v.null()) }),
+  handler: async (ctx, { agentId }): Promise<{ ok: boolean; deleted: number | null }> => {
+    const context = await editorContext(ctx, agentId);
+    const rc = retellCaller(context.apiKey!);
+    const live = (await (
+      await call(context.apiKey!, "GET", `get-agent/${encodeURIComponent(agentId)}`)
+    ).json()) as AgentDoc;
+    const latest = latestFromDoc(live);
+    if (latest.isPublished) return { ok: true, deleted: null };
+    if ((await publishedVersionOf(rc, agentId, latest)) === null) {
+      throw new Error("never-published");
+    }
+    await deleteDraftVersion(rc, agentId, latest.version);
+    return { ok: true, deleted: latest.version };
+  },
+});
+
+// The agent's own changelog, read from the provider on demand: small, opened
+// rarely, and a stored mirror would be wrong the moment somebody published
+// from the provider's console. Only this agent's versions, proven to be this
+// org's by editorContext; the account is shared and never listed.
+export const listVersions = action({
+  args: { agentId: v.string() },
+  returns: v.array(
+    v.object({
+      version: v.number(),
+      isPublished: v.boolean(),
+      title: v.union(v.string(), v.null()),
+      description: v.union(v.string(), v.null()),
+      modifiedAt: v.union(v.number(), v.null()),
+    }),
+  ),
+  handler: async (ctx, { agentId }) => {
+    const context = await editorContext(ctx, agentId);
+    const rows = await listAgentVersions(retellCaller(context.apiKey!), agentId);
+    return rows.map((row) => ({
+      version: row.version as number,
+      isPublished: row.is_published === true,
+      title: row.version_title?.trim() || null,
+      description: row.version_description?.trim() || null,
+      modifiedAt: row.last_modification_timestamp ?? null,
+    }));
+  },
+});
+
+// One earlier version's words, for Restore: the page loads them as unsaved
+// edits, and the person publishes them like any other change. Nothing here
+// writes; a restore that went live on click would be a publish nobody read.
+export const readVersion = action({
+  args: { agentId: v.string(), version: v.number() },
+  returns: v.object({
+    generalPrompt: v.union(v.string(), v.null()),
+    beginMessage: v.union(v.string(), v.null()),
+    voiceId: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, { agentId, version }) => {
+    const context = await editorContext(ctx, agentId);
+    const key = context.apiKey!;
+    const doc = (await (
+      await call(key, "GET", `get-agent/${encodeURIComponent(agentId)}?version=${version}`)
+    ).json()) as AgentDoc;
+    if (doc.agent_id !== agentId) throw new Error("no-such-agent");
+    const engine = doc.response_engine ?? {};
+    if (engine.type !== "retell-llm" || !engine.llm_id) {
+      return { generalPrompt: null, beginMessage: null, voiceId: doc.voice_id ?? null };
+    }
+    const llm = (await (
+      await call(key, "GET", llmPath(engine.llm_id, engine.version))
+    ).json()) as LlmDoc;
+    return {
+      generalPrompt: llm.general_prompt ?? "",
+      beginMessage: llm.begin_message ?? "",
+      voiceId: doc.voice_id ?? null,
+    };
+  },
+});
+
+// The version a dial should speak with: the newest PUBLISHED one, so an edit
+// sitting on a draft never talks to a customer. Null when it cannot be told,
+// and the caller dials unpinned then, as every call did before this: a
+// lookup failure must not stop a reminder call.
+async function liveVersionForDial(key: string, agentId: string): Promise<number | null> {
+  try {
+    const rc = retellCaller(key);
+    const doc = (await (
+      await call(key, "GET", `get-agent/${encodeURIComponent(agentId)}`)
+    ).json()) as AgentDoc;
+    return await publishedVersionOf(rc, agentId, latestFromDoc(doc));
+  } catch (error) {
+    console.warn(`dial-unpinned ${agentId}: ${String(error).slice(0, 160)}`);
+    return null;
+  }
+}
 
 // The sessionless doors for the prompt, same shape and same warning as
 // publishVariablesForOrg: editorContext TRUSTS the org it is handed and only
@@ -715,7 +1041,7 @@ export const readPromptForOrg = internalAction({
       };
     }
     const llm = (await (
-      await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
+      await call(key, "GET", llmPath(llmId, agent.response_engine?.version))
     ).json()) as LlmDoc;
     return {
       name: agent.agent_name ?? agentId,
@@ -749,44 +1075,11 @@ export const publishPromptForOrg = internalAction({
     { orgId, agentId, generalPrompt },
   ): Promise<{ ok: boolean; version: number | null; previousPrompt: string }> => {
     const context = await editorContext(ctx, agentId, orgId);
-    const key = context.apiKey!;
-    const agent = (await (
-      await call(key, "GET", `get-agent/${encodeURIComponent(agentId)}`)
-    ).json()) as AgentDoc;
-    const llmId = agent.response_engine?.llm_id;
-    if (!llmId) throw new Error("This agent has no editable prompt.");
-    const before = (await (
-      await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
-    ).json()) as LlmDoc;
-    // Same draft-then-publish every other agent edit rides, and the same
-    // deliberate omissions: no beginMessage and no voiceId, so publishing a
-    // prompt from a chat client cannot quietly drag the opening line or the
-    // voice along with it.
-    const published = await publishViaDraft(
-      key,
-      agentId,
-      llmId,
-      {
-        general_prompt: generalPrompt,
-        mcps: await runtimeMcpConfig(ctx, agentId, context, before),
-        general_tools: withRuntimeSaveTool(before.general_tools),
-      },
-      undefined,
-      context.keywords,
-    );
-    const version = published.version;
-    if (siteUrl()) {
-      await ctx.runMutation(internal.retell.markRuntimeConnected, {
-        retellAgentId: agentId,
-      });
-    }
-    await ctx.runMutation(internal.retell.stampPromptMirror, {
-      retellAgentId: agentId,
-      generalPrompt,
-      promptVersion: version,
-    });
-    await stampKeywords(ctx, agentId, published.keywords);
-    return { ok: true, version, previousPrompt: before.general_prompt ?? "" };
+    // The same core and the same deliberate omissions: no beginMessage and
+    // no voiceId, so publishing a prompt from a chat client cannot quietly
+    // drag the opening line or the voice along with it.
+    const applied = await applyAgentEdits(ctx, context, agentId, { generalPrompt });
+    return { ok: true, version: applied.version, previousPrompt: applied.previousPrompt };
   },
 });
 
@@ -996,22 +1289,21 @@ function deriveCaptureRows(context: EditorContext): VariableRow[] {
   return rows;
 }
 
-async function publishVariableSet(
-  ctx: ActionCtx,
-  {
-    agentId,
-    baseVersion,
-    variables,
-    orgId,
-  }: {
-    agentId: string;
-    baseVersion?: number;
-    variables: VariableRow[];
-    orgId?: Id<"orgs">;
-  },
-): Promise<{ ok: boolean; version: number | null }> {
-  const context = await editorContext(ctx, agentId, orgId);
-  const key = context.apiKey!;
+// The variables half of a publish, worked out from the live agent and LLM
+// without writing anything: which rows survive validation, and the LLM tools,
+// before-call fallbacks and post-call analysis they turn into. applyAgentEdits
+// writes the result onto the draft.
+function planVariables(
+  context: EditorContext,
+  variables: VariableRow[],
+  live: AgentDoc,
+  liveLlm: LlmDoc | null,
+): {
+  next: VariableRow[];
+  defaultDynamicVariables: Record<string, string>;
+  generalTools: Record<string, unknown>[];
+  postCallAnalysis: Record<string, unknown>[];
+} {
   // Input keeps only its CONTEXT rows (inject, capture nothing); the capture
   // set is derived from the org's fields, and a derived key beats an authored
   // one so the two can never disagree about one variable.
@@ -1027,12 +1319,6 @@ async function publishVariableSet(
     ),
     ...derived,
   ]);
-  const id = encodeURIComponent(agentId);
-  const live = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
-  if (baseVersion !== undefined && live.version !== baseVersion) {
-    throw new Error("This agent changed in Retell. Refresh before publishing.");
-  }
-
   const llmId = live.response_engine?.llm_id;
   const needsLlm = next.some(
     (variable) => variable.beforeSource !== "none" || variable.duringMode !== "none",
@@ -1040,11 +1326,6 @@ async function publishVariableSet(
   if (needsLlm && (live.response_engine?.type !== "retell-llm" || !llmId)) {
     throw new Error("Before-call and during-call variables require a Retell LLM agent.");
   }
-  const liveLlm = llmId
-    ? ((await (
-        await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
-      ).json()) as LlmDoc)
-    : null;
   const preservedTools = (liveLlm?.general_tools ?? []).filter(
     (tool) => tool.type !== "extract_dynamic_variable",
   );
@@ -1111,43 +1392,26 @@ async function publishVariableSet(
       }),
   ];
 
-  if (live.version === undefined) throw new Error("Agent has no version to clone.");
-  const draft = (await (
-    await call(key, "POST", `create-agent-version/${id}`, { base_version: live.version })
-  ).json()) as { version?: number };
-  if (draft.version === undefined) throw new Error("Retell returned no draft version.");
-  const draftAgent = (await (
-    await call(key, "GET", `get-agent/${id}?version=${draft.version}`)
-  ).json()) as AgentDoc;
+  return { next, defaultDynamicVariables, generalTools, postCallAnalysis };
+}
 
-  if (llmId) {
-    const llmVersion = draftAgent.response_engine?.version;
-    await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
-      ...(llmVersion !== undefined ? { version: llmVersion } : {}),
-      default_dynamic_variables: defaultDynamicVariables,
-      general_tools: generalTools,
-      mcps: await runtimeMcpConfig(ctx, agentId, context, liveLlm ?? {}),
-    });
-  }
-  const boosted = keywordPatch(live, context.keywords);
-  await call(key, "PATCH", `update-agent/${id}`, {
-    version: draft.version,
-    post_call_analysis_data: postCallAnalysis,
-    ...boosted.patch,
-  });
-  await call(key, "POST", `publish-agent-version/${id}`, { version: draft.version });
-  await ctx.runMutation(internal.retell.replaceAgentVariables, {
-    retellAgentId: agentId,
-    retellVersion: draft.version,
-    variables: next,
-  });
-  await stampKeywords(ctx, agentId, boosted.ours);
-  if (siteUrl()) {
-    await ctx.runMutation(internal.retell.markRuntimeConnected, {
-      retellAgentId: agentId,
-    });
-  }
-  return { ok: true, version: draft.version };
+async function publishVariableSet(
+  ctx: ActionCtx,
+  {
+    agentId,
+    baseVersion,
+    variables,
+    orgId,
+  }: {
+    agentId: string;
+    baseVersion?: number;
+    variables: VariableRow[];
+    orgId?: Id<"orgs">;
+  },
+): Promise<{ ok: boolean; version: number | null }> {
+  const context = await editorContext(ctx, agentId, orgId);
+  const applied = await applyAgentEdits(ctx, context, agentId, { variables, baseVersion });
+  return { ok: true, version: applied.version };
 }
 
 export const publishVariables = action({
@@ -1239,7 +1503,7 @@ async function wireAgent(
   const llmId = draftAgent.response_engine?.llm_id;
   if (llmId) {
     const liveLlm = (await (
-      await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
+      await call(key, "GET", llmPath(llmId, draftAgent.response_engine?.version))
     ).json()) as LlmDoc;
     const llmVersion = draftAgent.response_engine?.version;
     await call(key, "PATCH", `update-retell-llm/${encodeURIComponent(llmId)}`, {
@@ -1854,7 +2118,7 @@ export const syncTemplate = action({
     const llmId = draftAgent.response_engine?.llm_id;
     if (draftAgent.response_engine?.type === "retell-llm" && llmId) {
       const liveLlm = (await (
-        await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
+        await call(key, "GET", llmPath(llmId, draftAgent.response_engine?.version))
       ).json()) as LlmDoc;
       // The template's five function tools replace their live namesakes —
       // that is where speak_during_execution and the function URL live.
@@ -1918,12 +2182,19 @@ export const syncTemplate = action({
     // a definition somebody wrote by hand, with nothing to report the loss.
     // Same bargain as the analysis merge directly above: ours replaces ours,
     // theirs survives.
-    const voicemail = live.voicemail_option?.detection_prompt
-      ? {
-          ...templateVoicemail,
-          detection_prompt: live.voicemail_option.detection_prompt,
-        }
-      : templateVoicemail;
+    //
+    // And a choice the business made on its agent page (P7: leave a message,
+    // or turn detection off) beats the template's hang-up, the same contract
+    // canEndCall keeps: the update banner improves the engineering and never
+    // takes back a decision.
+    const voicemail = context.voicemail
+      ? voicemailOptionFor(context.voicemail, live)
+      : live.voicemail_option?.detection_prompt
+        ? {
+            ...templateVoicemail,
+            detection_prompt: live.voicemail_option.detection_prompt,
+          }
+        : templateVoicemail;
     // The recogniser's words (template v14): the same merge bargain once
     // more, ours replaced and anybody else's kept, and never an empty list.
     const boosted = keywordPatch(live, context.keywords);
@@ -1976,7 +2247,7 @@ export const setEndCallEnabled = action({
       await call(key, "GET", `get-agent/${id}?version=${draft.version}`)
     ).json()) as AgentDoc;
     const liveLlm = (await (
-      await call(key, "GET", `get-retell-llm/${encodeURIComponent(llmId)}`)
+      await call(key, "GET", llmPath(llmId, draftAgent.response_engine?.version))
     ).json()) as LlmDoc;
 
     // Everything except the end_call tool survives untouched, then it is put
@@ -2441,11 +2712,15 @@ export const testCall = action({
       phone: to,
     })) as { dynamicVariables: Record<string, string> } | null;
 
+    // Pinned to the published version, so an edit waiting on a draft never
+    // reaches the person who picks up.
+    const pinned = await liveVersionForDial(key, agentId);
     const res = (await (
       await call(key, "POST", "v2/create-phone-call", {
         from_number: from,
         to_number: to,
         override_agent_id: agentId,
+        ...(pinned !== null ? { override_agent_version: pinned } : {}),
         ...(before && Object.keys(before.dynamicVariables).length > 0
           ? { retell_llm_dynamic_variables: before.dynamicVariables }
           : {}),
@@ -2493,11 +2768,15 @@ export const placeCall = internalAction({
     if (context.demoMode) throw new Error("demo-org");
     if (!context.apiKey) throw new Error("retell-not-configured");
 
+    // Pinned like testCall: a bulk run dials the version callers hear, never
+    // a draft somebody is halfway through.
+    const pinned = await liveVersionForDial(context.apiKey, args.retellAgentId);
     const res = (await (
       await call(context.apiKey, "POST", "v2/create-phone-call", {
         from_number: args.fromNumber,
         to_number: args.toNumber,
         override_agent_id: args.retellAgentId,
+        ...(pinned !== null ? { override_agent_version: pinned } : {}),
         ...(Object.keys(args.dynamicVariables).length > 0
           ? { retell_llm_dynamic_variables: args.dynamicVariables }
           : {}),
