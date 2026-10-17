@@ -23,6 +23,7 @@ import {
 } from "@/lib/datetime";
 import { CallOutcomePill, CallTranscript, CollectedList, humanizeCallEnd } from "./CallDetail";
 import { CallRecording } from "./CallRecording";
+import { Avatar } from "./Avatar";
 import { MessageMedia } from "./MessageMedia";
 import { mediaTypeLabel } from "../../convex/lib/mediaKind";
 import { waFailureKind, type WaFailureKind } from "../../convex/lib/waFailure";
@@ -946,7 +947,12 @@ export function ConversationPanel({
           // one would say the two channels are the same thing.
           // The WhatsApp thread also takes WhatsApp Web's own face
           // (.chat-font, P10); nothing else in the app does.
-          chatOrder ? "chat-font space-y-2" : filter === "note" ? "space-y-3" : ""
+          // Notes are signed rows with a hairline between them (P12).
+          chatOrder
+            ? "chat-font space-y-2"
+            : filter === "note"
+              ? "divide-y divide-[var(--border)]"
+              : ""
         }`}
       >
         {feed === undefined && (
@@ -2607,30 +2613,32 @@ function NoteEntry({
   };
 
   return (
-    // Named, for the same reason the toolbar's tooltip group is: this row wraps
-    // a rich editor while editing, and a bare `group` here reaches into it.
-    <li className="group/note list-none">
+    // A SIGNED ROW, not a bubble (P12, Nudge 2026-09-21 session 7). A bubble
+    // means a conversation, and nobody here is writing TO anybody: notes are
+    // written ON the customer. So the shape the Activity index and the email
+    // list already use: a hairline between rows (the list draws it), the
+    // author's mark, their name at full strength, the time at the right, and
+    // the body flush and full width. Named group, for the same reason the
+    // toolbar's tooltip group is: this row wraps a rich editor while editing.
+    <li className="group/note flex list-none gap-2.5 py-3 first:pt-0">
       {confirmDialog}
-      <div className="flex min-w-0 max-w-[85%] flex-col items-start gap-1">
-        {/* Who put it there and when, above the bubble rather than inside it:
-            the bubble IS the note, and a byline crammed in beside the first
-            line of text competes with the thing you are reading. Where no
-            person is recorded we say so rather than leaving it blank — an
-            unattributed note on a shared record is a fact about the record. */}
-        <div className="flex items-center gap-2 px-1 text-[11px] text-[var(--muted)]">
-          <span className="font-medium text-[var(--muted-strong)]">
+      <Avatar name={item.authorName ?? t("notes.systemAuthor")} size="sm" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2 text-xs">
+          <span className="min-w-0 truncate font-medium text-[var(--foreground)]">
             {item.authorName ?? t("notes.systemAuthor")}
           </span>
-          <span>{formatDateTime(item.at, language)}</span>
-          {item.editedAt !== undefined && <span>{t("notes.edited")}</span>}
+          {item.editedAt !== undefined && (
+            <span className="shrink-0 text-[var(--muted)]">{t("notes.edited")}</span>
+          )}
           {/* Hover-revealed, opacity rather than hidden, so the row never
-              shifts when it appears. There is no edit button beside it: the
-              bubble itself is the edit affordance. */}
+              shifts when it appears. There is no edit button: the body itself
+              is the edit affordance. */}
           <button
             type="button"
             onClick={askRemove}
             aria-label={t("common.delete")}
-            className="shrink-0 text-[var(--muted)] opacity-0 transition-opacity hover:text-red-600 focus-visible:opacity-100 group-hover/note:opacity-100 dark:hover:text-red-400"
+            className="ml-auto shrink-0 self-center text-[var(--muted)] opacity-0 transition-opacity hover:text-red-600 focus-visible:opacity-100 group-hover/note:opacity-100 dark:hover:text-red-400"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M3 6h18" />
@@ -2638,13 +2646,17 @@ function NoteEntry({
               <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
             </svg>
           </button>
+          <span
+            className="shrink-0 tabular-nums text-[var(--muted)]"
+            title={formatDateTime(item.at, language)}
+          >
+            {formatDateTime(item.at, language)}
+          </span>
         </div>
         {editing ? (
-          // The editor wears the bubble, so a note reads and edits in the same
-          // box instead of jumping into a form somewhere else on the pane — and
-          // in the same FORMAT, rather than becoming plain text the moment you
-          // touch it.
-          <div className="w-full min-w-[16rem] rounded-2xl bg-[var(--note-bubble-bg)] px-3 py-2">
+          // The editor takes the body's place, in the same format, rather
+          // than jumping into a form somewhere else on the pane.
+          <div className="mt-1 w-full rounded-lg bg-[var(--note-bubble-bg)] px-3 py-2">
             <EmailBodyEditor
               compact
               showVariables={false}
@@ -2673,8 +2685,8 @@ function NoteEntry({
             </div>
           </div>
         ) : (
-          // Click to edit — the whole bubble, not a pencil that only appears
-          // once you have already found the note by hovering it.
+          // Click to edit: the whole body, with a wash on hover so it reads as
+          // something you can click, not a pencil found only by hovering.
           <button
             type="button"
             onClick={() => {
@@ -2685,7 +2697,7 @@ function NoteEntry({
               setEditing(true);
             }}
             title={t("notes.edit")}
-            className="min-w-0 rounded-2xl bg-[var(--note-bubble-bg)] px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--note-bubble-hover-bg)]"
+            className="-mx-1.5 mt-0.5 block w-[calc(100%+0.75rem)] rounded-md px-1.5 py-0.5 text-left text-sm transition-colors hover:bg-[var(--control-hover)]"
           >
             {/* Judged on the BODY, never on a stored flag — see lib/noteBody.
                 Sanitised even though this markup is ours: a note can be edited

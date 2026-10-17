@@ -5,10 +5,10 @@ import { useState } from "react";
 // The identity mark, one implementation. Ported from Nudge's Avatar
 // (2026-10-13). Here its first home is the account menu, which drew the same
 // circle twice by hand (the sidebar row's and the collapsed rail's) with its
-// own initials helper beside them. The notes in the customer record become
-// signed rows in a later phase (P12 in docs/nudge-port-plan.md) and will wear
-// the same circle; Nudge's machine tone and glyphs for unsigned notes come
-// with them, not before.
+// own initials helper beside them. The customer record's notes are signed
+// rows wearing it since P12 (2026-10-17). Nudge's machine tone and glyphs for
+// unsigned notes were not taken: a note here with no person on it is the
+// customer's own (the booking page), and it wears their initials.
 
 // First letter of the first and the last word of the name, Google's way, so
 // "Ayşe Nur Yılmaz" is AY. No name: the first letter of the address.
