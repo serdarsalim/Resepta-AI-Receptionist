@@ -949,6 +949,12 @@ thead {
   display: inline-block;
   max-width: 100%;
 }
+/* A clicked image is selected and its size menu shows under it: Gmail's blue
+   frame says which picture the menu acts on (P26). */
+.email-body-editor img.ProseMirror-selectednode {
+  outline: 2px solid #1a73e8;
+  outline-offset: 1px;
+}
 .email-body-editor table {
   border-collapse: collapse;
 }

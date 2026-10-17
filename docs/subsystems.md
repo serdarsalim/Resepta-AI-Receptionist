@@ -2646,7 +2646,21 @@ Every one lands in the library and attaches to the message.
   back (`deduped`) and the new blob is deleted. Never across businesses.
 - **Most recently used first**: `lastUsedAt`, set on upload and on pick
   (`media.touch`).
-- Delete (hover × on a tile) is refused while a sent message shows the file.
+- Delete (hover × on a tile) is refused while a sent message shows the file,
+  or while one of the business's email templates shows it as a picture.
+- **Pictures inside email** (P26). The email editor's Insert photo (the
+  composer's email and the message rules' email body; never notes, knowledge
+  or the operator's template desk) opens the library on its images with an
+  upload tile, and places the pick in the text as `<img src="/e/i/<assetId>">`
+  with `max-width:100%`. The body keeps that relative address; `sendEmail`
+  makes it absolute on `SITE_URL` (`withAbsoluteEmailImages`), and the
+  `/e/i/` route in `convex/http.ts`, reached through the proxy on the app's
+  origin, streams the bytes of a library IMAGE only (`media.emailImage`
+  resolves the asset id; a storage id, a document or an inbound file never
+  answers). Clicking a picture in the editor gives Gmail's frame, corner
+  handles to resize it and the row Small | Best fit | Original size | Edit alt
+  text | Remove, all written as inline styles. Mail already sent is not
+  protected from a delete: its bodies are not indexed by asset.
 
 ## Staying signed in (2026-10-17, P18)
 

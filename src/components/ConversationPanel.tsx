@@ -934,6 +934,7 @@ export function ConversationPanel({
               <EmailBodyEditor
                 compact
                 showVariables={false}
+                insertPhoto
                 value={emailBody}
                 onSave={setEmailBody}
                 onLiveChange={setEmailBody}

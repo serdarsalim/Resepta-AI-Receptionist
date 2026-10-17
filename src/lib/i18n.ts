@@ -2454,6 +2454,24 @@ const dictionary = {
   },
   "editor.link": { tr: "Bağlantı ekle", en: "Add / edit link", de: "Link einfügen" },
   "editor.removeLink": { tr: "Bağlantıyı kaldır", en: "Remove link", de: "Link entfernen" },
+  // Insert photo (P26, Gmail's): a library image placed INTO the email text.
+  "editor.insertPhoto": { tr: "Fotoğraf ekle", en: "Insert photo", de: "Foto einfügen" },
+  "editor.uploadPhoto": { tr: "Fotoğraf yükle", en: "Upload a photo", de: "Foto hochladen" },
+  "editor.noPhotos": {
+    tr: "Henüz fotoğraf yok. Yükleyin, dosyalarınızda kalsın.",
+    en: "No photos yet. Upload one and it stays in your files.",
+    de: "Noch keine Fotos. Laden Sie eins hoch, es bleibt in Ihren Dateien.",
+  },
+  // Gmail's menu under a clicked image, word for word where Gmail has one.
+  "editor.imageSmall": { tr: "Küçük", en: "Small", de: "Klein" },
+  "editor.imageBestFit": { tr: "En uygun", en: "Best fit", de: "Optimal" },
+  "editor.imageOriginal": { tr: "Orijinal boyut", en: "Original size", de: "Originalgröße" },
+  "editor.imageAltText": {
+    tr: "Alternatif metni düzenle",
+    en: "Edit alt text",
+    de: "Alternativtext bearbeiten",
+  },
+  "editor.imageRemove": { tr: "Kaldır", en: "Remove", de: "Entfernen" },
   "editor.textColor": { tr: "Yazı rengi", en: "Text color", de: "Textfarbe" },
   "editor.clearColor": { tr: "Rengi kaldır", en: "Clear color", de: "Farbe entfernen" },
   "editor.clearFormatting": {
@@ -6056,9 +6074,9 @@ const dictionary = {
     de: "{name} aus Ihren Dateien löschen?",
   },
   "media.inUse": {
-    tr: "Bu dosya gönderilmiş bir mesajda var, silinemez.",
-    en: "This file is in a message already sent, so it can't be deleted.",
-    de: "Diese Datei steht in einer bereits gesendeten Nachricht und kann nicht gelöscht werden.",
+    tr: "Bu dosya gönderilmiş bir mesajda ya da bir e-posta şablonunda var, silinemez.",
+    en: "This file is in a message already sent or in an email template, so it can't be deleted.",
+    de: "Diese Datei steht in einer gesendeten Nachricht oder einer E-Mail-Vorlage und kann nicht gelöscht werden.",
   },
 
   // What arrived, in one word, for the surfaces that cannot show the thing

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { createPortal } from "react-dom";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -28,6 +30,7 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { HoverTip } from "./HoverTip";
 import { InputDialog } from "./InputDialog";
+import { useLibraryUpload, type LibraryAsset } from "@/lib/useLibraryUpload";
 
 // WYSIWYG email-body editor with an HTML toggle, ported from Nudge and
 // trimmed to what a rule's email needs: no media library, no saved-signature
@@ -152,8 +155,11 @@ function Toolbar({
   divider = true,
   onChange,
   end,
+  insertPhoto = false,
 }: {
   editor: Editor;
+  // Gmail's Insert photo: a library image goes INTO the text (P26).
+  insertPhoto?: boolean;
   // The row's far right: the Visual / HTML switch, so the framed editor has
   // ONE header row instead of a bar holding only the switch above the tools
   // (P26, Nudge ec043a82).
@@ -298,6 +304,7 @@ function Toolbar({
           document.body,
         )}
       </>
+      {insertPhoto && <InsertPhotoButton editor={editor} onChange={onChange} />}
       <ToolbarButton title={t("editor.clearFormatting")} onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}>
         <Ic>
           <path d="M4 7V4h16v3" /><path d="M5 20h6" /><path d="M13 4L8 20" />
@@ -336,6 +343,302 @@ function Toolbar({
   );
 }
 
+// The address a library image takes inside an email body: relative, on the
+// app's own origin, made absolute at send (convex/lib/email
+// withAbsoluteEmailImages) and served by the /e/i/ route from the library.
+// Never the storage URL: that is a convex.cloud address in a customer's mail,
+// which AGENTS.md keeps out of every link we send.
+function emailImageSrc(asset: LibraryAsset): string {
+  return `/e/i/${asset._id}`;
+}
+
+// Gmail's Insert photo (P26, Nudge b4dac12e): the business's library on its
+// images, plus an upload tile, in a panel under the button. A pick goes into
+// the text at the caret, sized to fit a phone. The same library the WhatsApp
+// composer's strip opens, so a photo uploaded here can be sent there too.
+function InsertPhotoButton({ editor, onChange }: { editor: Editor; onChange: () => void }) {
+  const { t } = useLanguage();
+  const { triggerRef, panelRef, pos, open, toggle, close } = useAnchoredPanel(288, 260);
+  const assets = useQuery(api.media.list, open ? {} : "skip");
+  const touch = useMutation(api.media.touch);
+  const library = useLibraryUpload();
+  const images = (assets ?? []).filter((a) => a.url && a.contentType.startsWith("image/"));
+
+  const place = (asset: LibraryAsset) => {
+    void touch({ assetId: asset._id });
+    close();
+    editor
+      .chain()
+      .focus()
+      .insertContent({
+        type: "image",
+        attrs: { src: emailImageSrc(asset), alt: asset.name, style: IMAGE_SIZES.original },
+      })
+      .run();
+    onChange();
+  };
+
+  return (
+    <>
+      <ToolbarButton ref={triggerRef} title={t("editor.insertPhoto")} onClick={toggle}>
+        <Ic>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <path d="M21 15l-5-5L5 21" />
+        </Ic>
+      </ToolbarButton>
+      {open &&
+        pos &&
+        createPortal(
+          <div
+            ref={panelRef}
+            style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width }}
+            className="menu-surface fixed z-50 rounded-lg p-2"
+          >
+            <div className="thin-scroll grid max-h-52 grid-cols-4 gap-1.5 overflow-y-auto">
+              {images.map((asset) => (
+                <button
+                  key={asset._id}
+                  type="button"
+                  aria-label={asset.name}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => place(asset)}
+                  className="aspect-square overflow-hidden rounded-md transition-opacity hover:opacity-80"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={asset.url!} alt="" className="h-full w-full object-cover" />
+                </button>
+              ))}
+              <label
+                className={`flex aspect-square cursor-pointer items-center justify-center rounded-md border border-dashed border-[var(--border)] text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] ${
+                  library.progress !== null ? "opacity-50" : ""
+                }`}
+              >
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  aria-label={t("editor.uploadPhoto")}
+                  disabled={library.progress !== null}
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (!file) return;
+                    const asset = await library.upload(file);
+                    if (asset && asset.contentType.startsWith("image/")) place(asset);
+                  }}
+                />
+                {library.progress !== null ? "…" : "+"}
+              </label>
+            </div>
+            {assets && images.length === 0 && library.progress === null && !library.error && (
+              <p className="pt-2 text-xs text-[var(--muted)]">{t("editor.noPhotos")}</p>
+            )}
+            {library.error && (
+              <p className="pt-2 text-xs text-red-600 dark:text-red-400">{library.error}</p>
+            )}
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
+// Gmail's image menu (P26, Nudge b4dac12e, 49c31c26): click an image in the
+// text and it takes a blue frame, a corner square at each corner to drag it to
+// any width (aspect kept), and a row under it: Small | Best fit | Original
+// size | Edit alt text | Remove. Sizes are inline styles, the only sizing every
+// mail client honours, and each keeps max-width:100% so nothing overflows a
+// phone. Portalled and fixed (AGENTS.md: popovers never sit absolute in a
+// card), and kept inside the text's own scroller so it never lands on the
+// controls below it.
+const IMAGE_SIZES = {
+  small: "width:200px;max-width:100%;height:auto",
+  fit: "width:100%;height:auto",
+  original: "max-width:100%;height:auto",
+} as const;
+
+function ImageMenu({ editor, onChange }: { editor: Editor; onChange: () => void }) {
+  const { t } = useLanguage();
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const [frame, setFrame] = useState<DOMRect | null>(null);
+  const [altDraft, setAltDraft] = useState<string | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    const update = () => {
+      const sel = editor.state.selection as { node?: { type: { name: string } }; from: number };
+      if (!sel.node || sel.node.type.name !== "image" || !editor.isEditable || !editor.isFocused) {
+        imgRef.current = null;
+        setRect(null);
+        return;
+      }
+      const dom = editor.view.nodeDOM(sel.from);
+      const img =
+        dom instanceof HTMLImageElement
+          ? dom
+          : dom instanceof HTMLElement
+            ? dom.querySelector("img")
+            : null;
+      imgRef.current = img;
+      setRect(img ? img.getBoundingClientRect() : null);
+      let scroller: HTMLElement | null = editor.view.dom;
+      while (
+        scroller &&
+        scroller !== document.body &&
+        !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)
+      ) {
+        scroller = scroller.parentElement;
+      }
+      setFrame(scroller && scroller !== document.body ? scroller.getBoundingClientRect() : null);
+    };
+    // The selection outlives a click elsewhere on the page; the frame and the
+    // row should not, or they float over whatever the person moved on to.
+    const hide = () => {
+      imgRef.current = null;
+      setRect(null);
+    };
+    editor.on("selectionUpdate", update);
+    editor.on("transaction", update);
+    editor.on("focus", update);
+    editor.on("blur", hide);
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      editor.off("selectionUpdate", update);
+      editor.off("transaction", update);
+      editor.off("focus", update);
+      editor.off("blur", hide);
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [editor]);
+
+  const setStyle = (style: string) => {
+    editor.chain().focus().updateAttributes("image", { style, width: null, height: null }).run();
+    onChange();
+  };
+
+  // Live on the element while dragging, written to the document once on
+  // release, so a drag is one undo step and one save.
+  const startResize = (event: React.PointerEvent, fromLeft: boolean) => {
+    const img = imgRef.current;
+    if (!img) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startW = img.getBoundingClientRect().width;
+    const maxW = Math.max(40, editor.view.dom.clientWidth - 24);
+    let width = startW;
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      width = Math.round(Math.max(40, Math.min(maxW, startW + (fromLeft ? -dx : dx))));
+      img.style.width = `${width}px`;
+      img.style.height = "auto";
+      setRect(img.getBoundingClientRect());
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setStyle(`width:${width}px;max-width:100%;height:auto`);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  const items: { label: string; run: () => void }[] = [
+    { label: t("editor.imageSmall"), run: () => setStyle(IMAGE_SIZES.small) },
+    { label: t("editor.imageBestFit"), run: () => setStyle(IMAGE_SIZES.fit) },
+    { label: t("editor.imageOriginal"), run: () => setStyle(IMAGE_SIZES.original) },
+    {
+      label: t("editor.imageAltText"),
+      run: () => setAltDraft((editor.getAttributes("image").alt as string | undefined) ?? ""),
+    },
+    {
+      label: t("editor.imageRemove"),
+      run: () => {
+        editor.chain().focus().deleteSelection().run();
+        onChange();
+      },
+    },
+  ];
+
+  const visible = rect && (!frame || (rect.bottom > frame.top && rect.top < frame.bottom));
+  const menuTop = rect
+    ? Math.max(
+        frame?.top ?? 8,
+        Math.min(rect.bottom + 6, (frame?.bottom ?? window.innerHeight) - 40),
+      )
+    : 0;
+
+  return (
+    <>
+      {visible &&
+        rect &&
+        createPortal(
+          <>
+            {(
+              [
+                [rect.left, rect.top, true, "nwse-resize"],
+                [rect.right, rect.top, false, "nesw-resize"],
+                [rect.left, rect.bottom, true, "nesw-resize"],
+                [rect.right, rect.bottom, false, "nwse-resize"],
+              ] as const
+            )
+              .filter(([, y]) => !frame || (y >= frame.top && y <= frame.bottom))
+              .map(([x, y, fromLeft, cursor], i) => (
+                <span
+                  key={i}
+                  aria-hidden
+                  onPointerDown={(e) => startResize(e, fromLeft)}
+                  style={{ position: "fixed", left: x - 5, top: y - 5, cursor }}
+                  className="z-50 h-2.5 w-2.5 touch-none border border-white bg-[#1a73e8]"
+                />
+              ))}
+            <div
+              role="toolbar"
+              style={{
+                position: "fixed",
+                top: menuTop,
+                left: Math.max(8, Math.min(rect.left, window.innerWidth - 420)),
+              }}
+              className="menu-surface z-50 flex max-w-[calc(100vw-16px)] flex-wrap items-center rounded-md px-1 py-1 text-sm"
+            >
+              {items.map((item, i) => (
+                <span key={item.label} className="flex items-center">
+                  {i > 0 && <span className="h-4 w-px bg-[var(--border)]" aria-hidden />}
+                  <button
+                    type="button"
+                    // mousedown keeps the image selected for the command.
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      item.run();
+                    }}
+                    className="whitespace-nowrap rounded px-2 py-0.5 text-[var(--accent)] hover:bg-[var(--muted-bg)]"
+                  >
+                    {item.label}
+                  </button>
+                </span>
+              ))}
+            </div>
+          </>,
+          document.body,
+        )}
+      {altDraft !== null && (
+        <InputDialog
+          title={t("editor.imageAltText")}
+          initialValue={altDraft}
+          onSubmit={(alt) => {
+            setAltDraft(null);
+            editor.chain().focus().updateAttributes("image", { alt: alt.trim() }).run();
+            onChange();
+          }}
+          onCancel={() => setAltDraft(null)}
+        />
+      )}
+    </>
+  );
+}
+
 // What the editor holds, in the form we store: a variable chip back to its
 // `[key]` text (lib/emailTokens).
 function storedHtml(editor: Editor): string {
@@ -363,8 +666,14 @@ export function EmailBodyEditor({
   showVariables = true,
   previewPane,
   previewLabel,
+  insertPhoto = false,
 }: {
   value: string;
+  // Gmail's Insert photo on the toolbar: the business's library images, put
+  // into the text (P26). For mail to customers only: notes and knowledge
+  // have no reader for a picture, and the operator's desk has no library of
+  // its own a platform template could safely point at.
+  insertPhoto?: boolean;
   disabled?: boolean;
   // Called on blur (visual or HTML mode) when the content actually changed.
   onSave: (html: string) => void;
@@ -605,9 +914,10 @@ export function EmailBodyEditor({
       <div className={disabled ? "pointer-events-none opacity-50" : ""}>
         {editor ? (
           <>
-            <Toolbar editor={editor} showVariables={showVariables} divider={false} onChange={persistNow} />
+            <Toolbar editor={editor} showVariables={showVariables} divider={false} onChange={persistNow} insertPhoto={insertPhoto} />
             <EditorContent editor={editor} />
             {atList}
+            <ImageMenu editor={editor} onChange={persistNow} />
           </>
         ) : (
           <div className="min-h-[4rem] animate-pulse" aria-busy="true" />
@@ -660,9 +970,10 @@ export function EmailBodyEditor({
       ) : mode === "visual" ? (
         editor ? (
           <>
-            <Toolbar editor={editor} showVariables={showVariables} onChange={persistNow} end={modeSwitch} />
+            <Toolbar editor={editor} showVariables={showVariables} onChange={persistNow} end={modeSwitch} insertPhoto={insertPhoto} />
             <EditorContent editor={editor} />
             {atList}
+            <ImageMenu editor={editor} onChange={persistNow} />
           </>
         ) : (
           <div className="min-h-[12rem] animate-pulse" aria-busy="true" />

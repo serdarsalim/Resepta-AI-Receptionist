@@ -351,13 +351,19 @@ new marketing kind goes into that set.
   page's button, or the mail client's one-click) unsubscribes.
 - **Links in customer mail live on the app's origin, never on convex.site**
   (2026-10-13). `lib/email.emailLinkOrigin` builds the unsubscribe link and the
-  open pixel on `SITE_URL`, and `src/proxy.ts` rewrites exactly `/e/o/<token>`
-  and `/e/u/<token>` to the Convex routes of the same name, method and body
-  intact. A bare `*.convex.site` link reads as unbranded and costs every
-  business deliverability, since they all send from our one domain. The
-  Convex routes never move: mail already sent points at them directly. A new
-  link in customer mail takes the same path, a route in `convex/http.ts` plus
-  one line in the proxy's pattern.
+  open pixel on `SITE_URL`, and `src/proxy.ts` rewrites exactly `/e/o/<token>`,
+  `/e/u/<token>` and `/e/i/<assetId>` to the Convex routes of the same name,
+  method and body intact. A bare `*.convex.site` link reads as unbranded and
+  costs every business deliverability, since they all send from our one
+  domain. The Convex routes never move: mail already sent points at them
+  directly. A new link in customer mail takes the same path, a route in
+  `convex/http.ts` plus one line in the proxy's pattern.
+  **Images too** (2026-10-17, P26): the email editor's Insert photo stores a
+  library image as a RELATIVE `/e/i/<assetId>`, `sendEmail` makes it absolute
+  on `SITE_URL` (`withAbsoluteEmailImages`, so the first attempt and every
+  retry get it), and the route streams only library images
+  (`media.emailImage`), never a storage URL and never a customer's inbound
+  file. `media.remove` refuses an image an email template still shows.
 - **`customers.marketingEmailOptOutAt` is respected at every marketing send:**
   bulk email fan-out (`skipReason` → `unsubscribed`), campaign email fan-out,
   the win-back's email half (`emailVerdict`), and at claim in

@@ -1418,6 +1418,30 @@ http.route({
   }),
 });
 
+// A library image inside an email body (P26): `/e/i/<assetId>`, reached on
+// the app's origin through src/proxy.ts like the pixel. Streamed rather than
+// redirected, so no convex.cloud address appears in the mail or in what the
+// client fetches. Only library images resolve (media.emailImage). Cached
+// hard: an asset's bytes never change under its id.
+http.route({
+  pathPrefix: "/e/i/",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const assetId = new URL(request.url).pathname.slice("/e/i/".length).trim();
+    const image = /^[a-z0-9]{10,64}$/i.test(assetId)
+      ? await ctx.runQuery(internal.media.emailImage, { assetId })
+      : null;
+    const blob = image ? await ctx.storage.get(image.storageId) : null;
+    if (!image || !blob) return new Response("Not found", { status: 404 });
+    return new Response(blob, {
+      headers: {
+        "content-type": image.contentType,
+        "cache-control": "public, max-age=31536000, immutable",
+      },
+    });
+  }),
+});
+
 // ── Marketing-mail unsubscribe ───────────────────────────────────────────────
 //
 // The link at the foot of a campaign, bulk or win-back mail, and the URL in

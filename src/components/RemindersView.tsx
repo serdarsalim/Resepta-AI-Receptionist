@@ -919,6 +919,7 @@ function RuleEditor({
         // and emoji built in. Every save writes BOTH projections: the HTML
         // the email sends and the plain text the WhatsApp lane sends.
         <EmailBodyEditor
+          insertPhoto
           value={template.bodyHtml || plainToHtml(template.body ?? "")}
           placeholder={t("settings.templateBodyPlaceholder")}
           previewPane={previewPane}
@@ -1364,6 +1365,7 @@ function AddRuleSheet({
                     different message instead of carrying the old buffer over. */}
                 <EmailBodyEditor
                   key={trigger}
+                  insertPhoto
                   value={draft.html}
                   placeholder={t("settings.templateBodyPlaceholder")}
                   previewPane={previewPane}

@@ -9,8 +9,9 @@ import { resolveSiteUrl } from "@/lib/siteUrl";
 
 const isSignInPage = createRouteMatcher(["/signin"]);
 
-// The links inside customer email: the open pixel (/e/o/<token>) and the
-// unsubscribe page (/e/u/<token>). They are minted on this app's own origin
+// The links inside customer email: the open pixel (/e/o/<token>), the
+// unsubscribe page (/e/u/<token>) and a library image placed in the body
+// (/e/i/<assetId>, P26). They are minted on this app's own origin
 // (SITE_URL, convex/lib/email.ts emailLinkOrigin) so a mail never shows a bare
 // *.convex.site address, and forwarded here to the Convex routes of the same
 // name (convex/http.ts), which hold all the logic. A rewrite, not a redirect:
@@ -19,9 +20,9 @@ const isSignInPage = createRouteMatcher(["/signin"]);
 // a mail client's one-click POST (RFC 8058) arrives as it was sent. Mail sent
 // before 2026-10-13 points at convex.site directly, which still answers.
 //
-// Exactly one token segment, nothing after it: this forwards two routes, not
-// a prefix of the backend.
-const EMAIL_LINK = /^\/e\/[ou]\/[^/]+$/;
+// Exactly one token segment, nothing after it: this forwards three routes,
+// not a prefix of the backend.
+const EMAIL_LINK = /^\/e\/[oui]\/[^/]+$/;
 
 function emailLinkTarget(pathname: string): URL | null {
   if (!EMAIL_LINK.test(pathname)) return null;

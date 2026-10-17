@@ -9,7 +9,7 @@
 
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { mutation, query, type QueryCtx } from "./_generated/server";
+import { internalQuery, mutation, query, type QueryCtx } from "./_generated/server";
 import { requireOrg } from "./lib/orgAuth";
 
 // Meta accepts images up to 5 MB on the Cloud API. Capped lower here on
@@ -228,9 +228,44 @@ export const remove = mutation({
       .withIndex("by_media", (q) => q.eq("mediaStorageId", asset.storageId))
       .first();
     if (used) throw new Error("in-use");
+    // An image placed inside one of this business's email templates (P26):
+    // deleting it would break that picture in every mail the template sends
+    // from now on. A business holds a few dozen template rows, read whole.
+    // Mail already sent is not checked (its bodies are not indexed by asset).
+    const ref = `/e/i/${asset._id}`;
+    const templates = await ctx.db
+      .query("waTemplates")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .take(500);
+    if (templates.some((row) => row.bodyHtml?.includes(ref))) {
+      throw new Error("in-use");
+    }
 
     await ctx.storage.delete(asset.storageId);
     await ctx.db.delete(args.assetId);
     return null;
+  },
+});
+
+// A library image placed INSIDE an email body (P26, the editor's Insert
+// photo). The body carries `/e/i/<assetId>`, on the app's own origin like the
+// open pixel and the unsubscribe link (lib/email.emailLinkOrigin), and the
+// route in http.ts streams the bytes from here. Keyed on the asset, never on a
+// storage id: only what a business put in its own library is reachable, and
+// only its images, so a customer's inbound photo (also in storage) is not.
+// No auth, as with the pixel: an email client loads it anonymously, and the
+// asset id is the capability.
+export const emailImage = internalQuery({
+  args: { assetId: v.string() },
+  returns: v.union(
+    v.object({ storageId: v.id("_storage"), contentType: v.string() }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const id = ctx.db.normalizeId("mediaAssets", args.assetId);
+    if (!id) return null;
+    const asset = await ctx.db.get(id);
+    if (!asset || !ALLOWED_IMAGES.has(asset.contentType)) return null;
+    return { storageId: asset.storageId, contentType: asset.contentType };
   },
 });

@@ -107,6 +107,19 @@ function emailLinkOrigin(): string | undefined {
   return site ? site.replace(/\/+$/, "") : undefined;
 }
 
+// A library image placed in a body by the editor's Insert photo (P26) is
+// stored as `/e/i/<assetId>`: relative, so the app shows it on whatever origin
+// it runs on, and the same body serves every send. A mail client has no origin
+// to resolve it against, so every send makes it absolute on SITE_URL here, in
+// sendEmail, which every customer mail crosses (first attempt and retry
+// alike). No site URL leaves it relative; a broken image must never block a
+// send.
+export function withAbsoluteEmailImages(html: string): string {
+  const site = emailLinkOrigin();
+  if (!site || !html.includes("/e/i/")) return html;
+  return html.replace(/(\ssrc=)(["'])\/e\/i\//g, `$1$2${site}/e/i/`);
+}
+
 // Open-pixel injection: rule mail (confirmations, reminders, cancellation
 // notices, follow-ups, win-backs), campaign and bulk mail. The route
 // (/e/o/<token>) records the open on the row in this deployment's database.
@@ -220,7 +233,7 @@ export async function sendEmail(args: {
         from: args.from,
         to: [args.to],
         subject: args.subject,
-        html: args.html,
+        html: withAbsoluteEmailImages(args.html),
         ...(args.replyTo ? { reply_to: args.replyTo } : {}),
         ...(args.unsubscribeUrl
           ? {
