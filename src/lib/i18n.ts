@@ -4538,6 +4538,47 @@ const dictionary = {
     en: "The customer turned off promotional messages from this business on WhatsApp.",
     de: "Der Kunde hat Werbenachrichten dieses Geschäfts auf WhatsApp abgeschaltet.",
   },
+  // The call card (P11): what the call set in motion, and the player.
+  "calls.playRecording": {
+    tr: "Kaydı oynat",
+    en: "Play recording",
+    de: "Aufnahme abspielen",
+  },
+  "calls.pauseRecording": {
+    tr: "Kaydı duraklat",
+    en: "Pause recording",
+    de: "Aufnahme pausieren",
+  },
+  "calls.recordingPosition": {
+    tr: "Kayıttaki yer",
+    en: "Position in the recording",
+    de: "Position in der Aufnahme",
+  },
+  "calls.playbackSpeed": {
+    tr: "Oynatma hızı",
+    en: "Playback speed",
+    de: "Wiedergabegeschwindigkeit",
+  },
+  "calls.placedBy": {
+    tr: "Arayan: {name}",
+    en: "Placed by {name}",
+    de: "Angerufen von {name}",
+  },
+  "calls.bulkRun": {
+    tr: "Toplu arama: {name}",
+    en: "Bulk call: {name}",
+    de: "Sammelanruf: {name}",
+  },
+  "calls.booked": {
+    tr: "Bu aramada randevu: {when}",
+    en: "Booked on this call: {when}",
+    de: "In diesem Anruf gebucht: {when}",
+  },
+  "calls.bookedCancelled": {
+    tr: "sonra iptal edildi",
+    en: "since cancelled",
+    de: "inzwischen storniert",
+  },
   "voiceDetail.callMe": {
     tr: "Beni ara",
     en: "Call me",

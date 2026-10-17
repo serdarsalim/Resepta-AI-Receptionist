@@ -890,6 +890,14 @@ call into `usageMonthly.voiceTest*`, a share of the voice totals, never an
 addition. A new write in the functions route checks `isTest` first; a marked
 call with no row of this org is still a test.
 
+**A person's dial says who placed it** (2026-10-17, P11). `testCall` (the
+record's Place call and the agent page's test call) puts the caller's user id
+in the dial's metadata (`lib/browserTest.PLACED_BY_MARKER`); the webhook
+brings it back and `recordCall` keeps it as `calls.placedByUserId` only when
+that user is a member of the call's org. Bulk calls are named by their run
+(`bulkRunItems.by_retell_call`). A new dial path a person triggers carries the
+marker too.
+
 **Recogniser hints are derived, and only ours are replaced** (2026-10-13). An
 agent's `boosted_keywords` are this org's name, active team and active
 services (`lib/boostedKeywords`), read by org after the agent is proven to be

@@ -13,6 +13,7 @@ import { coerceVoiceValues } from "./lib/voicePayload";
 import { withoutNonAnswers } from "./lib/nonAnswer";
 import { NO_AI_CALLS_FIELD, VOICE_SUMMARY_FIELD } from "./lib/voiceAgentTemplate";
 import { callErased, erasedCallMarker } from "./lib/customerDeletion";
+import { placedByOf } from "./lib/browserTest";
 
 // A boolean analysis field arrives as a JSON boolean; a stringified one is
 // read the same way rather than dropped.
@@ -320,6 +321,7 @@ export const process = internalAction({
         retellCostMicroUsd: Number.isFinite(combinedCostCents)
           ? Math.round(combinedCostCents * 10_000)
           : undefined,
+        placedBy: placedByOf(call),
       });
 
       // The customer's leg, same branch as recordCall. updateContactFromVoice

@@ -1188,6 +1188,11 @@ export default defineSchema({
     // reached…). Kept raw rather than pre-humanized: the label is a UI concern
     // and this app speaks three languages. It is the only thing that explains a
     // call with no summary — an unanswered call has nothing else to show.
+    // The person who placed it, when one did (the record's Place call, the
+    // agent page's test call). Carried to the provider in the dial's metadata
+    // and back on the webhook, kept only when that user is a member of this
+    // org (P11). Absent for inbound, bulk (the run says so) and old rows.
+    placedByUserId: v.optional(v.id("users")),
     disconnectionReason: v.optional(v.string()),
     // Call metering — stamped ONCE each, in recordCall, idempotent on the
     // field being unset so the call_ended/call_analyzed double-fire (and any

@@ -575,6 +575,14 @@ const feedItem = v.object({
   // learn which of two screens carries the answer.
   collected: v.optional(v.record(v.string(), v.any())),
   disconnectionReason: v.optional(v.string()),
+  // Call-only (P11): who placed it (a team member's name), the bulk run it
+  // came from, and the appointment it booked, so the card says what the call
+  // set in motion without a second screen.
+  placedBy: v.optional(v.string()),
+  bulkRun: v.optional(v.string()),
+  booked: v.optional(
+    v.object({ at: v.number(), services: v.array(v.string()), cancelled: v.boolean() }),
+  ),
   // Email-only. A subject is the one thing an email has that a WhatsApp
   // message doesn't, and it is what the reader scans first.
   emailSubject: v.optional(v.string()),
@@ -658,6 +666,47 @@ export const feedForCustomer = query({
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
       .order("desc")
       .take(200);
+    // What each call set in motion, read per call and only where the row
+    // points somewhere: the placer (a member's name, once per person), the
+    // bulk run that dialled it (bulkRunItems by call id, this org's only),
+    // the appointment it booked (this org's, with its services).
+    const placerNames = new Map<string, string | undefined>();
+    const callExtras = await Promise.all(
+      calls.map(async (c) => {
+        let placedBy: string | undefined;
+        if (c.placedByUserId) {
+          const key = c.placedByUserId as string;
+          if (!placerNames.has(key)) {
+            const user = await ctx.db.get(c.placedByUserId);
+            placerNames.set(key, user?.name ?? user?.email ?? undefined);
+          }
+          placedBy = placerNames.get(key);
+        }
+        let bulkRun: string | undefined;
+        if (c.direction === "outbound" && c.retellCallId) {
+          const item = await ctx.db
+            .query("bulkRunItems")
+            .withIndex("by_retell_call", (q) => q.eq("retellCallId", c.retellCallId))
+            .first();
+          if (item && item.orgId === c.orgId) {
+            const run = await ctx.db.get(item.runId);
+            if (run && run.orgId === c.orgId) bulkRun = run.label;
+          }
+        }
+        let booked: { at: number; services: string[]; cancelled: boolean } | undefined;
+        if (c.appointmentId) {
+          const appointment = await ctx.db.get(c.appointmentId);
+          if (appointment && appointment.orgId === c.orgId) {
+            booked = {
+              at: appointment.startAt,
+              services: (appointment.items ?? []).map((line) => line.name),
+              cancelled: appointment.status === "cancelled",
+            };
+          }
+        }
+        return { call: c, placedBy, bulkRun, booked };
+      }),
+    );
     const notes = await ctx.db
       .query("notes")
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
@@ -724,8 +773,11 @@ export const feedForCustomer = query({
             ? legacyQuickReplyLabels
             : undefined),
       })),
-      ...calls.map((c) => ({
+      ...callExtras.map(({ call: c, placedBy, bulkRun, booked }) => ({
         id: c._id as string,
+        ...(placedBy ? { placedBy } : {}),
+        ...(bulkRun ? { bulkRun } : {}),
+        ...(booked ? { booked } : {}),
         channel: "call" as const,
         at: c.startedAt,
         direction: (c.direction === "inbound" ? "in" : "out") as "in" | "out",

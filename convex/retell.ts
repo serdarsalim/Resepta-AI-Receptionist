@@ -3835,6 +3835,9 @@ export const recordCall = internalMutation({
     collected: v.optional(v.record(v.string(), v.any())),
     disconnectionReason: v.optional(v.string()),
     retellCostMicroUsd: v.optional(v.number()),
+    // The user id the dial carried in its metadata (lib/browserTest
+    // PLACED_BY_MARKER). Untrusted until checked below.
+    placedBy: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -3843,6 +3846,18 @@ export const recordCall = internalMutation({
       .withIndex("by_agent", (q) => q.eq("retellAgentId", args.retellAgentId))
       .unique();
     if (!agent) return null;
+    // Who placed it, only when that user is a member of THIS org: the id came
+    // back from the provider, and a call is never attributed across a
+    // business boundary.
+    const placerId = args.placedBy ? ctx.db.normalizeId("users", args.placedBy) : null;
+    const placedByUserId =
+      placerId &&
+      (await ctx.db
+        .query("memberships")
+        .withIndex("by_user_org", (q) => q.eq("userId", placerId).eq("orgId", agent.orgId))
+        .first())
+        ? placerId
+        : undefined;
     // A call erased with its customer is not written back, whichever event
     // brings it: the processor can be mid-flight when the sweep removes the
     // row, and inserting here would mint a new customer from the transcript.
@@ -3864,6 +3879,7 @@ export const recordCall = internalMutation({
         transcript: existing.transcript ?? args.transcript,
         recordingUrl: existing.recordingUrl ?? args.recordingUrl,
         disconnectionReason: existing.disconnectionReason ?? args.disconnectionReason,
+        placedByUserId: existing.placedByUserId ?? placedByUserId,
         collected:
           existing.collected || args.collected
             ? { ...(args.collected ?? {}), ...(existing.collected ?? {}) }
@@ -3932,6 +3948,7 @@ export const recordCall = internalMutation({
       retellCallId: args.retellCallId,
       collected: args.collected,
       disconnectionReason: args.disconnectionReason,
+      placedByUserId,
       ...(await meterCall(ctx, agent.orgId, null, args, args.startedAt)),
     });
     const call = await ctx.db.get(callId);

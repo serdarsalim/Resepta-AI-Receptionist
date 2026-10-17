@@ -21,7 +21,8 @@ import {
   fromDatetimeLocalValue,
   localeFor,
 } from "@/lib/datetime";
-import { CallTranscript, CollectedList, humanizeCallEnd } from "./CallDetail";
+import { CallOutcomePill, CallTranscript, CollectedList, humanizeCallEnd } from "./CallDetail";
+import { CallRecording } from "./CallRecording";
 import { MessageMedia } from "./MessageMedia";
 import { mediaTypeLabel } from "../../convex/lib/mediaKind";
 import { waFailureKind, type WaFailureKind } from "../../convex/lib/waFailure";
@@ -1027,6 +1028,10 @@ export function ConversationPanel({
                   "disconnectionReason" in item
                     ? item.disconnectionReason
                     : undefined,
+                outcome: "outcome" in item ? item.outcome : undefined,
+                placedBy: "placedBy" in item ? item.placedBy : undefined,
+                bulkRun: "bulkRun" in item ? item.bulkRun : undefined,
+                booked: "booked" in item ? item.booked : undefined,
               }))}
             contactName={contactName}
             focusId={focusCallId}
@@ -2027,6 +2032,10 @@ type CallCardItem = {
   recordingUrl?: string;
   collected?: Record<string, unknown>;
   disconnectionReason?: string;
+  outcome?: string;
+  placedBy?: string;
+  bulkRun?: string;
+  booked?: { at: number; services: string[]; cancelled: boolean };
 };
 
 function CallCards({
@@ -2076,11 +2085,16 @@ function CallCards({
               data-call-id={c.id}
               className="scroll-mt-2 rounded-lg bg-[var(--chat-field)] px-3.5 py-3 text-sm shadow-[var(--bubble-shadow)]"
             >
+              {/* Nudge's call card (P11): the top row says what happened and
+                  when; under it the facts sit left and the summary right, so
+                  "who placed it, what it booked" and "what was said" read
+                  side by side instead of stacked. */}
               <div className="flex items-center gap-2 text-xs">
                 <FeedIcon type="call" size={13} />
                 <span className="font-medium">
                   {c.inbound ? t("calls.inbound") : t("calls.outbound")}
                 </span>
+                {c.outcome && <CallOutcomePill outcome={c.outcome} />}
                 {c.durationSec !== undefined && (
                   <span className="text-[var(--muted)]">
                     {formatDuration(c.durationSec)}
@@ -2093,24 +2107,47 @@ function CallCards({
                   {formatTime(c.at, language)}
                 </span>
               </div>
-              {/* The player at rest — "show play and the summary card" is the
-                  brief. preload="none": a history of recordings must not
-                  fetch every audio stream on tab entry. */}
+              {(() => {
+                const facts = [
+                  c.placedBy ? t("calls.placedBy", { name: c.placedBy }) : null,
+                  c.bulkRun ? t("calls.bulkRun", { name: c.bulkRun }) : null,
+                  c.booked
+                    ? `${t("calls.booked", { when: formatDateTime(c.booked.at, language) })}${
+                        c.booked.services.length > 0 ? ` · ${c.booked.services.join(", ")}` : ""
+                      }${c.booked.cancelled ? ` (${t("calls.bookedCancelled")})` : ""}`
+                    : null,
+                  // On an answered call a footnote; on a missed one the only
+                  // line there is.
+                  ended,
+                ].filter((fact): fact is string => !!fact);
+                if (facts.length === 0 && !c.summary) return null;
+                return (
+                  <div
+                    className={`mt-2 grid gap-x-4 gap-y-2 text-xs ${
+                      facts.length > 0 && c.summary
+                        ? "sm:grid-cols-[minmax(0,13rem)_minmax(0,1fr)]"
+                        : ""
+                    }`}
+                  >
+                    {facts.length > 0 && (
+                      <ul className="space-y-1 text-[var(--muted-strong)]">
+                        {facts.map((fact) => (
+                          <li key={fact}>{fact}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {c.summary && <p className="whitespace-pre-wrap">{c.summary}</p>}
+                  </div>
+                );
+              })()}
+              {/* The player at rest, ours rather than the browser's: it knows
+                  the length before a byte is fetched (CallRecording). */}
               {c.recordingUrl && (
-                <audio
-                  controls
-                  preload="none"
-                  src={c.recordingUrl}
-                  className="mt-2 h-9 w-full"
+                <CallRecording
+                  url={c.recordingUrl}
+                  durationMs={c.durationSec !== undefined ? c.durationSec * 1000 : undefined}
+                  className="mt-2"
                 />
-              )}
-              {c.summary && (
-                <p className="mt-2 whitespace-pre-wrap text-xs">{c.summary}</p>
-              )}
-              {/* On an answered call a footnote; on a missed one the only
-                  line there is. */}
-              {ended && (
-                <p className="mt-2 text-xs text-[var(--muted)]">{ended}</p>
               )}
               {expanded && (
                 <>

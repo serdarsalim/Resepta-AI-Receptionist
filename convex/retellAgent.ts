@@ -42,7 +42,7 @@ import {
   publishedVersionOf,
 } from "./lib/retellDraft";
 import { publishVersionBody, versionNoteValidator, type VersionNote } from "./lib/versionNote";
-import { BROWSER_TEST_MARKER, browserTestFacts } from "./lib/browserTest";
+import { BROWSER_TEST_MARKER, PLACED_BY_MARKER, browserTestFacts } from "./lib/browserTest";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
 const API = "https://api.retellai.com";
@@ -2753,12 +2753,17 @@ export const testCall = action({
     // Pinned to the published version, so an edit waiting on a draft never
     // reaches the person who picks up.
     const pinned = await liveVersionForDial(key, agentId);
+    // Who pressed Call rides the dial and comes back on the webhook, so the
+    // call card can say "Placed by" (P11). recordCall keeps it only for a
+    // member of this org.
+    const placedBy = await getAuthUserId(ctx);
     const res = (await (
       await call(key, "POST", "v2/create-phone-call", {
         from_number: from,
         to_number: to,
         override_agent_id: agentId,
         ...(pinned !== null ? { override_agent_version: pinned } : {}),
+        ...(placedBy ? { metadata: { [PLACED_BY_MARKER]: placedBy } } : {}),
         ...(before && Object.keys(before.dynamicVariables).length > 0
           ? { retell_llm_dynamic_variables: before.dynamicVariables }
           : {}),

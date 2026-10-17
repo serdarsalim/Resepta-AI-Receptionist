@@ -14,6 +14,16 @@ import { withoutNonAnswers } from "./nonAnswer";
 import { NO_AI_CALLS_FIELD, VOICE_SUMMARY_FIELD } from "./voiceAgentTemplate";
 
 export const BROWSER_TEST_MARKER = "resepta_browser_test";
+// Who placed a call by hand (P11): a user id in the dial's metadata, kept by
+// recordCall only for a member of the call's org.
+export const PLACED_BY_MARKER = "resepta_placed_by";
+
+export function placedByOf(call: Record<string, unknown>): string | undefined {
+  const metadata = call.metadata;
+  if (!metadata || typeof metadata !== "object") return undefined;
+  const value = (metadata as Record<string, unknown>)[PLACED_BY_MARKER];
+  return typeof value === "string" && value ? value : undefined;
+}
 
 export function isBrowserTestCall(call: Record<string, unknown>): boolean {
   const metadata = call.metadata;
