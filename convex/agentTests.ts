@@ -161,7 +161,7 @@ function shapeRow(row: Doc<"agentTests">) {
 // agent page, and this org's rows only.
 export const listForAgent = query({
   args: { retellAgentId: v.string() },
-  returns: v.array(testRow),
+  returns: v.array(v.object({ test: testRow, customerName: v.union(v.string(), v.null()) })),
   handler: async (ctx, { retellAgentId }) => {
     const { orgId } = await requireOwner(ctx);
     const rows = await ctx.db
@@ -171,7 +171,18 @@ export const listForAgent = query({
       )
       .order("desc")
       .take(20);
-    return rows.map(shapeRow);
+    // Who it called as, by name, from this org's own customers. A customer
+    // since deleted reads as nobody.
+    return await Promise.all(
+      rows.map(async (row) => {
+        const customer = row.customerId ? await ctx.db.get(row.customerId) : null;
+        const customerName =
+          customer && customer.orgId === orgId && !isDeleting(customer)
+            ? [customer.firstName, customer.lastName].filter(Boolean).join(" ") || customer.phone
+            : null;
+        return { test: shapeRow(row), customerName };
+      }),
+    );
   },
 });
 

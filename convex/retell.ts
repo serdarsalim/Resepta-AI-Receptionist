@@ -942,6 +942,48 @@ export const agentEditorContext = internalQuery({
   },
 });
 
+// The variables a stage left on the provider's draft, or none (both args
+// omitted clears them). See retellAgents.stagedVariables.
+export const setStagedVariables = internalMutation({
+  args: {
+    retellAgentId: v.string(),
+    version: v.optional(v.number()),
+    variables: v.optional(v.array(voiceVariableInput)),
+  },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId, version, variables }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent) return null;
+    if (version === undefined || variables === undefined) {
+      if (agent.stagedVariables !== undefined || agent.stagedVersion !== undefined) {
+        await ctx.db.patch(agent._id, { stagedVariables: undefined, stagedVersion: undefined });
+      }
+      return null;
+    }
+    await ctx.db.patch(agent._id, { stagedVariables: variables, stagedVersion: version });
+    return null;
+  },
+});
+
+export const stagedVariablesFor = internalQuery({
+  args: { retellAgentId: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({ version: v.number(), variables: v.array(voiceVariableInput) }),
+  ),
+  handler: async (ctx, { retellAgentId }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent?.stagedVariables || agent.stagedVersion === undefined) return null;
+    return { version: agent.stagedVersion, variables: agent.stagedVariables };
+  },
+});
+
 // The voicemail choice the agent page just published, recorded only after the
 // provider accepted it (the markBoostedKeywords contract), so syncTemplate
 // re-applies what the agent is really carrying.

@@ -780,7 +780,18 @@ async function applyAgentEdits(
     await call(key, "PATCH", `update-agent/${id}`, { version: draft.version, ...agentPatch });
   }
   const previousPrompt = liveLlm?.general_prompt ?? "";
-  if (opts.stage) return { version: draft.version, published: false, previousPrompt };
+  if (opts.stage) {
+    // The registry waits for the publish; the rows wait here with the draft
+    // they belong to, for publishDraft (retellAgents.stagedVariables).
+    if (nextVariables) {
+      await ctx.runMutation(internal.retell.setStagedVariables, {
+        retellAgentId: agentId,
+        version: draft.version,
+        variables: nextVariables,
+      });
+    }
+    return { version: draft.version, published: false, previousPrompt };
+  }
 
   await call(
     key,
@@ -802,12 +813,22 @@ async function applyAgentEdits(
       promptVersion: draft.version,
     });
   }
-  if (nextVariables) {
+  // Variables an earlier stage left on this same draft went live with it,
+  // unless this publish carries newer ones.
+  const staged = nextVariables
+    ? null
+    : await ctx.runQuery(internal.retell.stagedVariablesFor, { retellAgentId: agentId });
+  const liveVariables =
+    nextVariables ?? (staged && staged.version === draft.version ? staged.variables : null);
+  if (liveVariables) {
     await ctx.runMutation(internal.retell.replaceAgentVariables, {
       retellAgentId: agentId,
       retellVersion: draft.version,
-      variables: nextVariables,
+      variables: liveVariables,
     });
+  }
+  if (staged || nextVariables) {
+    await ctx.runMutation(internal.retell.setStagedVariables, { retellAgentId: agentId });
   }
   if (edits.voicemail) {
     // Read back by syncTemplate, so the update banner cannot put "hang up"
@@ -896,9 +917,23 @@ export const publishDraft = action({
       `publish-agent-version/${id}`,
       publishVersionBody(latest.version, versionNote),
     );
-    // The chat lane's copy of the prompt follows what just went live. A
-    // failure here must not report the publish as failed: the script is live.
+    // The chat lane's copy of the prompt and the variables registry follow
+    // what just went live. A failure here must not report the publish as
+    // failed: the script is live.
     try {
+      const staged = await ctx.runQuery(internal.retell.stagedVariablesFor, {
+        retellAgentId: agentId,
+      });
+      if (staged && staged.version === latest.version) {
+        await ctx.runMutation(internal.retell.replaceAgentVariables, {
+          retellAgentId: agentId,
+          retellVersion: latest.version,
+          variables: staged.variables,
+        });
+      }
+      if (staged) {
+        await ctx.runMutation(internal.retell.setStagedVariables, { retellAgentId: agentId });
+      }
       const engine = live.response_engine ?? {};
       if (engine.type === "retell-llm" && engine.llm_id) {
         const llm = (await (
@@ -936,6 +971,7 @@ export const discardDraft = action({
       throw new Error("never-published");
     }
     await deleteDraftVersion(rc, agentId, latest.version);
+    await ctx.runMutation(internal.retell.setStagedVariables, { retellAgentId: agentId });
     return { ok: true, deleted: latest.version };
   },
 });
@@ -2733,6 +2769,14 @@ export const testCall = action({
   },
 });
 
+// The variables as strings, whatever the context handed over: the provider
+// substitutes text, and the returns validators below are string records.
+function stringValues(raw: Record<string, unknown>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(raw ?? {}).map(([name, value]) => [name, String(value ?? "")]),
+  );
+}
+
 // ── Browser test ─────────────────────────────────────────────────────────────
 
 // A test of the agent from the agent page, as a WEB call, so no phone rings
@@ -2812,7 +2856,7 @@ export const startBrowserTest = action({
       phone,
     })) as { dynamicVariables: Record<string, string> } | null;
     if (!before) throw new Error("test-unavailable");
-    const variables: Record<string, string> = { ...before.dynamicVariables };
+    const variables: Record<string, string> = stringValues(before.dynamicVariables);
     for (const [name, value] of Object.entries(overrides ?? {})) {
       if (value.trim()) variables[name] = value;
       else delete variables[name];
@@ -2858,6 +2902,40 @@ export const startBrowserTest = action({
       variables,
       testId,
     };
+  },
+});
+
+// What a test would hand the agent, before anybody spends a minute on it: the
+// ring-time variables for the chosen customer (or a stranger), for the sheet
+// to show and let the owner type over. Read-only; makes no provider call.
+// `unavailable` is the reason a ring would be refused right now.
+export const browserTestVariables = action({
+  args: { agentId: v.string(), customerId: v.optional(v.id("customers")) },
+  returns: v.object({
+    variables: v.record(v.string(), v.string()),
+    unavailable: v.boolean(),
+  }),
+  handler: async (
+    ctx,
+    { agentId, customerId },
+  ): Promise<{ variables: Record<string, string>; unavailable: boolean }> => {
+    const context = await editorContext(ctx, agentId);
+    let phone = "";
+    if (customerId) {
+      const customer = await ctx.runQuery(internal.agentTests.testCustomer, {
+        orgId: context.orgId,
+        customerId,
+      });
+      if (!customer) throw new Error("no-such-customer");
+      phone = customer.phone;
+    }
+    const before = (await ctx.runQuery(internal.retell.beforeCallContext, {
+      retellAgentId: agentId,
+      phone,
+    })) as { dynamicVariables: Record<string, string> } | null;
+    return before
+      ? { variables: stringValues(before.dynamicVariables), unavailable: false }
+      : { variables: {}, unavailable: true };
   },
 });
 

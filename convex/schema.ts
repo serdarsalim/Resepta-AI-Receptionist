@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
 import { threadValidator } from "./lib/thread";
 import { agentIntentValidator } from "./lib/agentChange";
+import { voiceVariableInput } from "./lib/voiceVariables";
 
 // Multi-org invariant (see AGENTS.md): every app table carries orgId and every
 // index used by app queries starts with it. `orgs` and the auth tables are the
@@ -882,6 +883,15 @@ export default defineSchema({
         text: v.optional(v.string()),
       }),
     ),
+    // Variables staged on the provider's draft and not yet live (P8/P9: a
+    // browser test stages the page's edits before dialling). The registry
+    // (voiceAgentVariables) describes what callers hear, so it moves only
+    // when that draft is published; these rows are what publishDraft then
+    // writes. `stagedVersion` is the draft they belong to: a draft published
+    // or discarded by any other road leaves them stale, and stale rows are
+    // never applied to a different version.
+    stagedVariables: v.optional(v.array(voiceVariableInput)),
+    stagedVersion: v.optional(v.number()),
     // Operator's per-agent model override, one of lib/voiceModels. Unset means
     // the platform default (the template's model), which is what every agent
     // starts as — so the common case stays one string in code rather than a
