@@ -52,8 +52,22 @@ import { DEFAULT_CURRENCY } from "./lib/money";
 // pointing at; until it happens, which chair the customer gets stays the
 // salon's morning-coffee decision.
 
-// Half-hour grid, the granularity every salon's paper book already uses.
+// How far apart offered starts sit (P29, adapted from Nudge 77165aaa, where
+// cal.com's rule is one meeting LENGTH apart). A service shorter than half an
+// hour steps by its own length, so a 15-minute trim offers 09:00, 09:15,
+// 09:30 and a 20-minute one 09:00, 09:20, 09:40. Anything longer keeps the
+// half-hour grid every salon's paper book already uses: a 90-minute colour
+// stepped by its length would offer 09:00, 10:30, 12:00 and hide the 09:30
+// a two-chair salon can take, which is a booking lost, not a cleaner page.
+// A good (duration 0) has no length to step by and keeps the half hour.
+// The write never checks the grid; only the offer follows it.
 const SLOT_STEP_MINUTES = 30;
+const MIN_SLOT_STEP_MINUTES = 5;
+export function slotStepMinutes(duration: number): number {
+  return duration > 0 && duration < SLOT_STEP_MINUTES
+    ? Math.max(MIN_SLOT_STEP_MINUTES, Math.round(duration))
+    : SLOT_STEP_MINUTES;
+}
 // A stranger booking themselves gets no closer than the business's minimum
 // notice (orgs.minNoticeHours, lib/minNotice): someone has to be able to see
 // it coming. It was a fixed hour here until 2026-10-13; that hour is now the
@@ -433,7 +447,8 @@ export async function freeStarts(
     const starts: number[] = [];
     // First grid line at or after opening — 09:15 opening offers 09:30, not
     // a 09:15 the rest of the day's grid would sit crooked on.
-    const firstStep = Math.ceil(openFrom / SLOT_STEP_MINUTES) * SLOT_STEP_MINUTES;
+    const step = slotStepMinutes(duration);
+    const firstStep = Math.ceil(openFrom / step) * step;
     // `minute < openTo` as well as the duration fit. For a time-bound service
     // the duration term already implies it, but a GOOD has duration 0, so
     // `minute + 0 <= openTo` admitted a slot at exactly the closing minute —
@@ -445,7 +460,7 @@ export async function freeStarts(
     for (
       let minute = firstStep;
       minute < openTo && minute + duration <= openTo;
-      minute += SLOT_STEP_MINUTES
+      minute += step
     ) {
       let startMs: number;
       try {
