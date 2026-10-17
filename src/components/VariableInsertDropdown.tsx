@@ -16,7 +16,8 @@ import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { foldSearch } from "@/lib/useTableState";
-import { buttonClass } from "./Control";
+import { buttonClass, iconButtonClass } from "./Control";
+import { HoverTip } from "./HoverTip";
 
 // The vocabulary itself, for the editors that insert by typing "@" (P15,
 // TokenTextField and the email editor's chips): the same two groups the
@@ -84,8 +85,13 @@ function useVariableGroups() {
 
 export function VariableInsertDropdown({
   onInsert,
+  compact = false,
 }: {
   onInsert: (token: string) => void;
+  // An icon instead of the words, for the email editor's toolbar, where every
+  // other tool is a glyph and its name is the hover label (P26, Nudge
+  // 1f4fafcf).
+  compact?: boolean;
 }) {
   const { t } = useLanguage();
   const groups = useVariableGroups();
@@ -132,6 +138,24 @@ export function VariableInsertDropdown({
           around each control inside an editor is chrome drawn twice; it was
           also the one bordered pill among the email toolbar's plain
           buttons. Borders belong to containers (AGENTS.md). */}
+      {compact ? (
+        <HoverTip text={t("editor.insertVariable")} disabled={open}>
+          <button
+            ref={triggerRef}
+            type="button"
+            aria-label={t("editor.insertVariable")}
+            // mousedown keeps the editor's caret where the token will land.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={toggle}
+            className={iconButtonClass("quiet", "xs")}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1" />
+              <path d="M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1" />
+            </svg>
+          </button>
+        </HoverTip>
+      ) : (
       <button
         ref={triggerRef}
         type="button"
@@ -153,6 +177,7 @@ export function VariableInsertDropdown({
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
+      )}
       {open &&
         pos &&
         createPortal(

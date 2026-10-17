@@ -151,8 +151,13 @@ function Toolbar({
   showVariables = true,
   divider = true,
   onChange,
+  end,
 }: {
   editor: Editor;
+  // The row's far right: the Visual / HTML switch, so the framed editor has
+  // ONE header row instead of a bar holding only the switch above the tools
+  // (P26, Nudge ec043a82).
+  end?: React.ReactNode;
   // Saves now. A change made through a dialog or a menu lands while the
   // editor has no focus, so the blur that normally saves never comes.
   onChange: () => void;
@@ -208,7 +213,7 @@ function Toolbar({
   };
   return (
     <div
-      className={`flex flex-wrap items-center gap-0.5 px-2 py-1 ${
+      className={`flex min-h-9 flex-wrap items-center gap-0.5 px-2 py-1 ${
         divider ? "border-b border-[var(--border)]" : ""
       }`}
     >
@@ -301,9 +306,19 @@ function Toolbar({
       </ToolbarButton>
       <span className="mx-1 h-4 w-px bg-[var(--border)]" />
       {showVariables && (
-        <VariableInsertDropdown onInsert={(token) => insertToken(editor, token)} />
+        <VariableInsertDropdown compact onInsert={(token) => insertToken(editor, token)} />
       )}
-      <EmojiPicker onPick={(emoji) => editor.chain().focus().insertContent(emoji).run()} title={t("editor.insertEmoji")} />
+      {/* A drawn face like every tool beside it, not the colour emoji glyph,
+          which read as content sitting in the toolbar (Nudge 1f4fafcf). */}
+      <EmojiPicker onPick={(emoji) => editor.chain().focus().insertContent(emoji).run()} title={t("editor.insertEmoji")}>
+        <Ic>
+          <circle cx="12" cy="12" r="10" />
+          <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+          <line x1="9" y1="9" x2="9.01" y2="9" />
+          <line x1="15" y1="9" x2="15.01" y2="9" />
+        </Ic>
+      </EmojiPicker>
+      {end && <div className="ml-auto flex shrink-0 items-center pl-2">{end}</div>}
       {linkDraft !== null && (
         <InputDialog
           title={t("editor.link")}
@@ -601,43 +616,51 @@ export function EmailBodyEditor({
     );
   }
 
+  // The shared segmented control, as tabs: three views of one body. It was a
+  // bordered group with the picked view filled accent, the colour this app
+  // keeps for "do something", and the one segmented choice that wore it.
+  const modeSwitch = (
+    <SegmentedControl
+      size="xs"
+      semantics="tabs"
+      ariaLabel={t("editor.modes")}
+      value={mode}
+      onChange={switchMode}
+      segments={(previewPane
+        ? (["visual", "html", "preview"] as const)
+        : (["visual", "html"] as const)
+      ).map((m) => ({
+        id: m,
+        label:
+          m === "visual"
+            ? t("editor.modeVisual")
+            : m === "html"
+              ? t("editor.modeHtml")
+              : (previewLabel ?? t("settings.rulePreview")),
+      }))}
+    />
+  );
+
   return (
     <div
       className={`rounded-md border border-[var(--border)] bg-[var(--background)] ${
         disabled ? "pointer-events-none opacity-50" : ""
       }`}
     >
-      <div className="flex shrink-0 items-center justify-end border-b border-[var(--border)] bg-[var(--muted-bg)]/50 px-2 py-1">
-        {/* The shared segmented control, as tabs: three views of one body.
-            It was a bordered group with the picked view filled accent, the
-            colour this app keeps for "do something", and the one segmented
-            choice that wore it. */}
-        <SegmentedControl
-          size="xs"
-          semantics="tabs"
-          ariaLabel={t("editor.modes")}
-          value={mode}
-          onChange={switchMode}
-          segments={(previewPane
-            ? (["visual", "html", "preview"] as const)
-            : (["visual", "html"] as const)
-          ).map((m) => ({
-            id: m,
-            label:
-              m === "visual"
-                ? t("editor.modeVisual")
-                : m === "html"
-                  ? t("editor.modeHtml")
-                  : (previewLabel ?? t("settings.rulePreview")),
-          }))}
-        />
-      </div>
+      {/* In Visual the switch rides the toolbar's row; HTML and Preview have
+          no tools, so the same row holds the switch alone, right-aligned at
+          the same height, and switching moves nothing. */}
+      {mode !== "visual" && (
+        <div className="flex min-h-9 shrink-0 items-center justify-end border-b border-[var(--border)] px-2 py-1">
+          {modeSwitch}
+        </div>
+      )}
       {mode === "preview" ? (
         <div className="p-3">{previewPane}</div>
       ) : mode === "visual" ? (
         editor ? (
           <>
-            <Toolbar editor={editor} showVariables={showVariables} onChange={persistNow} />
+            <Toolbar editor={editor} showVariables={showVariables} onChange={persistNow} end={modeSwitch} />
             <EditorContent editor={editor} />
             {atList}
           </>
