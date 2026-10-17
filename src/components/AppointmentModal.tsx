@@ -237,30 +237,24 @@ export function AppointmentModal({
   // Only fetched once there is something to match. A booking whose customer
   // is already fixed, or where nothing has been typed yet, never loads the
   // org's contact list at all.
+  // A search on the server since P13 (customers.pickerSearch), so it reaches
+  // every customer, not only the newest 1,000.
   const customerOptions = useQuery(
-    api.customers.options,
-    customerFixed || customerQuery.trim() === "" ? "skip" : {},
+    api.customers.pickerSearch,
+    customerFixed || customerQuery.trim() === "" ? "skip" : { q: customerQuery },
   );
 
   // Name first, then number, because somebody typing "534" is looking up a
   // phone and somebody typing "ker" is looking up a person. Capped at eight:
   // past that the list is a scrolling surface inside a modal, and the answer
   // is to type another letter.
-  const customerMatches = useMemo(() => {
-    const all = customerOptions ?? [];
-    const needle = customerQuery.trim().toLocaleLowerCase();
-    // Nothing typed, nothing listed. A booking is for ONE person, so opening
-    // on a scrolling roster of everybody is a list you have to dismiss rather
-    // than an answer: the first eight by creation date are eight people you
-    // had no reason to want. Type a letter and it becomes a search.
-    if (!needle) return [];
-    return all
-      .filter((c) => {
-        const name = `${c.firstName} ${c.lastName ?? ""}`.toLocaleLowerCase();
-        return name.includes(needle) || c.phone.includes(needle);
-      })
-      .slice(0, 8);
-  }, [customerOptions, customerQuery]);
+  // Nothing typed, nothing listed. A booking is for ONE person, so opening on a
+  // scrolling roster of everybody is a list you have to dismiss rather than an
+  // answer. Type a letter and it is a search; the server ranks and caps it.
+  const customerMatches = useMemo(
+    () => (customerQuery.trim() ? (customerOptions ?? []) : []),
+    [customerOptions, customerQuery],
+  );
 
   // Save is off until there is a customer at all — a picked record or at
   // least a typed name. The finer checks (a phone for a new customer) surface
