@@ -72,7 +72,7 @@ means "read that commit".
 | P10 | 4. WhatsApp thread + formatter (+ 0772ac98) + (+) failed sends say why + Meta template category/rejection webhooks (a720be3b) + (triage 10-17) narrow chat spacing and joined tails (92ae96d2), Roboto inside the chat only (3298a228, d55ab896) | E.3, E.found. **Done 2026-10-17** (355f5bc..the thread-look commit); screen checks owed; the stamp's line name not ported (Resepta names no line) |
 | P11 | 5a. Call cards + (+) who placed a call | **Done 2026-10-17** (the P11 commit); screen checks and a first placed call owed |
 | P12 | 5b. Notes, property editors, tab title + read-only cards for members show plain values with a ViewOnlyPill instead of dimmed controls (Serdar chose this 2026-10-14, Nudge's way) + + (+) channel pills not greyed, copy phone, customer deep link + cmd-click | **Done 2026-10-17** (16d8a7f..the read-only commit); screen checks owed |
-| P13 | 9. Inbox paging + customer search index + (+) customers list paging + pins persist + inbox row + find customer from any tab + HTML-only email previews | E.4, E.7 |
+| P13 | 9. Inbox paging + customer search index + (+) customers list paging + pins persist + inbox row + find customer from any tab + HTML-only email previews | E.4, E.7. **Done 2026-10-17** (278a39d..2f4f93f); the row-dot sizes (c47c694c, 2ef5a0b4) ride P21, which resizes them again; prod owes `customers:backfillSearch` and `threads:backfill` |
 | P13b | (+) Bulk run outcomes + follow-up selection | E.flip.6 |
 | P14 | 11. Media library + (triage 10-17) Word, PowerPoint and text files from either tab (57bd2d2a) | |
 | P15 | 12. Token chips | |

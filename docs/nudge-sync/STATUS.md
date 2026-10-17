@@ -12,9 +12,11 @@
 - Call cards say who placed the call, what it booked, and the player shows the length before loading.
 - A customer record has its own link (cmd-click opens it in a new tab), its name in the browser tab, a copy button on the phone, notes as signed rows, Tab moving through fields, searchable picklists.
 - Team members see read-only cards as plain values instead of a dimmed form.
+- The Inbox scrolls through every conversation (no more 700 cap), with counts and search done on the server; a pin stays until you unpin it; email sent as HTML previews as words.
+- Searching for a customer (header search, booking sheet) finds anyone, not only the newest 1,000; the Customers table loads up to 5,000.
 
-**Ready to look at:** Voice agent page: edit, Publish, open the version number, Restore, the voicemail row, Test in the browser. Agents table: Try the WhatsApp assistant. A customer's WhatsApp thread, calls tab and notes tab. Admin templates table's category column.
+**Ready to look at:** Voice agent page: edit, Publish, open the version number, Restore, the voicemail row, Test in the browser. Agents table: Try the WhatsApp assistant. A customer's WhatsApp thread, calls tab and notes tab. Admin templates table's category column. The Inbox: scroll far, Unread and Pinned counts, search. The booking sheet's customer picker.
 
-**Before shipping:** Deploy Convex first (new tables agentTests; new optional fields on retellAgents, calls, waTemplates, usageMonthly). Subscribe the Meta app to template_category_update. Check on one real call that inbound answers with the published version.
+**Before shipping:** Deploy Convex first (new tables agentTests; new optional fields on retellAgents, calls, waTemplates, usageMonthly). Subscribe the Meta app to template_category_update. Check on one real call that inbound answers with the published version. After the deploy run `customers:backfillSearch` and `threads:backfill`, or search finds nobody.
 
-**Up next:** P13 inbox paging and customer search, then P13b bulk-run outcomes.
+**Up next:** P13b bulk-run outcomes and follow-up selection, then P14 media library.
