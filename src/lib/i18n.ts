@@ -1739,15 +1739,22 @@ const dictionary = {
     en: "No free times on this day. Try another one.",
     de: "An diesem Tag ist nichts frei. Versuchen Sie einen anderen.",
   },
-  // The slot grid's three shelves. Cut at 12:00 and 17:00 — coarse on
-  // purpose; the labels group, they do not define working hours.
-  "booking.morning": { tr: "Sabah", en: "Morning", de: "Vormittag" },
-  "booking.afternoon": {
-    tr: "Öğleden sonra",
-    en: "Afternoon",
-    de: "Nachmittag",
+  // The month grid and time list (P29, cal.com's layout).
+  "booking.prevMonth": { tr: "Önceki ay", en: "Previous month", de: "Vorheriger Monat" },
+  "booking.nextMonth": { tr: "Sonraki ay", en: "Next month", de: "Nächster Monat" },
+  "booking.noSlotsMonth": {
+    tr: "Bu ay boş saat yok. Sonraki aya bakın.",
+    en: "Nothing free this month. Try the next one.",
+    de: "Diesen Monat ist nichts frei. Versuchen Sie den nächsten.",
   },
-  "booking.evening": { tr: "Akşam", en: "Evening", de: "Abend" },
+  // The visitor's time zone. The business's own is the default; another one
+  // only changes how the times read, never what is booked.
+  "booking.timeZone": { tr: "Saat dilimi", en: "Time zone", de: "Zeitzone" },
+  "booking.searchZone": {
+    tr: "Şehir veya bölge ara",
+    en: "Search a city or region",
+    de: "Stadt oder Region suchen",
+  },
   // The goods-only fork. A basket with no time-bound line books no chair, so
   // instead of the calendar it is asked how the order reaches its customer —
   // picked up or delivered — and then when: right away, or a chosen time.

@@ -74,6 +74,9 @@ export function slotStepMinutes(duration: number): number {
 // default, and the assistants obey the same setting.
 // Same far-future guard as the voice lane.
 const MAX_AHEAD_MS = 400 * 24 * 60 * 60_000;
+// The most days one month lookup answers: a month plus a day either side,
+// so a visitor in another time zone still sees the month's edge days.
+const MAX_RANGE_DAYS = 33;
 // One phone number holds at most MAX_UPCOMING_PER_PHONE open bookings
 // (lib/bookingLimits, shared with the assistants' booking path since
 // 2026-10-13).
@@ -391,112 +394,195 @@ export const page = query({
 // customerId keeps the grid from offering a time the caller is already busy
 // at, which the write would then refuse. A picker that offers what the
 // mutation rejects is worse than one that offers less.
+type FreeStartsOpts = {
+  ignoreId?: Id<"appointments">;
+  customerId?: Id<"customers">;
+  // Goods lead time, ms. Folded into the business's notice floor so a cake
+  // that needs a day's warning never shows tomorrow-morning times.
+  leadMs?: number;
+};
+
+// What every day of a lookup shares: the bookings around it, the chairs,
+// the closures and one clock. Read once for a single day (freeStarts) or once
+// for a whole month (freeStartsRange), never once per day of a month.
+type DayLoad = {
+  rows: Doc<"appointments">[];
+  capacity: number;
+  closures: Doc<"closures">[];
+  now: number;
+};
+
+// A civil date's local midnight, or null when the date is malformed or the
+// zone cannot place it.
+function civilDay(
+  date: string,
+  timezone: string,
+): { civil: { y: number; m0: number; d: number }; weekday: number; startMs: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date.trim());
+  if (!match) return null;
+  const [, y, m, d] = match;
+  const civil = { y: Number(y), m0: Number(m) - 1, d: Number(d) };
+  // Weekday of a civil date is timezone-free arithmetic.
+  const weekday = new Date(Date.UTC(civil.y, civil.m0, civil.d)).getUTCDay();
+  try {
+    return {
+      civil,
+      weekday,
+      startMs: localWallTimeToUtcMs(civil.y, civil.m0, civil.d, 0, 0, timezone),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function freeStarts(
   ctx: ReadCtx,
   org: Doc<"orgs">,
   date: string,
   duration: number,
-  opts?: {
-    ignoreId?: Id<"appointments">;
-    customerId?: Id<"customers">;
-    // Goods lead time, ms. Folded into the business's notice floor so a cake
-    // that needs a day's warning never shows tomorrow-morning times.
-    leadMs?: number;
-  },
+  opts?: FreeStartsOpts,
 ): Promise<number[]> {
-  {
-    const hours = org.businessHours;
-    if (!hours || !hasBusinessHours(hours)) return [];
-
-    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date.trim());
-    if (!match) return [];
-    const [, y, m, d] = match;
-    const civil = { y: Number(y), m0: Number(m) - 1, d: Number(d) };
-    // Weekday of a civil date is timezone-free arithmetic.
-    const weekday = new Date(Date.UTC(civil.y, civil.m0, civil.d)).getUTCDay();
-
-    // THIS weekday's window, through the one normaliser, so a legacy org and a
-    // per-weekday org walk the same loop and a closed day yields no slots at
-    // all rather than falling back to one window for the whole week.
-    const win = windowForWeekday(hours, weekday);
-    if (!win) return [];
-    const openFrom = win.startMinute;
-    const openTo = win.endMinute;
-    const now = Date.now();
-
-    // The day's UTC bounds, for the overlap read.
-    let dayStartMs: number;
-    let dayEndMs: number;
-    try {
-      dayStartMs = localWallTimeToUtcMs(civil.y, civil.m0, civil.d, 0, 0, org.timezone);
-      dayEndMs = dayStartMs + 26 * 60 * 60_000;
-    } catch {
-      return [];
-    }
-    if (dayStartMs > now + MAX_AHEAD_MS) return [];
-    const rows = await activeRowsAround(ctx, org._id, dayStartMs, dayEndMs);
-    const capacity = await orgCapacity(ctx, org._id);
+  const hours = org.businessHours;
+  if (!hours || !hasBusinessHours(hours)) return [];
+  const day = civilDay(date, org.timezone);
+  if (!day) return [];
+  const now = Date.now();
+  if (day.startMs > now + MAX_AHEAD_MS) return [];
+  const load: DayLoad = {
+    rows: await activeRowsAround(ctx, org._id, day.startMs, day.startMs + 26 * 60 * 60_000),
+    capacity: await orgCapacity(ctx, org._id),
     // Once per day, not once per candidate slot: the read is org-wide and the
     // loop below runs it against every grid line.
-    const closures = await loadClosures(ctx, org._id);
-    const civilParts = { y: civil.y, m0: civil.m0, d: civil.d, weekday };
-    // The business's minimum notice, or a good's lead time when that is
-    // longer: a cake that needs a day's warning never shows tomorrow morning.
-    const floorMs = now + Math.max(minNoticeMs(org), opts?.leadMs ?? 0);
+    closures: await loadClosures(ctx, org._id),
+    now,
+  };
+  return startsInDay(org, date, duration, load, opts);
+}
 
-    const starts: number[] = [];
-    // First grid line at or after opening — 09:15 opening offers 09:30, not
-    // a 09:15 the rest of the day's grid would sit crooked on.
-    const step = slotStepMinutes(duration);
-    const firstStep = Math.ceil(openFrom / step) * step;
-    // `minute < openTo` as well as the duration fit. For a time-bound service
-    // the duration term already implies it, but a GOOD has duration 0, so
-    // `minute + 0 <= openTo` admitted a slot at exactly the closing minute —
-    // and nothing downstream filtered it, because overlapCount and
-    // customerConflict both return early on duration 0. The page offered 18:00
-    // at a salon closing at 18:00, and `book` then refused it through
-    // isWithinActiveWindow's `minutesOfDay >= endMinute` with reason
-    // "slot-taken": a slot nothing had taken.
-    for (
-      let minute = firstStep;
-      minute < openTo && minute + duration <= openTo;
-      minute += step
-    ) {
-      let startMs: number;
-      try {
-        startMs = localWallTimeToUtcMs(
-          civil.y,
-          civil.m0,
-          civil.d,
-          Math.floor(minute / 60),
-          minute % 60,
-          org.timezone,
-        );
-      } catch {
-        continue;
-      }
-      if (startMs < floorMs) continue;
-      // Checked on the SPAN, so a 60-minute service at 12:30 is withheld from
-      // a 13:00 lunch break rather than offered and then refused by the write
-      // guard — the grid and fitsOpenHours must agree, or the page offers a
-      // time that fails on submit. Unlike the two capacity guards below this
-      // one DOES bite a good: a closure is the shop being shut, not the chair
-      // being taken.
-      if (closureBlocks(closures, civilParts, minute, minute + duration)) continue;
-      // Both guards are no-ops for goods (duration 0): overlapCount returns 0
-      // and customerConflict returns null. A good is never crowded out and
-      // never crowds — every in-hours grid line stays offerable.
-      if (overlapCount(rows, startMs, duration, opts?.ignoreId) >= capacity) continue;
-      if (
-        opts?.customerId &&
-        customerConflict(rows, opts.customerId, startMs, duration, opts.ignoreId)
-      ) {
-        continue;
-      }
-      starts.push(startMs);
-    }
-    return starts;
+// Every free start across `days` civil days from `from`, for the booking
+// page's month (P29). The same day rule as freeStarts, so the month marks a
+// day open exactly when that day's list has a time in it, with one read of
+// the bookings for the whole span.
+export async function freeStartsRange(
+  ctx: ReadCtx,
+  org: Doc<"orgs">,
+  from: string,
+  days: number,
+  duration: number,
+  opts?: FreeStartsOpts,
+): Promise<number[]> {
+  const hours = org.businessHours;
+  if (!hours || !hasBusinessHours(hours)) return [];
+  const first = civilDay(from, org.timezone);
+  if (!first) return [];
+  const now = Date.now();
+  const count = Math.max(1, Math.min(MAX_RANGE_DAYS, Math.floor(days)));
+  const dates: string[] = [];
+  for (let i = 0; i < count; i += 1) {
+    dates.push(
+      new Date(Date.UTC(first.civil.y, first.civil.m0, first.civil.d + i))
+        .toISOString()
+        .slice(0, 10),
+    );
   }
+  // Days wholly in the past or past the far-future guard answer nothing,
+  // and the read below spans only the days that can.
+  const lastDay = civilDay(dates[dates.length - 1], org.timezone);
+  if (!lastDay || first.startMs > now + MAX_AHEAD_MS) return [];
+  const spanEnd = Math.min(lastDay.startMs + 26 * 60 * 60_000, now + MAX_AHEAD_MS + 26 * 60 * 60_000);
+  const spanStart = Math.max(first.startMs, now - 26 * 60 * 60_000);
+  if (spanEnd <= spanStart) return [];
+  const load: DayLoad = {
+    rows: await activeRowsAround(ctx, org._id, spanStart, spanEnd),
+    capacity: await orgCapacity(ctx, org._id),
+    closures: await loadClosures(ctx, org._id),
+    now,
+  };
+  const out: number[] = [];
+  for (const date of dates) out.push(...startsInDay(org, date, duration, load, opts));
+  return out;
+}
+
+// The day rule itself, over what the caller already read.
+function startsInDay(
+  org: Doc<"orgs">,
+  date: string,
+  duration: number,
+  load: DayLoad,
+  opts?: FreeStartsOpts,
+): number[] {
+  const hours = org.businessHours;
+  if (!hours || !hasBusinessHours(hours)) return [];
+  const day = civilDay(date, org.timezone);
+  if (!day) return [];
+  const { civil, weekday } = day;
+  const { rows, capacity, closures, now } = load;
+
+  // THIS weekday's window, through the one normaliser, so a legacy org and a
+  // per-weekday org walk the same loop and a closed day yields no slots at
+  // all rather than falling back to one window for the whole week.
+  const win = windowForWeekday(hours, weekday);
+  if (!win) return [];
+  const openFrom = win.startMinute;
+  const openTo = win.endMinute;
+  if (day.startMs > now + MAX_AHEAD_MS) return [];
+  const civilParts = { y: civil.y, m0: civil.m0, d: civil.d, weekday };
+  // The business's minimum notice, or a good's lead time when that is
+  // longer: a cake that needs a day's warning never shows tomorrow morning.
+  const floorMs = now + Math.max(minNoticeMs(org), opts?.leadMs ?? 0);
+
+  const starts: number[] = [];
+  // First grid line at or after opening — 09:15 opening offers 09:30, not
+  // a 09:15 the rest of the day's grid would sit crooked on.
+  const step = slotStepMinutes(duration);
+  const firstStep = Math.ceil(openFrom / step) * step;
+  // `minute < openTo` as well as the duration fit. For a time-bound service
+  // the duration term already implies it, but a GOOD has duration 0, so
+  // `minute + 0 <= openTo` admitted a slot at exactly the closing minute —
+  // and nothing downstream filtered it, because overlapCount and
+  // customerConflict both return early on duration 0. The page offered 18:00
+  // at a salon closing at 18:00, and `book` then refused it through
+  // isWithinActiveWindow's `minutesOfDay >= endMinute` with reason
+  // "slot-taken": a slot nothing had taken.
+  for (
+    let minute = firstStep;
+    minute < openTo && minute + duration <= openTo;
+    minute += step
+  ) {
+    let startMs: number;
+    try {
+      startMs = localWallTimeToUtcMs(
+        civil.y,
+        civil.m0,
+        civil.d,
+        Math.floor(minute / 60),
+        minute % 60,
+        org.timezone,
+      );
+    } catch {
+      continue;
+    }
+    if (startMs < floorMs) continue;
+    // Checked on the SPAN, so a 60-minute service at 12:30 is withheld from
+    // a 13:00 lunch break rather than offered and then refused by the write
+    // guard — the grid and fitsOpenHours must agree, or the page offers a
+    // time that fails on submit. Unlike the two capacity guards below this
+    // one DOES bite a good: a closure is the shop being shut, not the chair
+    // being taken.
+    if (closureBlocks(closures, civilParts, minute, minute + duration)) continue;
+    // Both guards are no-ops for goods (duration 0): overlapCount returns 0
+    // and customerConflict returns null. A good is never crowded out and
+    // never crowds — every in-hours grid line stays offerable.
+    if (overlapCount(rows, startMs, duration, opts?.ignoreId) >= capacity) continue;
+    if (
+      opts?.customerId &&
+      customerConflict(rows, opts.customerId, startMs, duration, opts.ignoreId)
+    ) {
+      continue;
+    }
+    starts.push(startMs);
+  }
+  return starts;
 }
 
 // Free starts as UTC ms. The client formats them in the org's timezone — a
@@ -563,6 +649,60 @@ export const slotsForToken = query({
       appointment.items?.reduce((sum, item) => sum + item.durationMinutes, 0) ??
       30;
     return await freeStarts(ctx, org, args.date, duration, {
+      ignoreId: appointment._id,
+      customerId: appointment.customerId,
+      leadMs: await goodsLeadMs(ctx, appointment),
+    });
+  },
+});
+
+// A month of free starts for the booking page's month grid and time list
+// (P29, cal.com's layout): `days` civil days from `from`, capped at a month
+// and a day either side. A day the grid marks open is a day the list fills,
+// because both read this one answer. Same keys as `slots`: the public slug
+// and the whole selection.
+export const monthSlots = query({
+  args: {
+    slug: v.string(),
+    from: v.string(),
+    days: v.number(),
+    serviceIds: v.array(v.id("services")),
+  },
+  returns: v.array(v.number()),
+  handler: async (ctx, args) => {
+    const org = await orgBySlug(ctx, args.slug);
+    if (!org) return [];
+    const picked = await resolveLines(
+      ctx,
+      org._id,
+      args.serviceIds.map((serviceId) => ({ serviceId })),
+    );
+    if (!picked) return [];
+    return await freeStartsRange(ctx, org, args.from, args.days, picked.duration, {
+      leadMs: picked.leadMs,
+    });
+  },
+});
+
+// The same month through an appointment's manage token, for its Reschedule
+// (slotsForToken's month).
+export const monthSlotsForToken = query({
+  args: { token: v.string(), from: v.string(), days: v.number() },
+  returns: v.array(v.number()),
+  handler: async (ctx, args) => {
+    const found = await appointmentByToken(ctx, args.token);
+    if (!found) return [];
+    const { appointment, org } = found;
+    if (appointment.status !== "scheduled" && appointment.status !== "confirmed") {
+      return [];
+    }
+    // No cal.com fork here (AGENTS.md: new work is native-only). A booking
+    // cal.com owns reads canModify false, so the page never asks.
+    const duration =
+      appointment.durationMinutes ??
+      appointment.items?.reduce((sum, item) => sum + item.durationMinutes, 0) ??
+      30;
+    return await freeStartsRange(ctx, org, args.from, args.days, duration, {
       ignoreId: appointment._id,
       customerId: appointment.customerId,
       leadMs: await goodsLeadMs(ctx, appointment),

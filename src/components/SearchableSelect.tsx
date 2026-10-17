@@ -51,6 +51,8 @@ export function SearchableSelect({
   className,
   size = "sm",
   menuWidth = 320,
+  plain = false,
+  emptyText,
 }: {
   value: string;
   options: SearchableSelectOption[];
@@ -65,6 +67,13 @@ export function SearchableSelect({
   // The control scale (Control.tsx): sm on a settings row, xs in a table.
   size?: ControlSize;
   menuWidth?: number;
+  // The closed field as a line of text with its caret, no box: the booking
+  // page's time zone, which reads as a fact you may change rather than a
+  // form field (P29, cal.com's look).
+  plain?: boolean;
+  // The empty list's words, for a page that speaks another language than the
+  // viewer's app setting (the public pages' createTranslator).
+  emptyText?: string;
 }) {
   const t = useT();
   // useId keeps two pickers on one page from sharing a listbox id, and agrees
@@ -118,7 +127,11 @@ export function SearchableSelect({
         aria-controls={listId}
         aria-haspopup="listbox"
         aria-label={placeholder}
-        className={`${fieldClass(size)} inline-flex w-full items-center justify-between gap-2 transition-colors hover:bg-[var(--muted-bg)] disabled:cursor-not-allowed`}
+        className={
+          plain
+            ? "inline-flex max-w-full items-center gap-1.5 rounded-md text-left transition-colors hover:text-[var(--foreground)] disabled:cursor-not-allowed"
+            : `${fieldClass(size)} inline-flex w-full items-center justify-between gap-2 transition-colors hover:bg-[var(--muted-bg)] disabled:cursor-not-allowed`
+        }
       >
         <span className={`truncate ${selected ? "" : "text-[var(--muted)]"}`}>
           {selected?.label ?? placeholder}
@@ -180,7 +193,7 @@ export function SearchableSelect({
             >
               {filtered.length === 0 ? (
                 <div className="px-3 py-2 text-sm text-[var(--muted)]">
-                  {t("table.noMatches")}
+                  {emptyText ?? t("table.noMatches")}
                 </div>
               ) : (
                 filtered.map((option, index) => {

@@ -29,6 +29,17 @@ import {
 } from "@/lib/i18n";
 import { PhoneInput } from "@/components/PhoneField";
 import { formatMoney } from "@/lib/money";
+import {
+  ClockIcon,
+  MonthGrid,
+  TimeList,
+  ZonePicker,
+  dayInMonth,
+  monthQuery,
+  shiftMonth,
+  zoneCity,
+  type DayKey,
+} from "@/components/booking/MonthTimes";
 
 // A civil date in a timezone, as YYYY-MM-DD — the org's, not the viewer's: a
 // Vienna customer at 23:30 books an Istanbul salon whose day has already
@@ -40,19 +51,6 @@ function dayIn(timezone: string, atMs: number): string {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date(atMs));
-}
-
-// The next 14 offerable days from a floor, as {date, ms}. Steps in 24h
-// increments and dedupes, because a DST fall-back would otherwise mint the
-// same civil date twice (Austria has DST even though Turkey no longer does).
-function dayStrip(timezone: string, fromMs: number): { date: string; ms: number }[] {
-  const out: { date: string; ms: number }[] = [];
-  for (let i = 0; out.length < 14 && i < 16; i++) {
-    const ms = fromMs + i * 86_400_000;
-    const date = dayIn(timezone, ms);
-    if (out.length === 0 || out[out.length - 1].date !== date) out.push({ date, ms });
-  }
-  return out;
 }
 
 // "fulfillment" exists only on the goods-only path: a basket with no
@@ -127,7 +125,13 @@ export default function BookingPage({
   // this page could express it. quantity is carried for every line and only
   // ever read for goods; two haircuts is two visits, not a 2 on one line.
   const [lines, setLines] = useState<{ serviceId: Id<"services">; quantity: number }[]>([]);
-  const [date, setDate] = useState<string | null>(null);
+  // The month on show and the day picked in it (P29, cal.com's layout). Null
+  // month = the first month the business's notice allows.
+  const [month, setMonth] = useState<string | null>(null);
+  const [day, setDay] = useState<DayKey | null>(null);
+  // The visitor's time zone, when they picked one; null = the business's own.
+  // Only how times are drawn: what is booked is the instant.
+  const [pickedZone, setPickedZone] = useState<string | null>(null);
   const [startMs, setStartMs] = useState<number | null>(null);
   // Goods-only answers. kind survives going back — a changed mind about the
   // hour is not a changed mind about delivery — while asap and startMs
@@ -182,16 +186,25 @@ export default function BookingPage({
   // on the server: a two-day notice must not open the strip on today.
   const minMs =
     Date.now() + Math.max(leadMinutes, (page?.minNoticeHours ?? 0) * 60) * 60_000;
-  const minDate = page ? dayIn(page.timezone, minMs) : "";
-  // A date picked for a previous selection may sit before this one's lead
-  // floor; string-compare works because both are ISO.
-  const dateValue = date && date >= minDate ? date : minDate;
-  const slots = useQuery(
-    api.booking.slots,
+  const zone = pickedZone ?? page?.timezone ?? "UTC";
+  // The first month with an offerable day. A month picked for a previous
+  // selection may sit before this one's lead floor; "YYYY-MM" compares as
+  // text.
+  const minMonth = page ? dayIn(zone, minMs).slice(0, 7) : "";
+  // A year ahead, well inside the server's far-future guard.
+  const maxMonth = minMonth ? shiftMonth(minMonth, 12) : "";
+  const shownMonth = month && month >= minMonth ? month : minMonth;
+  const offers = useQuery(
+    api.booking.monthSlots,
     page && lines.length > 0 && (step === "time" || step === "details")
-      ? { slug, date: dateValue, serviceIds: lines.map((row) => row.serviceId) }
+      ? {
+          slug,
+          ...monthQuery(shownMonth),
+          serviceIds: lines.map((row) => row.serviceId),
+        }
       : "skip",
   );
+  const openDay = dayInMonth(offers, zone, shownMonth, day);
 
   // Any change to WHAT is being booked invalidates WHEN: the grid was drawn
   // for a different total duration, so a time still held from before is a time
@@ -217,40 +230,22 @@ export default function BookingPage({
     );
   };
 
-  // The salon's wall clock, whatever the viewer's — the label must say what
-  // the clock on the salon's wall will say. Formatter built per call: a page
-  // renders a few dozen labels, and the React Compiler owns the memo now.
-  const timeLabel = (ms: number) =>
-    page
-      ? new Intl.DateTimeFormat(page.language, {
-          timeZone: page.timezone,
-          hour: "2-digit",
-          minute: "2-digit",
-          hourCycle: "h23",
-        }).format(new Date(ms))
-      : "";
+  // The salon's wall clock unless the visitor picked their own zone, which
+  // the label then names: a time read in Vienna for an Istanbul salon has to
+  // say whose clock it is. Formatter built per call: a page renders a few
+  // labels, and the React Compiler owns the memo now.
   const dateTimeLabel = (ms: number) =>
     page
       ? new Intl.DateTimeFormat(page.language, {
-          timeZone: page.timezone,
+          timeZone: zone,
           weekday: "long",
           day: "numeric",
           month: "long",
           hour: "2-digit",
           minute: "2-digit",
           hourCycle: "h23",
-        }).format(new Date(ms))
+        }).format(new Date(ms)) + (zone !== page.timezone ? ` (${zoneCity(zone)})` : "")
       : "";
-  const hourIn = (ms: number) =>
-    page
-      ? Number(
-          new Intl.DateTimeFormat("en-GB", {
-            timeZone: page.timezone,
-            hour: "2-digit",
-            hourCycle: "h23",
-          }).format(new Date(ms)),
-        )
-      : 0;
 
   if (page === undefined) {
     return (
@@ -315,25 +310,6 @@ export default function BookingPage({
 
   const priceLabel = (minor: number) =>
     formatMoney(minor, page.currency, page.language, page.priceDecimals);
-  const days = dayStrip(page.timezone, minMs);
-  // Coarse shelves, cut at 12:00 and 17:00. Labels group; hours define.
-  const shelves =
-    slots === undefined
-      ? []
-      : [
-          {
-            key: "booking.morning" as const,
-            slots: slots.filter((ms) => hourIn(ms) < 12),
-          },
-          {
-            key: "booking.afternoon" as const,
-            slots: slots.filter((ms) => hourIn(ms) >= 12 && hourIn(ms) < 17),
-          },
-          {
-            key: "booking.evening" as const,
-            slots: slots.filter((ms) => hourIn(ms) >= 17),
-          },
-        ].filter((shelf) => shelf.slots.length > 0);
   // Two purchases, not one list. A product is handed over and adds no minutes;
   // a service books a chair for a length of time. The split is only DRAWN when
   // the salon actually sells both — a header over the whole list names nothing.
@@ -461,6 +437,39 @@ export default function BookingPage({
               setError(null);
             }
           : undefined;
+  // The left column of cal.com's layout, from md: what is being booked, how
+  // long it takes and whose clock the times are on (P29). Below md only the
+  // time zone shows here, since the basket bar already names the rest.
+  const wide = step === "time" || step === "details";
+  const infoColumn = (
+    <div className="space-y-3 text-sm md:border-r md:border-[var(--border)] md:pr-5">
+      <p className="hidden font-semibold md:block">
+        {picked.map((row) => lineName(row)).join(", ")}
+      </p>
+      {step === "details" && startMs !== null && (
+        <p className="hidden font-medium md:block">{dateTimeLabel(startMs)}</p>
+      )}
+      {!goodsOnly && totalMinutes > 0 && (
+        <p className="hidden items-center gap-2 text-[var(--muted-strong)] md:flex">
+          <ClockIcon />
+          {minutesLabel(totalMinutes)}
+        </p>
+      )}
+      {step === "time" && (
+        <ZonePicker
+          t={t}
+          zone={zone}
+          homeZone={page.timezone}
+          onZone={(next) => {
+            setPickedZone(next === page.timezone ? null : next);
+            setDay(null);
+            setStartMs(null);
+          }}
+        />
+      )}
+    </div>
+  );
+
   // The bar's Continue. A function rather than an expression since the
   // service step now has three destinations: the calendar for a visit, the
   // fulfillment question for a goods order, or straight past it when the
@@ -480,6 +489,7 @@ export default function BookingPage({
       title={page.orgName}
       logoUrl={page.logoUrl}
       language={pageLanguage}
+      wide={wide}
       footer={
         /* The basket bar. TWO ROWS, with the action alone on the second: at
            the end of one line the button sat wedged against the total, so the
@@ -514,7 +524,7 @@ export default function BookingPage({
               control goes with it. Capped and scrollable only so the largest
               basket the server takes (ten lines) cannot swallow a phone. */}
           {showLines && (
-            <ul className="mx-auto max-h-[30vh] w-full max-w-md space-y-1.5 overflow-y-auto border-b border-[var(--border)] px-4 py-2.5 sm:px-5">
+            <ul className={`mx-auto max-h-[30vh] w-full space-y-1.5 overflow-y-auto border-b border-[var(--border)] px-4 py-2.5 sm:px-5 md:hidden ${wide ? "" : "max-w-md"}`}>
               {picked.map((row) => (
                 <li key={row._id} className="flex items-baseline justify-between gap-3 text-sm">
                   <span className="min-w-0 truncate">{lineName(row)}</span>
@@ -532,7 +542,7 @@ export default function BookingPage({
               ))}
             </ul>
           )}
-          <div className="mx-auto w-full max-w-md space-y-2 px-4 py-3 sm:px-5">
+          <div className={`mx-auto w-full space-y-2 px-4 py-3 sm:px-5 ${wide ? "" : "max-w-md"}`}>
             {/* Blank until something is picked. The heading above already asks
                 the question, and a bar repeating it would be the third place
                 on one screen saying "choose a service". */}
@@ -836,134 +846,97 @@ export default function BookingPage({
 
       {step === "time" && picked.length > 0 && (
         <section>
-          <h2 className="mb-3 text-sm font-semibold">
+          <h2 className="mb-3 text-sm font-semibold md:sr-only">
             {t(goodsOnly ? "booking.whenTitle" : "booking.pickTime")}
           </h2>
-          {/* The escape from the calendar. An order wanted "as soon as
-              possible" has no minute to pick, so the answer sits ABOVE the
-              day strip rather than inside it — and only where the goods carry
-              no lead time, because a cake needing a day's notice cannot be
-              promised right away (the server refuses exactly this). */}
-          {goodsOnly && leadMinutes === 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                setAsap(true);
-                setStartMs(null);
-                setError(null);
-                setStep("details");
-              }}
-              className="mb-3 flex w-full items-center justify-between gap-3 rounded-xl border border-[var(--border)] px-4 py-3 text-left text-sm font-medium transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
-            >
-              {t("booking.asap")}
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
-                <path
-                  d="M6 3l5 5-5 5"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          )}
-          <div className="no-scrollbar -mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1">
-            {days.map((day) => {
-              const picked = day.date === dateValue;
-              const parts = new Intl.DateTimeFormat(page.language, {
-                timeZone: page.timezone,
-                weekday: "short",
-                day: "numeric",
-              }).formatToParts(new Date(day.ms));
-              const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
-              const dayNum = parts.find((p) => p.type === "day")?.value ?? "";
-              return (
+          {/* cal.com's three columns from md (Nudge 84cc50fb): what is being
+              booked | the month | the day's times. Stacked below md, the
+              phone's order: the facts, the month, then the times. */}
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-[12rem_minmax(0,1fr)_12rem] md:gap-6">
+            {infoColumn}
+            <div>
+              {/* The escape from the calendar. An order wanted "as soon as
+                  possible" has no minute to pick, so the answer sits ABOVE the
+                  month rather than inside it — and only where the goods carry
+                  no lead time, because a cake needing a day's notice cannot be
+                  promised right away (the server refuses exactly this). */}
+              {goodsOnly && leadMinutes === 0 && (
                 <button
-                  key={day.date}
                   type="button"
-                  aria-pressed={picked}
                   onClick={() => {
-                    setDate(day.date);
+                    setAsap(true);
                     setStartMs(null);
+                    setError(null);
+                    setStep("details");
                   }}
-                  className={`flex shrink-0 flex-col items-center rounded-xl border px-3 py-1.5 transition-colors ${
-                    picked
-                      ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
-                      : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
-                  }`}
+                  className="mb-4 flex w-full items-center justify-between gap-3 rounded-xl border border-[var(--border)] px-4 py-3 text-left text-sm font-medium transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
                 >
-                  <span className="text-[11px] uppercase tracking-wide">{weekday}</span>
-                  <span className="text-sm font-medium tabular-nums">{dayNum}</span>
+                  {t("booking.asap")}
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                    <path
+                      d="M6 3l5 5-5 5"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
                 </button>
-              );
-            })}
-          </div>
-          {/* slot-taken lands the customer back on this step; the note says
-              why their pick is gone. */}
-          {error === "slot-taken" && (
-            <p className="mb-2 text-sm text-red-600 dark:text-red-400">
-              {t("booking.slotTaken")}
-            </p>
-          )}
-          {/* The grid RESERVES its room. All three states live in one box with
-              a floor under it — loading, no-times, and a full morning — so the
-              card is the size it is going to be before the query lands and
-              stays that size as the customer taps down the day strip. Without
-              it the card grew when the slots arrived and resized again on every
-              day with a different number of them, which is the reflow this
-              wizard exists to avoid: the whole reason it swaps screens rather
-              than revealing sections is that nothing should move under a
-              thumb already on its way down.
-
-              14rem is two shelves — a morning and an afternoon — which is what
-              a working day actually returns. A third shelf still grows the
-              card, but an evening's worth of slots appearing is a fact about
-              that day rather than a jump between two of them. */}
-          <div className="min-h-[14rem]">
-            {slots === undefined ? (
-              // Centred in the reserved box rather than sitting on top of it.
-              // The room is held either way; a single line pinned to the top
-              // of 14rem of white reads as a gap where something failed.
-              <p className="flex h-56 items-center justify-center text-sm text-[var(--muted)]">
-                {t("common.loading")}
-              </p>
-            ) : slots.length === 0 ? (
-              <p className="flex h-56 items-center justify-center text-center text-sm text-[var(--muted)]">
-                {t("booking.noSlots")}
-              </p>
-            ) : (
-              <div className="space-y-3">
-              {shelves.map((shelf) => (
-                <div key={shelf.key}>
-                  <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
-                    {t(shelf.key)}
-                  </p>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {shelf.slots.map((ms) => (
-                      <button
-                        key={ms}
-                        type="button"
-                        onClick={() => {
-                          setStartMs(ms);
-                          setAsap(false);
-                          setError(null);
-                          setStep("details");
-                        }}
-                        className="rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm tabular-nums text-[var(--foreground)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                      >
-                        {timeLabel(ms)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                ))}
-              </div>
-            )}
+              )}
+              <MonthGrid
+                t={t}
+                language={pageLanguage}
+                zone={zone}
+                month={shownMonth}
+                onMonth={(next) => {
+                  setMonth(next);
+                  setDay(null);
+                  setStartMs(null);
+                }}
+                minMonth={minMonth}
+                maxMonth={maxMonth}
+                offers={offers}
+                day={openDay}
+                onDay={(next) => {
+                  setDay(next);
+                  setStartMs(null);
+                }}
+              />
+            </div>
+            <div className="md:flex md:max-h-[26rem] md:min-h-0 md:flex-col">
+              {/* slot-taken lands the customer back on this step; the note
+                  says why their pick is gone. */}
+              {error === "slot-taken" && (
+                <p className="mb-2 text-sm text-red-600 dark:text-red-400">
+                  {t("booking.slotTaken")}
+                </p>
+              )}
+              {/* The list scrolls in its own column beside the month, as
+                  cal.com's does; stacked on a phone it is the rest of the
+                  card's scroll. */}
+              <TimeList
+                t={t}
+                language={pageLanguage}
+                zone={zone}
+                offers={offers}
+                day={openDay}
+                onPick={(ms) => {
+                  setStartMs(ms);
+                  setAsap(false);
+                  setError(null);
+                  setStep("details");
+                }}
+                className="thin-scroll md:overflow-y-auto md:pr-1"
+              />
+            </div>
           </div>
         </section>
       )}
 
       {step === "details" && picked.length > 0 && (startMs !== null || asap) && (
+        // cal.com's second screen from md: the booking's facts | the form.
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-6">
+        {infoColumn}
         <form
           id="booking-form"
           className="space-y-4"
@@ -1140,6 +1113,7 @@ export default function BookingPage({
             </p>
           )}
         </form>
+        </div>
       )}
 
     </Shell>
@@ -1192,12 +1166,17 @@ function Shell({
   title,
   logoUrl,
   language,
+  wide = false,
   footer,
   children,
 }: {
   title?: string;
   logoUrl?: string | null;
   language?: Language;
+  // The time and details steps, from md: cal.com's columns need the room. The
+  // service list stays a phone-width column at every size, since a list of
+  // names and prices only gets harder to read stretched across a desktop.
+  wide?: boolean;
   // The basket bar. A separate slot rather than the last child of `children`
   // because from sm the card is a fixed-height flex column and this is the row
   // that must NOT scroll — it has to be a sibling of the scrolling middle, not
@@ -1216,7 +1195,9 @@ function Shell({
       lang={language}
       // h-dvh, not min-h: the card below is a fixed-height column that fills
       // it, so this is the frame rather than a floor to grow past.
-      className="mx-auto flex h-dvh w-full max-w-md flex-col px-4 py-8 sm:px-5"
+      className={`mx-auto flex h-dvh w-full flex-col px-4 py-8 sm:px-5 ${
+        wide ? "max-w-md md:max-w-4xl" : "max-w-md"
+      }`}
     >
       {/* .card-raised is the app's card: rounded-lg, --card-shadow, NO border.
 

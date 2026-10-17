@@ -46,6 +46,7 @@ import { useConfirm } from "./ConfirmDialog";
 import { conflictText } from "@/lib/slotVerdict";
 import type { Rect } from "@/lib/anchoredSheet";
 import { HoverTip } from "./HoverTip";
+import { gmtLabel } from "@/lib/gmtLabel";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
   scheduled: "status.scheduled",
@@ -1317,23 +1318,6 @@ function GmtBadge({ at }: { at: number }) {
         )}
     </>
   );
-}
-
-// "GMT+03" for the gutter corner. Given the viewer's zone: the offset that
-// explains a grid is the one its hour labels are in, which is Google's
-// choice too.
-function gmtLabel(timezone: string | undefined, at: number): string {
-  try {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      timeZoneName: "shortOffset",
-    }).formatToParts(new Date(at));
-    const name = parts.find((p) => p.type === "timeZoneName")?.value ?? "GMT";
-    // "GMT+3" → "GMT+03"; "GMT+5:30" and plain "GMT" pass through untouched.
-    return name.replace(/^GMT([+-])(\d)$/, "GMT$10$2");
-  } catch {
-    return "GMT";
-  }
 }
 
 type Cluster = { key: string; startAt: number; endAt: number; size: number };
