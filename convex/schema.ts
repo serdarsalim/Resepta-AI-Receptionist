@@ -1088,6 +1088,58 @@ export default defineSchema({
     .index("by_org", ["orgId"])
     .index("by_org_agent", ["orgId", "retellAgentId"]),
 
+  // A browser test of a voice agent (P8 of the Nudge port, 2026-10-17): a
+  // web call from the agent page, so no phone rings. One row per test, written
+  // when the call is minted and completed by the post-call webhook or the
+  // transcript poll, whichever lands first. It is NEVER a calls row: a test
+  // writes nothing to a customer, a thread, the inbox or the calendar, and a
+  // calls row would carry it into all of them. The transcript is fetched from
+  // the provider on demand, never stored.
+  agentTests: defineTable({
+    orgId: v.id("orgs"),
+    retellAgentId: v.string(),
+    callId: v.string(),
+    // Which way the call is simulated. The variables are the same either
+    // way (beforeCallContext serves both the inbound hook and an outbound
+    // dial); the direction is what the person asked to rehearse.
+    direction: v.union(v.literal("outbound"), v.literal("inbound")),
+    // The version dialled; null when it could not be told and the call went
+    // unpinned. `draft` says it was the unpublished draft.
+    agentVersion: v.union(v.number(), v.null()),
+    draft: v.boolean(),
+    // Who the agent was told it was talking to. The tools act as this
+    // customer, dry: nothing is booked, moved, cancelled or saved.
+    customerId: v.optional(v.id("customers")),
+    startedByUserId: v.optional(v.id("users")),
+    startedAt: v.number(),
+    endedAt: v.optional(v.number()),
+    durationSec: v.optional(v.number()),
+    outcome: v.optional(v.string()),
+    summary: v.optional(v.string()),
+    collected: v.optional(v.record(v.string(), v.any())),
+    recordingUrl: v.optional(v.string()),
+    disconnectionReason: v.optional(v.string()),
+    // What the agent's tools WOULD have done, in order: a booking, a move, a
+    // cancel, details saved. Capped (agentTests.MAX_ACTIONS).
+    actions: v.optional(
+      v.array(
+        v.object({
+          tool: v.string(),
+          // Short machine-free facts for the card: a time, services, keys.
+          detail: v.string(),
+          ok: v.boolean(),
+          at: v.number(),
+        }),
+      ),
+    ),
+    // The meter's two stamps, same contract as calls (retell.meterVoice).
+    billedMicroUsd: v.optional(v.number()),
+    retellCostMicroUsd: v.optional(v.number()),
+  })
+    .index("by_org_agent_started", ["orgId", "retellAgentId", "startedAt"])
+    .index("by_call", ["callId"])
+    .index("by_org_customer", ["orgId", "customerId"]),
+
   calls: defineTable({
     orgId: v.id("orgs"),
     customerId: v.optional(v.id("customers")),
@@ -2752,6 +2804,14 @@ export default defineSchema({
     voiceSeconds: v.optional(v.number()),
     voiceBilledMicroUsd: v.optional(v.number()),
     voiceCostMicroUsd: v.optional(v.number()),
+    // The share of the voice figures above that came from browser tests on
+    // the agent page (agentTests, P8). A SHARE, not an addition: a test burns
+    // the same provider minutes as a call and is billed at the same rate, so
+    // voiceCalls/voiceSeconds/voiceBilledMicroUsd already include it, and
+    // these say how much of each was testing.
+    voiceTestCalls: v.optional(v.number()),
+    voiceTestSeconds: v.optional(v.number()),
+    voiceTestBilledMicroUsd: v.optional(v.number()),
     // Budget-alert stamps: set when the month's billed spend crossed 80% /
     // 100% of orgs.voiceMonthlyBudgetMicroUsd, so each alert fires once per
     // threshold per month. On the month row rather than the org so a new

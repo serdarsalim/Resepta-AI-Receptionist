@@ -3571,12 +3571,23 @@ export const markNoAiCallsFromCall = internalMutation({
 // usageMonthly rule the chat lane already lives by. The month is the month of
 // the call's startedAt in the org's zone: a call analysed after midnight
 // bills into the month it was made.
+//
+// A browser test (agentTests, P8) is metered by the same function: it burns
+// the same provider minutes, so it is billed at the same rate, counts against
+// the same budget and draws the same wallet. `test` additionally bumps the
+// month's test share (usageMonthly.voiceTest*), which is a part of the totals,
+// never added to them.
 async function meterCall(
   ctx: MutationCtx,
   orgId: Id<"orgs">,
-  existing: Doc<"calls"> | null,
+  existing: {
+    durationSec?: number;
+    billedMicroUsd?: number;
+    retellCostMicroUsd?: number;
+  } | null,
   args: { durationSec?: number; retellCostMicroUsd?: number },
   startedAt: number,
+  opts: { test?: boolean } = {},
 ): Promise<{ billedMicroUsd?: number; retellCostMicroUsd?: number }> {
   const durationSec = existing?.durationSec ?? args.durationSec;
   const stampBilled =
@@ -3612,6 +3623,14 @@ async function meterCall(
     voiceBilledMicroUsd: billedMicroUsd ?? 0,
     voiceCostMicroUsd: stampCost ? (args.retellCostMicroUsd ?? 0) : 0,
   };
+  const testBump =
+    opts.test && stampBilled
+      ? {
+          voiceTestCalls: 1,
+          voiceTestSeconds: durationSec ?? 0,
+          voiceTestBilledMicroUsd: billedMicroUsd ?? 0,
+        }
+      : null;
   // Budget alerts — the whole budget feature; there is deliberately no cap on
   // the dispatch path (schema: orgs.voiceMonthlyBudgetMicroUsd). Once per
   // threshold per month via the stamps on this row. Current month only, so a
@@ -3647,6 +3666,14 @@ async function meterCall(
         (usage.voiceBilledMicroUsd ?? 0) + bump.voiceBilledMicroUsd,
       voiceCostMicroUsd:
         (usage.voiceCostMicroUsd ?? 0) + bump.voiceCostMicroUsd,
+      ...(testBump
+        ? {
+            voiceTestCalls: (usage.voiceTestCalls ?? 0) + testBump.voiceTestCalls,
+            voiceTestSeconds: (usage.voiceTestSeconds ?? 0) + testBump.voiceTestSeconds,
+            voiceTestBilledMicroUsd:
+              (usage.voiceTestBilledMicroUsd ?? 0) + testBump.voiceTestBilledMicroUsd,
+          }
+        : {}),
       ...alertStamps,
       updatedAt: Date.now(),
     });
@@ -3659,6 +3686,7 @@ async function meterCall(
       llmOutputTokens: 0,
       llmCostMicroUsd: 0,
       ...bump,
+      ...(testBump ?? {}),
       ...alertStamps,
       updatedAt: Date.now(),
     });
@@ -3683,6 +3711,66 @@ async function meterCall(
     ...(stampCost ? { retellCostMicroUsd: args.retellCostMicroUsd } : {}),
   };
 }
+
+// A browser test's finished call (agentTests, P8) onto its row, from the
+// post-call webhook or the transcript poll, whichever lands first. Here beside
+// meterCall rather than in agentTests.ts, so that module needs nothing from
+// this one. Fill, never overwrite: call_ended
+// and call_analyzed both arrive, and the poll runs every few seconds. The
+// meter stamps once (its own unset-field guard), so a test is never billed
+// twice however many times this runs.
+export const completeBrowserTest = internalMutation({
+  args: {
+    retellAgentId: v.string(),
+    callId: v.string(),
+    startedAt: v.optional(v.number()),
+    endedAt: v.optional(v.number()),
+    durationSec: v.optional(v.number()),
+    outcome: v.optional(v.string()),
+    summary: v.optional(v.string()),
+    collected: v.optional(v.record(v.string(), v.any())),
+    recordingUrl: v.optional(v.string()),
+    disconnectionReason: v.optional(v.string()),
+    retellCostMicroUsd: v.optional(v.number()),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("agentTests")
+      .withIndex("by_call", (q) => q.eq("callId", args.callId))
+      .first();
+    if (!row || row.retellAgentId !== args.retellAgentId) return false;
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", args.retellAgentId))
+      .unique();
+    if (!agent || agent.orgId !== row.orgId) return false;
+
+    const fill = <K extends keyof typeof args>(key: K) =>
+      row[key as keyof typeof row] === undefined && args[key] !== undefined
+        ? { [key]: args[key] }
+        : {};
+    const meter = await meterCall(
+      ctx,
+      row.orgId,
+      row,
+      { durationSec: args.durationSec, retellCostMicroUsd: args.retellCostMicroUsd },
+      row.startedAt,
+      { test: true },
+    );
+    await ctx.db.patch(row._id, {
+      ...fill("endedAt"),
+      ...fill("durationSec"),
+      ...fill("outcome"),
+      ...fill("summary"),
+      ...fill("collected"),
+      ...fill("recordingUrl"),
+      ...fill("disconnectionReason"),
+      ...meter,
+    });
+    return true;
+  },
+});
 
 // Post-call webhook: one row per Retell call, idempotent by retellCallId.
 export const recordCall = internalMutation({

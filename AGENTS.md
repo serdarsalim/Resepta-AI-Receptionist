@@ -836,6 +836,18 @@ names (`lib/retellDraft.llmPath`), never bare: after a discard the bare read is
 the orphan. A new outbound dial path passes `override_agent_version` for the
 published version, as `testCall` and `placeCall` do.
 
+**A browser test is never a call** (2026-10-17, P8 of the Nudge port). The
+agent page tests an agent as a WEB call (`retellAgent.startBrowserTest`)
+carrying our marker (`lib/browserTest`) and an `agentTests` row. Its tools
+answer DRY in `/retell/functions`, as the customer the owner chose to call as:
+nothing is booked, moved, cancelled or saved and the team is not emailed;
+what they would have done goes on the row (`agentTests.noteAction`). The
+post-call webhook completes that row and stops before `voiceEvents`, so no
+calls row, thread entry or customer field comes of it. It is metered like a
+call into `usageMonthly.voiceTest*`, a share of the voice totals, never an
+addition. A new write in the functions route checks `isTest` first; a marked
+call with no row of this org is still a test.
+
 **Recogniser hints are derived, and only ours are replaced** (2026-10-13). An
 agent's `boosted_keywords` are this org's name, active team and active
 services (`lib/boostedKeywords`), read by org after the agent is proven to be

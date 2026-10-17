@@ -1345,6 +1345,31 @@ same core; `publishAgent` with `stage: true` writes the draft and stops.
   and `syncTemplate` applies the stored choice, keeping any
   `detection_prompt` the live agent carries.
 
+### Testing an agent in the browser (P8, 2026-10-17)
+
+`retellAgent.startBrowserTest` mints a web call (`v3/create-web-call`) for one
+of this org's agents, owner-only and never in the demo org: variables from
+`beforeCallContext` for the chosen customer's phone (or none, a stranger), the
+owner's typed overrides applied last (a blank removes a variable), the version
+asked for (the draft after `publishAgent` with `stage`) or the published one.
+It refuses (`test-unavailable`) whenever a real ring would: the agent off, the
+business suspended, a prepaid wallet empty. The `agentTests` row is written
+before the browser joins and is fatal if it fails.
+
+- `/retell/functions`: a call carrying `metadata.resepta_browser_test` is a
+  test. The caller is the test row's customer (`agentTests.testOfCall`);
+  booking runs `checkBook` and answers a clear plan as booked; save, cancel
+  and move answer done after the same whose/which checks; refusals answer as
+  usual. Each is noted on the row. No cal.com hold, no write, no team email.
+- `/retell/call-ended`: a marked call goes to `retell.completeBrowserTest`
+  and returns. `browserTestResult` (the page's poll) fetches the transcript
+  from the provider for this org's test only, completes the row too, and
+  never stores the words.
+- Metering: `meterCall` with `test`: same rate, budget alerts and wallet
+  debit as a call, plus `usageMonthly.voiceTestCalls/Seconds/BilledMicroUsd`.
+- Deletion: `agentTests` is in `ORG_TABLES` and in the customer `FOOTPRINT`
+  (rows run as a customer go with them).
+
 ## The calendar and booking sheet after 2026-08-19 (the Google pass — read this before the 2026-07-29 entry in `journal/2026-07.md`)
 
 Serdar's brief: make the calendar and its popup read like Google Calendar,

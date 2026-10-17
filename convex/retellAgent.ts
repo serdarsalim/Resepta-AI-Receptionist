@@ -42,6 +42,8 @@ import {
   publishedVersionOf,
 } from "./lib/retellDraft";
 import { publishVersionBody, versionNoteValidator, type VersionNote } from "./lib/versionNote";
+import { BROWSER_TEST_MARKER, browserTestFacts } from "./lib/browserTest";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 const API = "https://api.retellai.com";
 
@@ -2728,6 +2730,199 @@ export const testCall = action({
     ).json()) as { call_id?: string };
 
     return { ok: true, callId: res.call_id ?? null, from, to };
+  },
+});
+
+// ── Browser test ─────────────────────────────────────────────────────────────
+
+// A test of the agent from the agent page, as a WEB call, so no phone rings
+// (P8 of the Nudge port, 2026-10-17; Nudge's retellStudio.startBrowserTest).
+//
+// What the agent hears is what it would hear on a real ring: the same
+// beforeCallContext the inbound hook and every dial use, built from the
+// customer the owner chose to "call as" (or nobody, for a stranger), with
+// anything the owner typed over a variable applied last. The version is the
+// one the page asks for, which is the draft when it just staged its edits
+// (publishAgent with stage), else the published one.
+//
+// It touches no customer. The call carries our test marker in its metadata;
+// /retell/functions answers its tools dry (as the chosen customer) and
+// /retell/call-ended completes the agentTests row instead of writing a call.
+// It costs the same minutes as a call and is metered like one, at the org's
+// rate, into the month's test share.
+export const startBrowserTest = action({
+  args: {
+    agentId: v.string(),
+    customerId: v.optional(v.id("customers")),
+    direction: v.optional(v.union(v.literal("outbound"), v.literal("inbound"))),
+    // What the owner typed, by variable key. Applied last; a blank value is
+    // not sent, so an empty box means "let the agent fall back".
+    overrides: v.optional(v.record(v.string(), v.string())),
+    // The version to dial. Omitted = the published version.
+    agentVersion: v.optional(v.number()),
+  },
+  returns: v.object({
+    accessToken: v.string(),
+    callId: v.string(),
+    // Handed to the browser SDK verbatim. The v3 endpoint answers with its
+    // own transport and ICE servers, and the client falls back to a
+    // transport that fails as "invalid API key" when not told (Nudge,
+    // 2026-09-19).
+    transport: v.union(v.string(), v.null()),
+    iceServers: v.array(
+      v.object({
+        urls: v.union(v.string(), v.array(v.string())),
+        username: v.optional(v.string()),
+        credential: v.optional(v.string()),
+      }),
+    ),
+    agentVersion: v.union(v.number(), v.null()),
+    variables: v.record(v.string(), v.string()),
+    testId: v.id("agentTests"),
+  }),
+  handler: async (
+    ctx,
+    { agentId, customerId, direction, overrides, agentVersion: requested },
+  ): Promise<{
+    accessToken: string;
+    callId: string;
+    transport: string | null;
+    iceServers: { urls: string | string[]; username?: string; credential?: string }[];
+    agentVersion: number | null;
+    variables: Record<string, string>;
+    testId: Id<"agentTests">;
+  }> => {
+    // Owner-only and never the demo org (editorContext refuses both): the
+    // showroom holds no provider key and must make no provider call.
+    const context = await editorContext(ctx, agentId);
+    const key = context.apiKey!;
+    let phone = "";
+    if (customerId) {
+      const customer = await ctx.runQuery(internal.agentTests.testCustomer, {
+        orgId: context.orgId,
+        customerId,
+      });
+      if (!customer) throw new Error("no-such-customer");
+      phone = customer.phone;
+    }
+    // The ring-time variables. Null is the same refusal a real ring gets:
+    // the agent switched off, the business suspended or its wallet empty.
+    const before = (await ctx.runQuery(internal.retell.beforeCallContext, {
+      retellAgentId: agentId,
+      phone,
+    })) as { dynamicVariables: Record<string, string> } | null;
+    if (!before) throw new Error("test-unavailable");
+    const variables: Record<string, string> = { ...before.dynamicVariables };
+    for (const [name, value] of Object.entries(overrides ?? {})) {
+      if (value.trim()) variables[name] = value;
+      else delete variables[name];
+    }
+
+    const agentVersion = requested ?? (await liveVersionForDial(key, agentId));
+    const json = (await (
+      await call(key, "POST", "v3/create-web-call", {
+        agent_id: agentId,
+        ...(agentVersion !== null ? { agent_version: agentVersion } : {}),
+        retell_llm_dynamic_variables: variables,
+        metadata: { [BROWSER_TEST_MARKER]: true, direction: direction ?? "outbound" },
+      })
+    ).json()) as {
+      access_token?: string;
+      call_id?: string;
+      transport?: string;
+      ice_servers?: { urls: string | string[]; username?: string; credential?: string }[];
+    };
+    if (!json.access_token || !json.call_id) throw new Error("retell-no-web-call");
+
+    // Written before the browser joins, and fatal if it fails: without the
+    // row the tools could not tell whose test this is, and they would answer
+    // as a call with nobody on the line. A test that will not start is
+    // better than one that runs blind.
+    const userId = await getAuthUserId(ctx);
+    const testId = await ctx.runMutation(internal.agentTests.record, {
+      orgId: context.orgId,
+      retellAgentId: agentId,
+      callId: json.call_id,
+      direction: direction ?? "outbound",
+      agentVersion,
+      draft: requested !== undefined,
+      ...(customerId ? { customerId } : {}),
+      ...(userId ? { startedByUserId: userId } : {}),
+    });
+    return {
+      accessToken: json.access_token,
+      callId: json.call_id,
+      transport: json.transport ?? null,
+      iceServers: json.ice_servers ?? [],
+      agentVersion,
+      variables,
+      testId,
+    };
+  },
+});
+
+// What the test said and did, once it has hung up. Not live: the web call's
+// data channel carries no transcript events, and the provider answers an
+// ongoing call with an empty transcript (Nudge, 2026-09-19), so the words
+// arrive a second or two after the call ends. Fetched on demand, for this
+// org's own test only, and never stored. Each poll also completes the row,
+// so the result does not wait for the webhook.
+export const browserTestResult = action({
+  args: { callId: v.string() },
+  returns: v.object({
+    ready: v.boolean(),
+    turns: v.array(v.object({ role: v.string(), text: v.string() })),
+    summary: v.union(v.string(), v.null()),
+    collected: v.record(v.string(), v.any()),
+    recordingUrl: v.union(v.string(), v.null()),
+    durationSec: v.union(v.number(), v.null()),
+    actions: v.array(
+      v.object({ tool: v.string(), detail: v.string(), ok: v.boolean(), at: v.number() }),
+    ),
+  }),
+  handler: async (
+    ctx,
+    { callId },
+  ): Promise<{
+    ready: boolean;
+    turns: { role: string; text: string }[];
+    summary: string | null;
+    collected: Record<string, unknown>;
+    recordingUrl: string | null;
+    durationSec: number | null;
+    actions: { tool: string; detail: string; ok: boolean; at: number }[];
+  }> => {
+    const row = await ctx.runQuery(internal.agentTests.ownedTest, { callId });
+    if (!row) throw new Error("no-such-test");
+    const context = await editorContext(ctx, row.retellAgentId);
+    const got = (await (
+      await call(context.apiKey!, "GET", `v2/get-call/${encodeURIComponent(callId)}`)
+    ).json()) as Record<string, unknown>;
+    const status = String(got.call_status ?? "");
+    const ended = status === "ended" || status === "error" || status === "not_connected";
+    const facts = browserTestFacts(got);
+    if (ended) {
+      await ctx.runMutation(internal.retell.completeBrowserTest, {
+        retellAgentId: row.retellAgentId,
+        callId,
+        ...facts,
+      });
+    }
+    const transcript = Array.isArray(got.transcript_object)
+      ? (got.transcript_object as { role?: string; content?: string }[])
+      : [];
+    const after = await ctx.runQuery(internal.agentTests.ownedTest, { callId });
+    return {
+      ready: ended,
+      turns: transcript
+        .filter((turn) => typeof turn.content === "string" && turn.content.trim())
+        .map((turn) => ({ role: String(turn.role ?? ""), text: String(turn.content) })),
+      summary: facts.summary ?? null,
+      collected: facts.collected ?? {},
+      recordingUrl: facts.recordingUrl ?? null,
+      durationSec: facts.durationSec ?? null,
+      actions: after?.actions ?? row.actions,
+    };
   },
 });
 

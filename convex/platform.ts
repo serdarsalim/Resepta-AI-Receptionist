@@ -2196,6 +2196,7 @@ type PurgeEntry = {
 const ORG_TABLES = [
   { table: "messages", rows: (ctx, orgId) => ctx.db.query("messages").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
   { table: "calls", rows: (ctx, orgId) => ctx.db.query("calls").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "agentTests", rows: (ctx, orgId) => ctx.db.query("agentTests").withIndex("by_org_agent_started", (q) => q.eq("orgId", orgId)) },
   { table: "voiceEvents", rows: (ctx, orgId) => ctx.db.query("voiceEvents").withIndex("by_org_event_key", (q) => q.eq("orgId", orgId)) },
   { table: "chatAgentTurns", rows: (ctx, orgId) => ctx.db.query("chatAgentTurns").withIndex("by_org_at", (q) => q.eq("orgId", orgId)) },
   { table: "activityLog", rows: (ctx, orgId) => ctx.db.query("activityLog").withIndex("by_org", (q) => q.eq("orgId", orgId)) },

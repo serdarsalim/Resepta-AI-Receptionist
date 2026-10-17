@@ -37,6 +37,7 @@ import { cleanError } from "./lib/mcpProtocol";
 import type { AgentBooking } from "./retell";
 import { answerOrEmpty } from "./lib/nonAnswer";
 import { queueOrgAlert } from "./lib/alerts";
+import { browserTestFacts, isBrowserTestCall } from "./lib/browserTest";
 import { formatAppointmentTime } from "./lib/format";
 import { minNoticeHoursOf, minNoticeMs, noticeSpan } from "./lib/minNotice";
 import { languageFromAcceptHeader, unsubscribePage } from "./lib/unsubscribePage";
@@ -533,6 +534,32 @@ http.route({
     });
     if (!context) return respond({ error: "agent-not-configured" });
     const { org } = context;
+    // A browser test from the agent page (P8, agentTests): a web call with
+    // our marker. Its tools answer DRY, acting as the customer the owner
+    // chose and writing down what they would have done, and nothing below
+    // books, moves, cancels, saves or emails the team for it. A marked call
+    // whose test row is missing (or another org's) still counts as a test,
+    // with nobody on the line: a marked call never writes.
+    const testCallId = String(call.call_id ?? "");
+    const isTest = isBrowserTestCall(call);
+    const testOf = isTest
+      ? await ctx.runQuery(internal.agentTests.testOfCall, {
+          orgId: org._id,
+          callId: testCallId,
+        })
+      : null;
+    const noteTest = (tool: string, detail: string, ok: boolean) =>
+      ctx.runMutation(internal.agentTests.noteAction, {
+        orgId: org._id,
+        callId: testCallId,
+        tool,
+        detail,
+        ok,
+      });
+    // The team is told about a promise the agent made on a live call; a test
+    // made none.
+    const alertTeam = (alert: Parameters<typeof queueOrgAlert>[1]) =>
+      isTest ? Promise.resolve() : queueOrgAlert(ctx, alert);
     // WHO IS CALLING comes from the call, never from the model (2026-10-13).
     // The customer's leg by direction, normalized with the org's dial code and
     // never the business's own line: retell.callerOfCall, the same reading
@@ -548,7 +575,9 @@ http.route({
     // Resolved on first use, not up front: check_availability is the tool an
     // agent calls most and needs no caller, and every round trip here is
     // silence on a live line.
-    let caller: { phone: string | null; customerId: Id<"customers"> | null } | null = null;
+    let caller: { phone: string | null; customerId: Id<"customers"> | null } | null = isTest
+      ? { phone: testOf?.phone ?? null, customerId: testOf?.customerId ?? null }
+      : null;
     const callerOfCall = async () =>
       (caller ??= await ctx.runQuery(internal.retell.callerOfCall, {
         orgId: org._id,
@@ -867,7 +896,22 @@ http.route({
       // The slot cal.com is holding for this booking, released again if the
       // write refuses after all.
       let held: { apiKey: string; uid: string } | undefined;
-      if (org.calcomApiKey && org.calcomEventTypeId) {
+      if (isTest) {
+        // Every guard the write would run, and no write: no cal.com hold, no
+        // row, no confirmation. A clear plan is answered as booked.
+        const checked = await ctx.runQuery(internal.retell.checkBook, bookArgs);
+        const when = spokenDateTime(startAt, org.timezone, org.language);
+        if ("clear" in checked) {
+          await noteTest("book_appointment", [when, ...(asked ?? [])].join(" · "), true);
+          return respond({ booked: true, spoken_time: when, services: asked });
+        }
+        await noteTest(
+          "book_appointment",
+          [when, checked.ok ? "already booked" : checked.code].join(" · "),
+          checked.ok,
+        );
+        booking = checked;
+      } else if (org.calcomApiKey && org.calcomEventTypeId) {
         // Goods-only orders never touch cal.com: nothing zero-length exists
         // there, and an externalUid would make voiceBook skip its own guards
         // — the lead-time check included. Local book, local truth.
@@ -921,7 +965,7 @@ http.route({
         // agent says a colleague will be in touch, and the team is emailed
         // so that promise has an owner.
         if (booking.code === "too-many-changes" || booking.code === "book-failed") {
-          await queueOrgAlert(ctx, {
+          await alertTeam({
             orgId: org._id,
             template: "bookNeedsPerson",
             who: customerName || callerPhone,
@@ -984,6 +1028,11 @@ http.route({
       const values = voiceValuesFromToolArgs(args);
       if (Object.keys(values).length === 0) {
         return respond({ saved: false, updated: [], ignored: [], message: "Nothing to save." });
+      }
+      if (isTest) {
+        const keys = Object.keys(values);
+        await noteTest("save_customer_details", keys.join(", "), true);
+        return respond({ saved: true, updated: keys, message: "Saved." });
       }
       let result;
       try {
@@ -1124,7 +1173,7 @@ http.route({
           // The note promises a colleague, so the team is emailed in the same
           // breath, as for every other handover below: nobody reads a live
           // call, and a promise with no owner is worse than none.
-          await queueOrgAlert(ctx, {
+          await alertTeam({
             orgId: org._id,
             template:
               name === "cancel_appointment" ? "cancelNeedsPerson" : "moveNeedsPerson",
@@ -1170,7 +1219,7 @@ http.route({
           known === "calendar-error" ||
           known === "appointment-duplicate"
         ) {
-          await queueOrgAlert(ctx, {
+          await alertTeam({
             orgId: org._id,
             template: did === "cancelled" ? "cancelNeedsPerson" : "moveNeedsPerson",
             who: own.customerName,
@@ -1207,13 +1256,26 @@ http.route({
       // The daily cap is judged with the change (writeOwnChange), after a
       // repeat is recognised: a retry at the cap is "already done", not a
       // handover, and cal.com still hears nothing a refusal would undo.
-      const write = (change: { kind: "cancel" } | { kind: "move"; to: number }) =>
-        writeOwnChange(ctx, {
+      const write = async (
+        change: { kind: "cancel" } | { kind: "move"; to: number },
+      ): Promise<Awaited<ReturnType<typeof writeOwnChange>>> => {
+        // A test changes nothing and says it did, after the same identity
+        // checks a real change gets above (whose, which).
+        if (isTest) {
+          await noteTest(
+            name,
+            change.kind === "cancel" ? spokenOf(from) : `${spokenOf(from)} → ${spokenOf(change.to)}`,
+            true,
+          );
+          return { ok: true };
+        }
+        return await writeOwnChange(ctx, {
           target,
           calcomApiKey: org.calcomApiKey ?? undefined,
           change,
           via: "phone",
         });
+      };
 
       if (name === "cancel_appointment") {
         const done = await write({ kind: "cancel" });
@@ -1291,6 +1353,17 @@ http.route({
     const call = (guard.payload.call ?? {}) as Record<string, unknown>;
     const callId = String(call.call_id ?? "");
     if (!callId) return new Response("ok", { status: 200 });
+    // A browser test from the agent page (P8) is never a call: it completes
+    // its agentTests row (and is metered there) and goes no further, so no
+    // calls row, thread entry, customer field or bulk-queue step comes of it.
+    if (isBrowserTestCall(call)) {
+      await ctx.runMutation(internal.retell.completeBrowserTest, {
+        retellAgentId: guard.agentId,
+        callId,
+        ...browserTestFacts(call),
+      });
+      return new Response("ok", { status: 200 });
+    }
     await ctx.runMutation(internal.voiceEvents.enqueue, {
       orgId: guard.orgId as never,
       retellAgentId: guard.agentId,

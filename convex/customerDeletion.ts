@@ -82,6 +82,7 @@ export const FOOTPRINT_KINDS = [
   "appointments",
   "messages",
   "calls",
+  "agentTests",
   "chatTurns",
   "notes",
   "bulkRunItems",
@@ -100,6 +101,7 @@ export const footprintValidator = v.object({
     appointments: v.number(),
     messages: v.number(),
     calls: v.number(),
+    agentTests: v.number(),
     chatTurns: v.number(),
     notes: v.number(),
     bulkRunItems: v.number(),
@@ -335,6 +337,20 @@ const FOOTPRINT: Source[] = [
   }),
   // A note written by a connected assistant also has a journal row holding
   // its text; that row is emptied before the note goes.
+  // A browser test the owner ran AS this customer. Deleted, not unlinked:
+  // its summary and answers are what the agent said to and about them.
+  source({
+    kind: "agentTests",
+    rows: (ctx, customer) =>
+      ctx.db
+        .query("agentTests")
+        .withIndex("by_org_customer", (q) =>
+          q.eq("orgId", customer.orgId).eq("customerId", customer._id),
+        ),
+    clear: async (ctx, row) => {
+      await ctx.db.delete(row._id);
+    },
+  }),
   source({
     kind: "notes",
     rows: (ctx, customer) =>
