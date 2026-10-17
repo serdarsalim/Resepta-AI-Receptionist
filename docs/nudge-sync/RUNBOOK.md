@@ -34,7 +34,9 @@ You are that routine. You start with no context: this file, the port plan
    `git checkout claude/nudge-port` (it tracks `origin/claude/nudge-port`). If the branch
    does not exist, write nothing and stop.
 3. **Take the lock.** If `docs/nudge-sync/LOCK` exists and its timestamp is
-   less than 5 hours old, another run is working: stop. Otherwise write the
+   less than 3 hours old, another run is working: stop. (A working run
+   rewrites that timestamp after every phase, so an older one means the run
+   died.) Otherwise write the
    current UTC time and "running" into it, commit
    (`nudge-sync: run started`), push. If the push is rejected, someone else
    just took it: stop.
@@ -50,9 +52,11 @@ You are that routine. You start with no context: this file, the port plan
 7. **Build phases.** Take the first phase in the table that is not done, not
    marked "needs Serdar", and not listed in `docs/nudge-sync/held` (phases
    being built somewhere else right now, one per line; whoever finishes one
-   removes it from that file). Build it (see "Building a phase"). Repeat
-   while you have more than about an hour of the run left. A run that has
-   been going 3 hours starts no new phase.
+   removes it from that file). Build it (see "Building a phase"). After each phase, rewrite `LOCK`
+   with the current UTC time, commit and push it with the phase, and update
+   STATUS.md. Then take the next phase. Keep going until no phase is left:
+   Serdar has a long backlog and wants it finished in one go. Re-read the
+   builder brief before each phase, since a long run forgets.
 8. **Report.** Update STATUS.md. Update the PR description if you can reach
    GitHub's API; if not, STATUS.md is enough.
 9. **Release the lock.** Delete `LOCK`, commit (`nudge-sync: run finished`),
