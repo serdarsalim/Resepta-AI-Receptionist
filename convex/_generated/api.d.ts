@@ -48,6 +48,7 @@ import type * as lib_boostedKeywords from "../lib/boostedKeywords.js";
 import type * as lib_browserTest from "../lib/browserTest.js";
 import type * as lib_businessHours from "../lib/businessHours.js";
 import type * as lib_calcomApi from "../lib/calcomApi.js";
+import type * as lib_callOutcome from "../lib/callOutcome.js";
 import type * as lib_chatAgentTemplate from "../lib/chatAgentTemplate.js";
 import type * as lib_chatLlm from "../lib/chatLlm.js";
 import type * as lib_closureRows from "../lib/closureRows.js";
@@ -190,6 +191,7 @@ declare const fullApi: ApiFromModules<{
   "lib/browserTest": typeof lib_browserTest;
   "lib/businessHours": typeof lib_businessHours;
   "lib/calcomApi": typeof lib_calcomApi;
+  "lib/callOutcome": typeof lib_callOutcome;
   "lib/chatAgentTemplate": typeof lib_chatAgentTemplate;
   "lib/chatLlm": typeof lib_chatLlm;
   "lib/closureRows": typeof lib_closureRows;

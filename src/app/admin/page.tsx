@@ -622,6 +622,31 @@ export default function AdminPage() {
             />
           </Section>
 
+          {/* One Retell account carries every business's calls, inbound
+              included, so this is the platform's only lever on how much of
+              that pool bulk runs may take. bulkRuns.claimNextCall holds a run
+              while the limit is reached. Its own section: unlike the rows
+              above, no business can override it. */}
+          <Section
+            title="Bulk calls"
+            description="A ceiling on bulk-run calls across every business, so runs cannot take the lines inbound callers need."
+          >
+            <Row
+              label="Bulk calls at once"
+              count
+              hint="The most bulk-run calls ringing at the same time, across every business. Every business's calls and every inbound call share one Retell account and its concurrency, so keep this below the account's limit with room left for inbound. A run that finds the limit reached waits and tries again every 30 seconds. Empty = no platform limit; each run still makes one call at a time."
+              current={
+                mail.bulkCallConcurrency === null
+                  ? undefined
+                  : String(mail.bulkCallConcurrency)
+              }
+              placeholder="No limit"
+              onSave={(value) =>
+                setConfig({ key: "bulkCallConcurrency", value: value.trim() })
+              }
+            />
+          </Section>
+
           {/* The Tech Provider shape (lib/platformConfig resolveWaAccount):
               one Meta system-user token for every hosted number, so wiring a
               business is just its phone number id and WABA id on the Setup

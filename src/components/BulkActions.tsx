@@ -19,7 +19,13 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { useLanguage, useT } from "@/lib/LanguageProvider";
-import { formatAge } from "@/lib/datetime";
+import { formatAge, formatDateTimeWithWeekday, formatTime } from "@/lib/datetime";
+import {
+  callOutcome,
+  isRetryableCallEnd,
+  isRetryableDialError,
+} from "../../convex/lib/callOutcome";
+import { humanizeCallEnd } from "./CallDetail";
 import { useConfirm } from "./ConfirmDialog";
 import { EmojiPicker } from "./EmojiPicker";
 import { RowLabel } from "./RowLabel";
@@ -386,7 +392,7 @@ export function BulkRunsCard({
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">
                   <span className="truncate font-medium">{run.label}</span>
-                  <StatusPill status={run.status} />
+                  <StatusPill status={run.status} held={run.heldUntil !== undefined} />
                 </span>
                 <span className="mt-0.5 block text-xs text-[var(--muted)]">
                   {t(`bulk.${run.channel}`)} · {formatAge(run.startedAt, language)}
@@ -412,8 +418,18 @@ export function BulkRunsCard({
   );
 }
 
-function StatusPill({ status }: { status: string }) {
+// `held`: a running call run that may not dial yet (bulkRuns.claimNextCall's
+// hold, outside opening hours). It is still running, and Pause and Stop still
+// apply, but "Running" would claim phones are ringing when none are.
+function StatusPill({ status, held }: { status: string; held?: boolean }) {
   const t = useT();
+  if (status === "running" && held) {
+    return (
+      <span className="shrink-0 text-xs text-[var(--muted-strong)]">
+        {t("bulk.statusWaiting")}
+      </span>
+    );
+  }
   const tone =
     status === "running"
       ? "text-emerald-600 dark:text-emerald-400"
@@ -456,6 +472,9 @@ function RunDetail({
   // still reads Running, nothing appears on screen, and the run keeps dialling
   // while the person who pressed Stop believes it stopped.
   const options = useQuery(api.bulkRuns.launchOptions, {});
+  // The business's zone, for when a waiting run resumes: the hold is the
+  // business's opening, so it is said on the business's clock.
+  const timezone = useQuery(api.orgs.current, {})?.org.timezone;
   const setStatus = useMutation(api.bulkRuns.setStatus);
   const [confirm, confirmDialog] = useConfirm();
   const [error, setError] = useState<string | null>(null);
@@ -507,7 +526,7 @@ function RunDetail({
         >
           ← {t("bulk.backToRuns")}
         </button>
-        <StatusPill status={run.status} />
+        <StatusPill status={run.status} held={run.heldUntil !== undefined} />
         {live && (
           <span className="ml-auto flex items-center gap-2">
             {run.status === "running" ? (
@@ -551,6 +570,21 @@ function RunDetail({
             skipped: run.skippedCount,
           })}
         </p>
+        {/* Why a running call run is not ringing anybody, and when it will.
+            Without this a run launched after closing reads as stuck. */}
+        {run.status === "running" && run.heldUntil !== undefined && (
+          <p className="mt-1 text-xs text-[var(--muted-strong)]">
+            {run.heldReason === "no-opening"
+              ? t("bulk.heldNoOpening")
+              : run.heldReason === "busy"
+                ? t("bulk.heldBusy", {
+                    time: formatTime(run.heldUntil, language, timezone),
+                  })
+                : t("bulk.heldClosed", {
+                    when: formatDateTimeWithWeekday(run.heldUntil, language, timezone),
+                  })}
+          </p>
+        )}
         {/* What was actually written, kept because a run is looked at weeks
             later and "which one was this" is answered by the words, not by
             the timestamp. */}
@@ -570,7 +604,7 @@ function RunDetail({
               onClick={() => onOpenContact(item.customerId)}
             >
               <span className="min-w-0 flex-1 truncate">{item.name}</span>
-              <ItemOutcome item={item} />
+              <ItemOutcome item={item} channel={run.channel} />
             </li>
           ))}
         </ul>
@@ -600,7 +634,7 @@ type RunItem = {
 // A skipped row says WHY, verbatim. That is the whole point of skipping rather
 // than dropping: a run that quietly lost eleven people is how "I sent it to
 // everyone" becomes false.
-function ItemOutcome({ item }: { item: RunItem }) {
+function ItemOutcome({ item, channel }: { item: RunItem; channel: BulkChannel }) {
   const t = useT();
   const muted = "shrink-0 text-xs text-[var(--muted)]";
 
@@ -618,12 +652,29 @@ function ItemOutcome({ item }: { item: RunItem }) {
                   ? "bulk.skipNoAiCalls"
                   : item.reason === "unsubscribed"
                     ? "bulk.skipUnsubscribed"
-                    : "bulk.skipOther",
+                    : item.reason === "already-booked"
+                      ? "bulk.skipAlreadyBooked"
+                      : item.reason === "called-today"
+                        ? "bulk.skipCalledToday"
+                        : "bulk.skipOther",
         )}
       </span>
     );
   }
   if (item.status === "cancelled") return <span className={muted}>{t("bulk.itemCancelled")}</span>;
+  // A finished call says what it came to, from the provider's disconnect code
+  // (lib/callOutcome), never "Sent": before this an unanswered call, which
+  // ends with no duration, fell through to the message channels' last line.
+  if (channel === "call" && (item.status === "done" || item.status === "failed")) {
+    const ended = callOutcome(item.disconnectionReason, item.durationSec);
+    if (ended) return <CallOutcomeText item={item} outcome={ended} />;
+    // Given up on after the provider refused every try for want of a free
+    // line (bulkRuns.requeueRefusedCall): nothing ever rang.
+    if (item.status === "failed" && retryableRefusal(item.reason)) {
+      return <CallOutcomeText item={item} outcome="refused" gaveUp />;
+    }
+    if (item.status === "done") return <span className={muted}>{t("bulk.itemCalled")}</span>;
+  }
   if (item.status === "failed") {
     return (
       <span
@@ -641,7 +692,15 @@ function ItemOutcome({ item }: { item: RunItem }) {
       </span>
     );
   }
-  if (item.status === "pending") return <span className={muted}>{t("bulk.itemPending")}</span>;
+  if (item.status === "pending") {
+    // Back in line after a refused dial, and the run is waiting to try again
+    // (bulkRuns.requeueRefusedCall): not the same as never tried.
+    return (
+      <span className={muted}>
+        {t(retryableRefusal(item.reason) ? "bulk.itemRetrying" : "bulk.itemPending")}
+      </span>
+    );
+  }
 
   // Done, or a message row still working its way through the delivery queue.
   if (item.repliedAt) {
@@ -652,20 +711,64 @@ function ItemOutcome({ item }: { item: RunItem }) {
     );
   }
   if (item.openedAt) return <span className={muted}>{t("bulk.itemOpened")}</span>;
-  if (item.durationSec !== undefined) {
-    // A call that connected reports how long; one that did not reports why,
-    // and Retell's own disconnect code is the only thing that explains a call
-    // with no summary.
-    return (
-      <span className={muted}>
-        {item.durationSec > 0
-          ? t("bulk.itemAnswered", { s: item.durationSec })
-          : t("bulk.itemNoAnswer")}
-      </span>
-    );
-  }
   if (item.status === "queued" && item.messageStatus === "queued") {
     return <span className={muted}>{t("bulk.itemQueued")}</span>;
   }
   return <span className={muted}>{t("bulk.itemSent")}</span>;
+}
+
+// A refusal the call queue retries rather than counts: no free line on the
+// shared account, the carrier briefly away, the provider failing.
+function retryableRefusal(reason: string | undefined): boolean {
+  return Boolean(reason) && (isRetryableCallEnd(reason) || isRetryableDialError(reason!));
+}
+
+// One call's outcome in a word or two. The two that never reached the phone
+// are red, like any failure on this screen, and carry the call card's own
+// sentence for the code on hover; the rest are facts about a call that rang.
+function CallOutcomeText({
+  item,
+  outcome,
+  gaveUp,
+}: {
+  item: RunItem;
+  outcome: NonNullable<ReturnType<typeof callOutcome>>;
+  // Refused on every try (requeueRefusedCall gave up): the hover says so
+  // rather than print the provider's raw error.
+  gaveUp?: boolean;
+}) {
+  const t = useT();
+  const muted = "shrink-0 text-xs text-[var(--muted)]";
+  switch (outcome) {
+    case "answered":
+      return (
+        <span className={muted}>
+          {item.durationSec && item.durationSec > 0
+            ? t("bulk.itemAnswered", { s: item.durationSec })
+            : t("bulk.outcomeAnswered")}
+        </span>
+      );
+    case "voicemail":
+      return <span className={muted}>{t("bulk.outcomeVoicemail")}</span>;
+    case "busy":
+      return <span className={muted}>{t("bulk.outcomeBusy")}</span>;
+    case "declined":
+      return <span className={muted}>{t("bulk.outcomeDeclined")}</span>;
+    case "no-answer":
+      return <span className={muted}>{t("bulk.itemNoAnswer")}</span>;
+    case "refused":
+    case "failed":
+      return (
+        <span
+          className="shrink-0 truncate text-xs text-red-600 dark:text-red-400"
+          title={
+            gaveUp
+              ? t("bulk.gaveUpTitle")
+              : (humanizeCallEnd(item.disconnectionReason, t) ?? item.reason)
+          }
+        >
+          {t(outcome === "refused" ? "bulk.outcomeRefused" : "bulk.itemFailed")}
+        </span>
+      );
+  }
 }

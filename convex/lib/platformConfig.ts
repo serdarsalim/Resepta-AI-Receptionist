@@ -139,6 +139,14 @@ export const PLATFORM_KEYS = {
   // deploy. Unset = the pages leave out every sentence that asks the reader
   // to write to us, rather than promise an answer with no address to ask at.
   legalContactEmail: null,
+  // The most bulk-run calls that may ring at once across EVERY business, a
+  // whole number as a string ("8"). Table-only, an operator decision from
+  // /admin → Platform. One provider account carries every business's calls
+  // and every inbound call, and its concurrency is one pool: several
+  // businesses' runs at once could take the lines a caller ringing in needs.
+  // Unset = no platform limit, and each run still makes one call at a time
+  // (bulkRuns.claimNextCall, which holds a run while the limit is reached).
+  bulkCallConcurrency: null,
 } as const;
 
 export type PlatformKey = keyof typeof PLATFORM_KEYS;
@@ -190,6 +198,21 @@ export async function platformValue(
   if (stored) return stored;
   const envName = PLATFORM_KEYS[key];
   return envName ? clean(process.env[envName]) : null;
+}
+
+// The platform-wide limit on bulk calls ringing at once, parsed: a whole
+// number from 1, or null for none. One reading for the console, the setter's
+// check and the claim (bulkRuns.claimNextCall), so a row the setter would
+// refuse can never mean a limit somewhere else.
+export function bulkCallLimitOf(raw: string | null | undefined): number | null {
+  const text = raw?.trim() ?? "";
+  if (!/^\d+$/.test(text)) return null;
+  const n = Number(text);
+  return Number.isSafeInteger(n) && n >= 1 ? n : null;
+}
+
+export async function bulkCallLimit(ctx: Ctx): Promise<number | null> {
+  return bulkCallLimitOf(await platformValue(ctx, "bulkCallConcurrency"));
 }
 
 // A waAccounts row ready to send with: the org's own token when it carries

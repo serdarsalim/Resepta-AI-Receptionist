@@ -1761,6 +1761,79 @@ next time its variables are published; until then only the switch sets it.
 | Respected | Bulk email: `skipReason` → `unsubscribed` (composer mirror `canReach`, run detail "Unsubscribed"). Campaign email: fan-out writes no email row. Win-back: `emailVerdict({ unsubscribed })`, silent on "both", a refusal row on email-only. Queue: `claimForRetry` refuses a queued marketing mail with `unsubscribed`; a bulk item refused that way becomes `skipped`, not failed (`noteBulkItemResult`). `unsubscribed` is a local refusal (permanent), a steady-state failure (no alert) and, like `no-consent`, never shown in the thread (`neverLeftSilently`). |
 | Shown and set by hand | The record footer's Unsubscribed switch (`customers.setMarketingEmailOptOut`, any member), the date on hover. On is immediate (a request made in person); off asks first (`ConfirmDialog` with `focusCancel`) because it puts the customer back on marketing mail. Both write a `customer_updated` activity row with the acting member. |
 
+## Bulk call runs: when they ring, who they skip, what they report (2026-10-17)
+
+A call run (Customers, tick people, Call, pick an agent: `bulkRuns.launch`)
+has no message queue under it, so `convex/bulkRuns.ts` is its own: one
+`bulkRunItems` row per customer, ONE call in flight per run (an item in
+`dialing` is the token), the chain moved on by the `call_ended` webhook
+(`finishByCallId`), by a placement failure inside `dialNext`, or by the
+five-minute reaper (`reapStuckCalls`). Every guard below sits in
+`claimNextCall`, the one transaction that decides a dial, because the reaper
+restarts every running run and a resume dials at once: a guard anywhere else
+is dialled straight through (P6b of the Nudge port).
+
+- **Hours.** `callHoursFor`: the business's opening hours when they carry
+  clock times (`hasBusinessHours` and `hasClockBounds`), with its closures
+  cut out, in `orgs.timezone`; otherwise the message send window
+  (`quietHoursStart` / `quietHoursEnd`, 09:00 to 21:00 by default), and an
+  overnight send window reads as that default. `callWindowAt` asks
+  `lib/businessHours.nextOpenAt` once, which answers "now" or the minute the
+  business next opens (a lunch closure answers its end, a holiday the next
+  working day, nothing within 60 days null). Closed, the run gets
+  `heldUntil` and `heldReason` ("closed", or "no-opening" with a six-hour
+  look-again) and ONE scheduled `dialNext` at that minute. A hold still in
+  force answers "held" and schedules nothing; the reaper leaves a run alone
+  while its hold stands and restarts it after, the net under a lost wake-up;
+  `setStatus` clears any hold, so a resume judges the clock afresh.
+- **Who is skipped, at their turn.** First `skipReason` (deleted, no consent,
+  No AI calls, a bad number), read at launch, at fan-out and at the claim.
+  Then `turnSkipReason`, read only at the claim because "today" is the day
+  the phone would ring: `already-booked` (an open booking still ahead of
+  them, the booking page's reading of upcoming, an open ASAP order included)
+  and `called-today` (a calls row with them today in the business's day, in
+  either direction, unless it never reached the phone; or another run's
+  item `dialing` them now, since a calls row appears only when a call ends).
+  Every skip is the item's reason, shown in the run detail.
+- **A refusal is not a call.** At dial time `lib/callOutcome.isRetryableDialError`
+  (a 429, a 5xx, a full pool named in the body) and at call end
+  `isRetryableCallEnd` (`concurrency_limit_reached`,
+  `telephony_provider_unavailable`) send the item through
+  `requeueRefusedCall`: back to `pending` at the head of the line (its
+  `_creationTime` is its place), the run held `busy` one minute longer per
+  try, and on the sixth refusal the item rests `failed` with the last
+  refusal as its reason and the run moves on. A 4xx about the request and a
+  thrown fetch are terminal (`failItem`; the second because that call may
+  be ringing). `no_valid_payment` (`isAccountRefusal`) is the account's, so
+  the item goes back in line and the run pauses.
+- **What a call came to.** `callOutcome(disconnectionReason, durationSec)`:
+  answered, voicemail, busy, declined, no-answer, refused or failed, from the
+  provider's code, with the duration deciding only for a code nobody has met
+  or a row from before the code was kept. Never from a transcript: Nudge's
+  word lists are English. `finishByCallId` marks a call that reached the
+  phone `done` and one that did not `failed` (with the code as its reason),
+  and the counters follow. The run detail prints the outcome (Talked 95s,
+  Voicemail, Busy, Declined, No answer, Refused by the network), never Sent
+  for a call. The MCP `activity_report` counts answered and voicemail by it,
+  and each call in `customerHistory` carries its `result`.
+- **The platform's limit.** `platformConfig` key `bulkCallConcurrency`
+  (/admin, Platform, Bulk calls, "Bulk calls at once"; a whole number from
+  1, parsed by `lib/platformConfig.bulkCallLimitOf`). Unset reads nothing.
+  Set, the claim counts live bulk calls through `bulkRunItems.by_status`
+  (cross-org, a count and nothing else) and at the limit holds the run
+  `busy` for 30 seconds. One provider account carries every business's
+  calls and every inbound call, so this is what leaves lines for callers.
+- **On screen.** The run list says Waiting for a held running run. The detail
+  says "Closed now. Calling resumes Tue 14 Oct, 09:00." (the business's
+  clock), "No free line right now. Trying again at 10:42." or "No opening
+  hours in the coming weeks"; a customer back in line reads "Trying again
+  shortly". The composer's hint says calls ring one at a time, during
+  opening hours, and who is skipped.
+
+Not here, on purpose: Nudge's per-number caps and calls-per-second gap (a run
+makes one call at a time), a person's dial cancelling queued automated calls
+(nothing queues a call outside a run), and leaving a voicemail (P7).
+
 ## The app lives at app.resepta.xyz (2026-08-24)
 
 Marketing left. `resepta.xyz` and `www` are a SEPARATE repo on a separate
