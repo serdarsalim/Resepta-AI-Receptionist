@@ -28,6 +28,11 @@ crons.interval("complete-past", { hours: 1 }, internal.appointments.completePast
 // for. The claim-then-send ordering inside makes overlapping ticks harmless.
 crons.interval("send-scheduled-messages", { minutes: 1 }, internal.wa.sendDueScheduled, {});
 
+// Parked emails (P28): the compose window's undo hold and Schedule send. Each
+// row has its own scheduled run at its moment; this is the backstop for one
+// whose run was lost, and costs one empty index range when nothing is due.
+crons.interval("send-parked-emails", { minutes: 1 }, internal.email.sendDueParked, {});
+
 // Sends the provider refused for a reason that might not hold later — a 500, a
 // rate limit, a dropped connection. Every minute because the first backoff
 // step is one minute and a reminder that recovers is only useful if it

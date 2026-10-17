@@ -1604,6 +1604,10 @@ export const dueScheduled = internalQuery({
         // message on the deployment, including ones merely waiting on a retry.
         q.eq("status", "queued").gt("scheduledFor", 0).lte("scheduledFor", Date.now()),
       )
+      // A parked EMAIL (the compose window's undo hold or Schedule send, P28)
+      // is email.sendDueParked's, never a WhatsApp send. Filtered in the scan,
+      // so a run of due mail cannot crowd WhatsApp rows out of the 100.
+      .filter((q) => q.neq(q.field("kind"), "email_reply"))
       .take(100);
     return rows
       .filter((row) => row.customerId && (row.body || row.mediaStorageId))
@@ -1794,19 +1798,23 @@ export const sendDueScheduled = internalAction({
 // Cancel a parked send. Deletes the row rather than marking it cancelled: it
 // never reached anybody, so leaving a tombstone in the customer's thread
 // records a conversation that did not happen.
+//
+// Answers whether it cancelled (P28): the email window's Undo races the hold,
+// and a row already claimed has gone, so the window must say "sent" and not
+// bring a draft back for a mail the customer has.
 export const cancelScheduled = mutation({
   args: { messageId: v.id("messages") },
-  returns: v.null(),
+  returns: v.boolean(),
   handler: async (ctx, args) => {
     const { orgId } = await requireOrg(ctx);
     const row = await ctx.db.get(args.messageId);
     if (!row || row.orgId !== orgId) throw new Error("not-found");
     // Already gone out — nothing to cancel, and pretending otherwise would be
     // telling the salon a message was stopped when the customer has it.
-    if (row.scheduledFor === undefined || row.status !== "queued") return null;
+    if (row.scheduledFor === undefined || row.status !== "queued") return false;
     await ctx.db.delete(args.messageId);
     // It may have been the newest entry the inbox row was previewing.
     if (row.customerId) await recomputeThread(ctx, row.customerId);
-    return null;
+    return true;
   },
 });

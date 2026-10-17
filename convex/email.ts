@@ -6,8 +6,10 @@ import {
   internalMutation,
   internalQuery,
   query,
+  type ActionCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { requireOrg } from "./lib/orgAuth";
 import { isDemo } from "./demo";
 import { customerSender, productSender, sendEmail } from "./lib/email";
@@ -20,7 +22,7 @@ import {
   splitName,
 } from "./lib/emailInbound";
 import { recordCustomerCreated } from "./lib/newCustomer";
-import { noteMessageById } from "./lib/thread";
+import { noteMessageById, recomputeThread } from "./lib/thread";
 import { isDeleting } from "./lib/customerDeletion";
 import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
 import { outOfHoursMessage } from "./lib/awayReply";
@@ -490,6 +492,27 @@ export const renderTokenForCustomer = query({
   },
 });
 
+// The address the compose window's From line shows (P28): the business's one
+// sender, as sendToCustomer will send it. Null when the deployment has no
+// verified domain, which the window says instead of offering Send.
+export const composeSender = query({
+  args: {},
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx) => {
+    const { orgId } = await requireOrg(ctx);
+    const org = await ctx.db.get(orgId);
+    if (!org) return null;
+    return customerSender(org, await emailConfig(ctx)) ?? null;
+  },
+});
+
+// How long a composed email waits before it goes, so Undo can take it back
+// (P28, Gmail's "Sending… Undo"). Nudge holds ten seconds; so does this.
+const EMAIL_UNDO_HOLD_MS = 10_000;
+// The furthest ahead a person may schedule one. A year is far past any real
+// use, and a bound keeps a typo in the year from parking a row forever.
+const MAX_SCHEDULE_AHEAD_MS = 366 * 24 * 3600_000;
+
 export const sendToCustomer = action({
   args: {
     customerId: v.id("customers"),
@@ -509,9 +532,26 @@ export const sendToCustomer = action({
     // render (src/lib/sanitizeHtml.ts), which is where the untrusted markup
     // actually is.
     html: v.optional(v.string()),
+    // The compose window's two ways of NOT sending this instant (P28). `hold`
+    // parks the row for EMAIL_UNDO_HOLD_MS so the Sending… Undo note can
+    // cancel it; `scheduledFor` parks it until that moment (Schedule send).
+    // Either way the row sits queued with scheduledFor set, visible in the
+    // thread with its time and a Cancel, and goes out through sendParked.
+    // Neither = send now, the old behaviour every other caller keeps.
+    hold: v.optional(v.boolean()),
+    scheduledFor: v.optional(v.number()),
   },
-  returns: v.object({ ok: v.boolean(), reason: v.optional(v.string()) }),
-  handler: async (ctx, args) => {
+  returns: v.object({
+    ok: v.boolean(),
+    reason: v.optional(v.string()),
+    // Set when the row was parked: the id Undo cancels and when it goes.
+    messageId: v.optional(v.id("messages")),
+    sendAt: v.optional(v.number()),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ ok: boolean; reason?: string; messageId?: Id<"messages">; sendAt?: number }> => {
     const subject = args.subject.trim();
     const html = args.html?.trim() || undefined;
     // The flattening is what the feed index, the inbox preview and any future
@@ -519,6 +559,21 @@ export const sendToCustomer = action({
     // disagree about what this mail said.
     const body = html ? htmlToText(html) : args.body.trim();
     if (!body) return { ok: false, reason: "empty" };
+    const now = Date.now();
+    if (
+      args.scheduledFor !== undefined &&
+      (!Number.isFinite(args.scheduledFor) || args.scheduledFor > now + MAX_SCHEDULE_AHEAD_MS)
+    ) {
+      return { ok: false, reason: "bad-schedule" };
+    }
+    // A moment already passed (a slow click on "in a minute") is a send now,
+    // still with the hold, rather than a refusal.
+    const sendAt =
+      args.scheduledFor !== undefined && args.scheduledFor > now + EMAIL_UNDO_HOLD_MS
+        ? args.scheduledFor
+        : args.hold || args.scheduledFor !== undefined
+          ? now + EMAIL_UNDO_HOLD_MS
+          : undefined;
     const context = await ctx.runQuery(internal.email.loadSendContext, {
       customerId: args.customerId,
     });
@@ -551,7 +606,16 @@ export const sendToCustomer = action({
       emailSubject: subject || undefined,
       emailFrom: context.sender,
       emailHtml: html,
+      scheduledFor: sendAt,
     });
+
+    // Parked: sendParked takes it at its moment, and the every-minute sweep
+    // (sendDueParked) is the backstop if that scheduled run is lost. Both
+    // claim through claimParked, so only one of them sends.
+    if (sendAt !== undefined) {
+      await ctx.scheduler.runAt(sendAt, internal.email.sendParked, { messageId });
+      return { ok: true, messageId, sendAt };
+    }
 
     const result = await sendEmail({
       apiKey: context.apiKey,
@@ -571,6 +635,132 @@ export const sendToCustomer = action({
       error: result.ok ? undefined : result.reason,
     });
     return result.ok ? { ok: true } : { ok: false, reason: result.reason };
+  },
+});
+
+// ── A parked email reaching its moment (P28) ─────────────────────────────────
+//
+// The claim and everything the send needs in ONE transaction, the same shape
+// as delivery.claimForRetry and wa.claimScheduled: the scheduled run and the
+// sweep may both reach a row, and only the one whose claim clears
+// scheduledFor sends it. Everything a send must refuse is re-checked here,
+// because the world moves while a row waits: the customer may be being
+// deleted (the row goes with them, wa.claimScheduled's rule), the org may be
+// suspended, the address may be gone. demoMode is checked before any
+// credential, the rule every send path keeps, though sendToCustomer already
+// refuses the demo org before it parks anything.
+export const claimParked = internalMutation({
+  args: { messageId: v.id("messages") },
+  returns: v.union(
+    v.null(),
+    v.object({ refused: v.string() }),
+    v.object({
+      apiKey: v.union(v.string(), v.null()),
+      from: v.string(),
+      to: v.string(),
+      subject: v.string(),
+      html: v.string(),
+      replyTo: v.optional(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.messageId);
+    if (
+      !row ||
+      row.kind !== "email_reply" ||
+      row.status !== "queued" ||
+      row.scheduledFor === undefined ||
+      row.scheduledFor > Date.now() + 1000 ||
+      !row.customerId
+    ) {
+      return null;
+    }
+    const customer = await ctx.db.get(row.customerId);
+    if (!customer || customer.orgId !== row.orgId || isDeleting(customer)) {
+      await ctx.db.delete(row._id);
+      if (customer) await recomputeThread(ctx, customer._id);
+      return null;
+    }
+    await ctx.db.patch(row._id, { scheduledFor: undefined, sendingAt: Date.now() });
+    const org = await ctx.db.get(row.orgId);
+    if (!org) return { refused: "not-found" };
+    if ((org.status ?? "active") === "suspended") return { refused: "org-suspended" };
+    if (isDemo(org)) return { refused: "demo-org" };
+    if (!customer.email) return { refused: "missing-email" };
+    const mailConfig = await emailConfig(ctx);
+    const from = row.emailFrom ?? customerSender(org, mailConfig);
+    if (!from) return { refused: "email-not-configured" };
+    return {
+      apiKey: mailConfig.apiKey,
+      from,
+      to: customer.email,
+      subject: row.emailSubject || org.name,
+      html: row.emailHtml ?? `<p>${escapeHtml(row.body ?? "").replace(/\n/g, "<br/>")}</p>`,
+      replyTo:
+        org.inboundAddress && mailConfig.domain
+          ? `${org.inboundAddress}@${mailConfig.domain}`
+          : undefined,
+    };
+  },
+});
+
+// One parked row: claim, then send or report the refusal. Shared by the
+// scheduled run and the sweep, so the two cannot drift.
+async function dispatchParked(ctx: ActionCtx, messageId: Id<"messages">): Promise<void> {
+  const job = await ctx.runMutation(internal.email.claimParked, { messageId });
+  if (!job) return;
+  if ("refused" in job) {
+    await ctx.runMutation(internal.messages.applySendResult, {
+      messageId,
+      ok: false,
+      error: job.refused,
+    });
+    return;
+  }
+  const result = await sendEmail(job);
+  await ctx.runMutation(internal.messages.applySendResult, {
+    messageId,
+    ok: result.ok,
+    error: result.ok ? undefined : result.reason,
+  });
+}
+
+export const sendParked = internalAction({
+  args: { messageId: v.id("messages") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await dispatchParked(ctx, args.messageId);
+    return null;
+  },
+});
+
+// The parked emails whose moment has passed. Only email rows: WhatsApp's own
+// sweep (wa.dueScheduled) takes the rest and leaves these alone.
+export const dueParked = internalQuery({
+  args: {},
+  returns: v.array(v.id("messages")),
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("messages")
+      .withIndex("by_status_scheduled", (q) =>
+        q.eq("status", "queued").gt("scheduledFor", 0).lte("scheduledFor", Date.now()),
+      )
+      .filter((q) => q.eq(q.field("kind"), "email_reply"))
+      .take(50);
+    return rows.map((row) => row._id);
+  },
+});
+
+// The backstop sweep, every minute (crons.ts). A parked row normally goes by
+// the run sendToCustomer scheduled for it; this catches one whose run was
+// lost, a minute late rather than never.
+export const sendDueParked = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const ids = await ctx.runQuery(internal.email.dueParked, {});
+    for (const messageId of ids) await dispatchParked(ctx, messageId);
+    return null;
   },
 });
 
