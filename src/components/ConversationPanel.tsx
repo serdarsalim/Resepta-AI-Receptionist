@@ -1,6 +1,6 @@
 "use client";
 
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useConvex, useMutation, useQuery } from "convex/react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Picker, { Theme, EmojiStyle, type EmojiClickData } from "emoji-picker-react";
@@ -352,6 +352,8 @@ export function ConversationPanel({
   const [calling, setCalling] = useState(false);
   const [confirmCall, confirmCallDialog] = useConfirm();
   const toast = useToast();
+  // The email composer's variables go in as this customer's values (P26).
+  const convex = useConvex();
   const threadRef = useRef<HTMLDivElement>(null);
   // The WhatsApp bubble's menu (P23, Nudge daddc71e): right-click a message
   // (opens at the cursor) or its corner chevron (opens under it). ONE menu
@@ -935,6 +937,12 @@ export function ConversationPanel({
                 compact
                 showVariables={false}
                 insertPhoto
+                // A one-off mail to this customer: a picked variable becomes
+                // their value now, since nothing renders this body at send.
+                resolveToken={(token) =>
+                  convex.query(api.email.renderTokenForCustomer, { customerId, token })
+                }
+                onTokenEmpty={(label) => toast(t("email.variableEmpty", { name: label }))}
                 value={emailBody}
                 onSave={setEmailBody}
                 onLiveChange={setEmailBody}

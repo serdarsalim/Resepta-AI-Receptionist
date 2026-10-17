@@ -156,10 +156,14 @@ function Toolbar({
   onChange,
   end,
   insertPhoto = false,
+  onInsertToken,
 }: {
   editor: Editor;
   // Gmail's Insert photo: a library image goes INTO the text (P26).
   insertPhoto?: boolean;
+  // What a picked variable becomes. A chip by default; the one-customer
+  // composer puts in that customer's value instead.
+  onInsertToken?: (token: string) => void;
   // The row's far right: the Visual / HTML switch, so the framed editor has
   // ONE header row instead of a bar holding only the switch above the tools
   // (P26, Nudge ec043a82).
@@ -313,7 +317,10 @@ function Toolbar({
       </ToolbarButton>
       <span className="mx-1 h-4 w-px bg-[var(--border)]" />
       {showVariables && (
-        <VariableInsertDropdown compact onInsert={(token) => insertToken(editor, token)} />
+        <VariableInsertDropdown
+          compact
+          onInsert={(token) => (onInsertToken ? onInsertToken(token) : insertToken(editor, token))}
+        />
       )}
       {/* A drawn face like every tool beside it, not the colour emoji glyph,
           which read as content sitting in the toolbar (Nudge 1f4fafcf). */}
@@ -645,6 +652,17 @@ function storedHtml(editor: Editor): string {
   return editor.isEmpty ? "" : htmlToTokens(editor.getHTML());
 }
 
+// A rendered value as editor content: a multi-line one (the service list)
+// keeps its lines as breaks instead of collapsing into one run of text.
+function valueContent(value: string) {
+  return value
+    .split("\n")
+    .flatMap((line, i) => [
+      ...(i > 0 ? [{ type: "hardBreak" }] : []),
+      ...(line ? [{ type: "text", text: line }] : []),
+    ]);
+}
+
 // A `[key]` from the dropdown goes in as a chip, not as text the input rule
 // never sees (the rule fires on typing only).
 function insertToken(editor: Editor, token: string) {
@@ -667,8 +685,18 @@ export function EmailBodyEditor({
   previewPane,
   previewLabel,
   insertPhoto = false,
+  resolveToken,
+  onTokenEmpty,
 }: {
   value: string;
+  // One customer's composer (P26, Nudge 4a232eae): nothing renders this body
+  // on the way out, so a variable picked from the list or by "@" goes in as
+  // THAT customer's value ("Ayşe"), never as a chip that would reach them as
+  // "[firstname]". Null means it renders to nothing for them: nothing goes in
+  // and onTokenEmpty says which one, so the pick is not silently lost.
+  // Giving it switches the variable list on.
+  resolveToken?: (token: string) => Promise<string | null>;
+  onTokenEmpty?: (label: string) => void;
   // Gmail's Insert photo on the toolbar: the business's library images, put
   // into the text (P26). For mail to customers only: notes and knowledge
   // have no reader for a picture, and the operator's desk has no library of
@@ -709,9 +737,10 @@ export function EmailBodyEditor({
   // "@" opens the variable list at the caret (P15), where variables are
   // offered at all (showVariables).
   const variables = useMessageVariables();
+  const offersVariables = showVariables || Boolean(resolveToken);
   const atVariables = useMemo(
-    () => (showVariables ? variables : []),
-    [showVariables, variables],
+    () => (offersVariables ? variables : []),
+    [offersVariables, variables],
   );
   const [atMenu, setAtMenu] = useState<
     { left: number; top: number; from: number; fragment: string } | null
@@ -864,12 +893,31 @@ export function EmailBodyEditor({
     onSave(html);
   };
 
-  // Accepting a pick replaces the "@fragment" with the chip.
+  // The value route: resolve, then put the words in (at `range`, replacing
+  // the "@fragment", or at the caret), or nothing and a word about it.
+  const placeValue = (token: string, range?: { from: number; to: number }) => {
+    if (!editor || !resolveToken) return;
+    const key = token.slice(1, -1);
+    const label = variables.find((v) => v.key === key)?.label ?? token;
+    const settle = (value: string | null) => {
+      const chain = editor.chain().focus();
+      if (range) chain.deleteRange(range);
+      if (value) chain.insertContent(valueContent(value));
+      chain.run();
+      if (value) persistNow();
+      else onTokenEmpty?.(label);
+    };
+    void resolveToken(token).then(settle, () => settle(null));
+  };
+
+  // Accepting a pick replaces the "@fragment" with the chip, or with the
+  // customer's value in the one-customer composer.
   const acceptAt = (v: TokenVariable) => {
     const menu = atState.current.menu;
     if (!editor || !menu) return;
     const range = { from: menu.from, to: editor.state.selection.from };
     setAtMenu(null);
+    if (resolveToken) return placeValue(`[${v.key}]`, range);
     editor
       .chain()
       .focus()
@@ -914,7 +962,14 @@ export function EmailBodyEditor({
       <div className={disabled ? "pointer-events-none opacity-50" : ""}>
         {editor ? (
           <>
-            <Toolbar editor={editor} showVariables={showVariables} divider={false} onChange={persistNow} insertPhoto={insertPhoto} />
+            <Toolbar
+              editor={editor}
+              showVariables={offersVariables}
+              divider={false}
+              onChange={persistNow}
+              insertPhoto={insertPhoto}
+              onInsertToken={resolveToken ? (token) => placeValue(token) : undefined}
+            />
             <EditorContent editor={editor} />
             {atList}
             <ImageMenu editor={editor} onChange={persistNow} />
@@ -970,7 +1025,14 @@ export function EmailBodyEditor({
       ) : mode === "visual" ? (
         editor ? (
           <>
-            <Toolbar editor={editor} showVariables={showVariables} onChange={persistNow} end={modeSwitch} insertPhoto={insertPhoto} />
+            <Toolbar
+              editor={editor}
+              showVariables={offersVariables}
+              onChange={persistNow}
+              end={modeSwitch}
+              insertPhoto={insertPhoto}
+              onInsertToken={resolveToken ? (token) => placeValue(token) : undefined}
+            />
             <EditorContent editor={editor} />
             {atList}
             <ImageMenu editor={editor} onChange={persistNow} />

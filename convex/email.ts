@@ -5,6 +5,7 @@ import {
   internalAction,
   internalMutation,
   internalQuery,
+  query,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireOrg } from "./lib/orgAuth";
@@ -25,6 +26,9 @@ import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
 import { outOfHoursMessage } from "./lib/awayReply";
 import { resolvePublicPhone } from "./lib/publicPhone";
 import { SESSION_WINDOW_MS } from "./webhook";
+import { renderTokens } from "./lib/renderTokens";
+import { formatAppointmentTime } from "./lib/format";
+import { formatMoney } from "./lib/money";
 
 // The email lane's own writes. Sending lives in lib/email.ts (transport) and
 // wa.ts (the template lane that rides alongside WhatsApp); this file is what
@@ -395,6 +399,94 @@ export const loadSendContext = internalQuery({
       suspended: (org.status ?? "active") === "suspended",
       demo: isDemo(org),
     };
+  },
+});
+
+// One [token] for one customer, rendered as a send would render it (P26,
+// Nudge 4a232eae). The composer is a one-off email to ONE customer and
+// nothing renders its body on the way out, so a variable picked there goes in
+// as this customer's VALUE ("Ayşe"), never as a chip that would reach them as
+// "[firstname]". Appointment facts come from their next open appointment,
+// which is the one a reply to them is about. Null when the token renders to
+// nothing for them; the composer then inserts nothing and says so.
+export const renderTokenForCustomer = query({
+  args: { customerId: v.id("customers"), token: v.string() },
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    if (!/^\[[A-Za-z0-9_]{1,32}\]$/.test(args.token)) return null;
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) return null;
+    const org = await ctx.db.get(orgId);
+    if (!org) return null;
+    const language = customer.language ?? org.language ?? "tr";
+
+    const contactFields = await ctx.db
+      .query("contactFields")
+      .withIndex("by_org", (q) => q.eq("orgId", orgId))
+      .collect();
+    const custom: Record<string, string> = {};
+    for (const field of contactFields) custom[field.key] = customer.custom?.[field.key] ?? "";
+
+    const now = Date.now();
+    const next = (
+      await ctx.db
+        .query("appointments")
+        .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+        .take(500)
+    )
+      .filter(
+        (a) =>
+          a.orgId === orgId &&
+          a.startAt >= now &&
+          (a.status === "scheduled" || a.status === "confirmed"),
+      )
+      .sort((a, b) => a.startAt - b.startAt)[0];
+    const staff = next?.staffId ? await ctx.db.get(next.staffId) : null;
+    const money = (minor: number) =>
+      formatMoney(minor, org.currency ?? "TRY", language, org.priceDecimals);
+    const items = next?.items ?? [];
+    const totalMinor = items.reduce(
+      (sum, item) => sum + (item.price ?? 0) * (item.quantity ?? 1),
+      0,
+    );
+
+    const out = renderTokens(args.token, {
+      firstName: customer.firstName,
+      lastName: customer.lastName,
+      businessName: org.name,
+      phone: await resolvePublicPhone(ctx, org),
+      email: customer.email,
+      bookingLink: org.bookingUrl,
+      address: org.address,
+      appointmentAt: next
+        ? formatAppointmentTime(next.startAt, org.timezone, language)
+        : undefined,
+      staffName: staff && staff.orgId === orgId ? staff.name : undefined,
+      manageLink:
+        next?.manageToken && process.env.SITE_URL
+          ? `${process.env.SITE_URL}/appt/${next.manageToken}`
+          : undefined,
+      serviceName: items.length
+        ? items
+            .map((item) =>
+              (item.quantity ?? 1) > 1 ? `• ${item.quantity}× ${item.name}` : `• ${item.name}`,
+            )
+            .join("\n")
+        : undefined,
+      servicePriceList: items.length
+        ? items
+            .map((item) => {
+              const quantity = item.quantity ?? 1;
+              const label = quantity > 1 ? `${quantity}× ${item.name}` : item.name;
+              return `• ${label}${item.price !== undefined ? ` — ${money(item.price * quantity)}` : ""}`;
+            })
+            .join("\n")
+        : undefined,
+      price: totalMinor > 0 ? money(totalMinor) : undefined,
+      custom,
+    }).trim();
+    return out && out !== args.token ? out : null;
   },
 });
 

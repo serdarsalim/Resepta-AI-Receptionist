@@ -1417,6 +1417,13 @@ const dictionary = {
   "email.showMore": { tr: "Devamını göster", en: "Show more", de: "Mehr anzeigen" },
   "email.showLess": { tr: "Daha az göster", en: "Show less", de: "Weniger anzeigen" },
   "email.subject": { tr: "Konu", en: "Subject", de: "Betreff" },
+  // A variable picked in the one-customer email composer that this customer
+  // has no value for: nothing went in, and this says why (P26).
+  "email.variableEmpty": {
+    tr: "Bu müşteri için {name} boş, eklenmedi.",
+    en: "{name} is empty for this customer, so nothing was added.",
+    de: "{name} ist für diesen Kunden leer, es wurde nichts eingefügt.",
+  },
   "email.bodyPlaceholder": {
     tr: "Mesajınızı yazın…",
     en: "Write your message…",
