@@ -27,6 +27,7 @@ import { SegmentedControl } from "./SegmentedControl";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { HoverTip } from "./HoverTip";
+import { InputDialog } from "./InputDialog";
 
 // WYSIWYG email-body editor with an HTML toggle, ported from Nudge and
 // trimmed to what a rule's email needs: no media library, no saved-signature
@@ -149,8 +150,12 @@ function Toolbar({
   editor,
   showVariables = true,
   divider = true,
+  onChange,
 }: {
   editor: Editor;
+  // Saves now. A change made through a dialog or a menu lands while the
+  // editor has no focus, so the blur that normally saves never comes.
+  onChange: () => void;
   // Tokens are for a TEMPLATE, which is written once and rendered per
   // customer. A one-off reply is already addressed to somebody — nothing
   // renders it on the way out, so a {{name}} inserted here would reach the
@@ -172,15 +177,34 @@ function Toolbar({
     toggle: togglePalette,
     close: closePalette,
   } = useAnchoredPanel(200, 40);
+  // The app's own dialog, never window.prompt: a grey browser box titled
+  // "localhost says" (P26, Nudge 541748dc). Empty or Remove link takes the
+  // link off; a bare domain gets https://; with nothing selected the address
+  // goes in as the link's own text, so the button works without a selection.
+  const [linkDraft, setLinkDraft] = useState<string | null>(null);
   const setLink = () => {
-    const existing = editor.getAttributes("link").href as string | undefined;
-    const url = window.prompt(t("editor.linkPrompt"), existing ?? "https://");
-    if (url === null) return;
-    if (url.trim() === "") {
-      editor.chain().focus().unsetLink().run();
-      return;
+    setLinkDraft((editor.getAttributes("link").href as string | undefined) ?? "");
+  };
+  const unsetLink = () => {
+    setLinkDraft(null);
+    editor.chain().focus().extendMarkRange("link").unsetLink().run();
+    onChange();
+  };
+  const applyLink = (raw: string) => {
+    const url = raw.trim();
+    if (!url) return unsetLink();
+    setLinkDraft(null);
+    const href = /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`;
+    if (editor.state.selection.empty && !editor.isActive("link")) {
+      editor
+        .chain()
+        .focus()
+        .insertContent({ type: "text", text: url, marks: [{ type: "link", attrs: { href } }] })
+        .run();
+    } else {
+      editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
     }
-    editor.chain().focus().extendMarkRange("link").setLink({ href: url.trim() }).run();
+    onChange();
   };
   return (
     <div
@@ -280,6 +304,19 @@ function Toolbar({
         <VariableInsertDropdown onInsert={(token) => insertToken(editor, token)} />
       )}
       <EmojiPicker onPick={(emoji) => editor.chain().focus().insertContent(emoji).run()} title={t("editor.insertEmoji")} />
+      {linkDraft !== null && (
+        <InputDialog
+          title={t("editor.link")}
+          placeholder="https://"
+          initialValue={linkDraft}
+          extra={linkDraft ? { label: t("editor.removeLink"), onClick: unsetLink } : undefined}
+          onSubmit={applyLink}
+          onCancel={() => {
+            setLinkDraft(null);
+            editor.commands.focus();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -492,6 +529,17 @@ export function EmailBodyEditor({
     setHtmlDraft(value);
   }, [value, editor]);
 
+  // Saves what the editor holds now, for a change that did not come from
+  // typing (a dialog, a menu): no blur follows it to do the saving.
+  const persistNow = () => {
+    if (!editor) return;
+    const html = storedHtml(editor);
+    if (html === savedRef.current) return;
+    savedRef.current = html;
+    setHtmlDraft(html);
+    onSave(html);
+  };
+
   // Accepting a pick replaces the "@fragment" with the chip.
   const acceptAt = (v: TokenVariable) => {
     const menu = atState.current.menu;
@@ -542,7 +590,7 @@ export function EmailBodyEditor({
       <div className={disabled ? "pointer-events-none opacity-50" : ""}>
         {editor ? (
           <>
-            <Toolbar editor={editor} showVariables={showVariables} divider={false} />
+            <Toolbar editor={editor} showVariables={showVariables} divider={false} onChange={persistNow} />
             <EditorContent editor={editor} />
             {atList}
           </>
@@ -589,7 +637,7 @@ export function EmailBodyEditor({
       ) : mode === "visual" ? (
         editor ? (
           <>
-            <Toolbar editor={editor} showVariables={showVariables} />
+            <Toolbar editor={editor} showVariables={showVariables} onChange={persistNow} />
             <EditorContent editor={editor} />
             {atList}
           </>

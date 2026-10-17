@@ -2453,7 +2453,7 @@ const dictionary = {
     de: "Nummerierte Liste",
   },
   "editor.link": { tr: "Bağlantı ekle", en: "Add / edit link", de: "Link einfügen" },
-  "editor.linkPrompt": { tr: "Bağlantı adresi", en: "Link URL", de: "Link-Adresse" },
+  "editor.removeLink": { tr: "Bağlantıyı kaldır", en: "Remove link", de: "Link entfernen" },
   "editor.textColor": { tr: "Yazı rengi", en: "Text color", de: "Textfarbe" },
   "editor.clearColor": { tr: "Rengi kaldır", en: "Clear color", de: "Farbe entfernen" },
   "editor.clearFormatting": {
