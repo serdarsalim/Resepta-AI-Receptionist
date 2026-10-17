@@ -27,7 +27,8 @@
 // would notice. Do not add one.
 //
 // The call channel is the exception and has to be, because there is no queue
-// for calls. It gets its own, and its rule is one at a time — see dialNext.
+// for calls. It gets its own, and its rules are one at a time and only while
+// the business is open — see claimNextCall.
 //
 // ── CONSENT ─────────────────────────────────────────────────────────────────
 //
@@ -60,6 +61,15 @@ import { emailConfig, resolveWaAccount } from "./lib/platformConfig";
 import { renderTokens } from "./lib/renderTokens";
 import { resolvePublicPhone } from "./lib/publicPhone";
 import { recordActivity } from "./lib/activity";
+import { loadClosures } from "./lib/closureRows";
+import {
+  hasBusinessHours,
+  hasClockBounds,
+  nextOpenAt,
+  type ActiveWindow,
+} from "./lib/businessHours";
+import { DEFAULT_QUIET_HOURS } from "./orgs";
+import { bulkRunHoldReason } from "./schema";
 
 // A run is capped, for campaigns' reason word for word: a salon with more
 // customers than this wants a filter, not a bigger blast, and a send nobody
@@ -82,6 +92,11 @@ const FANOUT_BATCH = 100;
 // call queue is not a delayed message — it is a run that has silently stopped
 // with the owner watching a progress bar that will never move again.
 const CALL_STUCK_MS = 20 * 60_000;
+// How long a call run that finds no opening ahead (seven closed days, or a
+// closure longer than nextOpenAt's horizon) waits before it looks again. Long
+// enough to cost nothing, short enough that hours set in the morning are read
+// the same day.
+const NO_OPENING_RECHECK_MS = 6 * 60 * 60_000;
 
 export type BulkChannel = "email" | "whatsapp" | "call";
 
@@ -582,6 +597,13 @@ export const setStatus = mutation({
     await ctx.db.patch(args.runId, {
       status: args.status,
       ...(args.status === "cancelled" ? { finishedAt: Date.now() } : {}),
+      // Any hold ends here. A resume judges the clock afresh in claimNextCall,
+      // so hours changed while the run waited (open late tonight, say) count
+      // at once rather than at a wake-up worked out from the old ones; if it
+      // is still closed, the claim holds it again. A paused or stopped run is
+      // not waiting for anything.
+      heldUntil: undefined,
+      heldReason: undefined,
     });
 
     if (args.status === "cancelled") {
@@ -786,6 +808,62 @@ export async function bulkRunGate(
 //
 // Drop any one and a single bad call strands the run forever, silently.
 
+// ── When a call may ring ────────────────────────────────────────────────────
+//
+// A run rings only while the business is open (2026-10-17, P6b of the Nudge
+// port; its b013a43b and 69100df8 for the agent's calling hours). Until then
+// nothing in this chain read a clock: a run launched at 17:55 kept dialling
+// through the evening and the night until its list ran out, and the
+// reminders' send window was the only time-of-day gate in the product.
+//
+// The hours are the business's opening hours with its closures cut out (a
+// lunch break, a holiday), in its own timezone. They are what a caller who
+// rings back meets, and a call that may end "a colleague will call you" should
+// come while there is a colleague. A business that never set its hours rings
+// inside its message send window instead (Reminders), the one clock it has
+// given us about when its customers may be contacted.
+function callHoursFor(org: Doc<"orgs">): ActiveWindow {
+  const hours = org.businessHours;
+  // hasClockBounds too: a legacy row naming days but no times reads as open
+  // around the clock, and 03:00 on an open day is no time to ring anybody.
+  if (hours && hasBusinessHours(hours) && hasClockBounds(hours)) return hours;
+  let start: number = org.quietHoursStart ?? DEFAULT_QUIET_HOURS[0];
+  let end: number = org.quietHoursEnd ?? DEFAULT_QUIET_HOURS[1];
+  // An overnight send window (start after end) is a choice about messages
+  // arriving late. Nobody's phone should ring at 03:00 because of it.
+  if (start >= end) {
+    start = DEFAULT_QUIET_HOURS[0];
+    end = DEFAULT_QUIET_HOURS[1];
+  }
+  const day = { startMinute: start * 60, endMinute: end * 60 };
+  return { days: [day, day, day, day, day, day, day] };
+}
+
+type CallWindow =
+  | { open: true }
+  | { open: false; until: number; reason: "closed" | "no-opening" };
+
+// Open now, or closed until when. One computation for both (nextOpenAt), so
+// the moment a run is told it may resume is the moment the same rules call
+// open.
+async function callWindowAt(
+  ctx: MutationCtx,
+  org: Doc<"orgs">,
+  now: number,
+): Promise<CallWindow> {
+  const opensAt = nextOpenAt(
+    now,
+    org.timezone,
+    callHoursFor(org),
+    await loadClosures(ctx, org._id),
+  );
+  if (opensAt === null) {
+    return { open: false, until: now + NO_OPENING_RECHECK_MS, reason: "no-opening" };
+  }
+  if (opensAt <= now) return { open: true };
+  return { open: false, until: opensAt, reason: "closed" };
+}
+
 // The agent's line, resolved and checked before a run is allowed to start.
 export const callLineFor = internalQuery({
   args: { retellAgentId: v.string() },
@@ -847,6 +925,14 @@ export const claimNextCall = internalMutation({
       .first();
     if (inFlight) return { state: "in-flight" as const };
 
+    // A hold still in force. Its wake-up was scheduled when it was set
+    // (below), so this answers the reaper, a resume or a duplicate wake-up
+    // without scheduling another.
+    const now = Date.now();
+    if (run.heldUntil !== undefined && run.heldUntil > now) {
+      return { state: "held" as const, until: run.heldUntil };
+    }
+
     // Oldest pending first. Convex appends _creationTime to every index, and
     // fan-out inserts in position order, so ascending IS the dial order.
     const next = await ctx.db
@@ -858,6 +944,30 @@ export const claimNextCall = internalMutation({
     if (!next) {
       await settleRun(ctx, args.runId);
       return { state: "empty" as const };
+    }
+
+    // The business's hours (callHoursFor), judged HERE and nowhere else. The
+    // reaper restarts every running run every five minutes and a resume
+    // schedules dialNext at once, so a hold kept in the scheduler alone
+    // would be dialled straight through; kept on the run and read in the
+    // transaction that claims, nothing can. One wake-up is scheduled with the
+    // hold, at the minute the business opens.
+    const org = await ctx.db.get(run.orgId);
+    if (!org) return { state: "stopped" as const };
+    const window = await callWindowAt(ctx, org, now);
+    if (!window.open) {
+      await ctx.db.patch(args.runId, {
+        heldUntil: window.until,
+        heldReason: window.reason,
+      });
+      await ctx.scheduler.runAfter(window.until - now, internal.bulkRuns.dialNext, {
+        runId: args.runId,
+      });
+      return { state: "held" as const, until: window.until };
+    }
+    // Open: whatever held the run is over.
+    if (run.heldUntil !== undefined) {
+      await ctx.db.patch(args.runId, { heldUntil: undefined, heldReason: undefined });
     }
 
     const customer = await ctx.db.get(next.customerId);
@@ -1087,6 +1197,11 @@ export const reapStuckCalls = internalMutation({
         if (Date.now() - (stuck.dialedAt ?? 0) < CALL_STUCK_MS) continue;
         await ctx.db.patch(stuck._id, { status: "failed", reason: "dial-timeout" });
         await ctx.db.patch(run._id, { failedCount: run.failedCount + 1 });
+      } else if (run.heldUntil !== undefined && run.heldUntil > Date.now()) {
+        // Waiting on purpose (claimNextCall's hold), with its wake-up already
+        // scheduled. Starting it now would only be answered "held"; once the
+        // hold has passed, this sweep is the net under a lost wake-up.
+        continue;
       }
 
       // Either we just cleared a stuck call, or the chain broke with nothing
@@ -1123,6 +1238,10 @@ export const list = query({
       skippedCount: v.number(),
       startedAt: v.number(),
       finishedAt: v.optional(v.number()),
+      // A running call run that is waiting (claimNextCall's hold), so the
+      // list can say Waiting rather than Running.
+      heldUntil: v.optional(v.number()),
+      heldReason: v.optional(bulkRunHoldReason),
     }),
   ),
   handler: async (ctx) => {
@@ -1143,6 +1262,8 @@ export const list = query({
       skippedCount: run.skippedCount,
       startedAt: run.startedAt,
       finishedAt: run.finishedAt,
+      heldUntil: run.heldUntil,
+      heldReason: run.heldReason,
     }));
   },
 });

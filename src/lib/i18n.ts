@@ -879,10 +879,12 @@ const dictionary = {
   },
   "bulk.agent": { tr: "Asistan", en: "Agent", de: "Assistent" },
   "bulk.pickAgent": { tr: "Seçin", en: "Pick one", de: "Auswählen" },
+  // Opening hours since 2026-10-17: a run waits while the business is
+  // closed and picks up when it opens.
   "bulk.callHint": {
-    tr: "Teker teker aranır. Bir görüşme bitmeden sonraki başlamaz.",
-    en: "Dialled one at a time. The next call waits for the current one to end.",
-    de: "Nacheinander. Der nächste Anruf beginnt erst nach dem laufenden.",
+    tr: "Teker teker ve yalnızca açık olduğunuz saatlerde aranır. Bir görüşme bitmeden sonraki başlamaz.",
+    en: "Dialled one at a time, and only during your opening hours. The next call waits for the current one to end.",
+    de: "Nacheinander und nur während Ihrer Öffnungszeiten. Der nächste Anruf beginnt erst nach dem laufenden.",
   },
   "bulk.confirmSend.one": {
     tr: "{n} kişiye gönderilsin mi? Geri alınamaz.",
@@ -984,6 +986,19 @@ const dictionary = {
   "bulk.statusPaused": { tr: "Duraklatıldı", en: "Paused", de: "Pausiert" },
   "bulk.statusCancelled": { tr: "Durduruldu", en: "Stopped", de: "Gestoppt" },
   "bulk.statusDone": { tr: "Bitti", en: "Done", de: "Fertig" },
+  // A running call run held until the business opens (bulkRuns.heldUntil).
+  "bulk.statusWaiting": { tr: "Bekliyor", en: "Waiting", de: "Wartet" },
+  // {when} is the business's own clock, weekday first: "Sal 14 Eki 09:00".
+  "bulk.heldClosed": {
+    tr: "Şu an kapalı. Aramalar {when} itibarıyla sürecek.",
+    en: "Closed now. Calling resumes {when}.",
+    de: "Gerade geschlossen. Die Anrufe laufen ab {when} weiter.",
+  },
+  "bulk.heldNoOpening": {
+    tr: "Önümüzdeki haftalarda açık saatiniz görünmüyor. Açık olduğunuz ilk saatte aramalar sürecek.",
+    en: "No opening hours in the coming weeks. Calling resumes once you are open.",
+    de: "In den nächsten Wochen sind keine Öffnungszeiten eingetragen. Die Anrufe laufen weiter, sobald Sie geöffnet haben.",
+  },
   "bulk.counts": {
     tr: "{done}/{total} tamam · {failed} hata · {skipped} atlandı",
     en: "{done}/{total} done · {failed} failed · {skipped} skipped",

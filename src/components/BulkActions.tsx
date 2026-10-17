@@ -19,7 +19,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { useLanguage, useT } from "@/lib/LanguageProvider";
-import { formatAge } from "@/lib/datetime";
+import { formatAge, formatDateTimeWithWeekday } from "@/lib/datetime";
 import { useConfirm } from "./ConfirmDialog";
 import { EmojiPicker } from "./EmojiPicker";
 import { RowLabel } from "./RowLabel";
@@ -386,7 +386,7 @@ export function BulkRunsCard({
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">
                   <span className="truncate font-medium">{run.label}</span>
-                  <StatusPill status={run.status} />
+                  <StatusPill status={run.status} held={run.heldUntil !== undefined} />
                 </span>
                 <span className="mt-0.5 block text-xs text-[var(--muted)]">
                   {t(`bulk.${run.channel}`)} · {formatAge(run.startedAt, language)}
@@ -412,8 +412,18 @@ export function BulkRunsCard({
   );
 }
 
-function StatusPill({ status }: { status: string }) {
+// `held`: a running call run that may not dial yet (bulkRuns.claimNextCall's
+// hold, outside opening hours). It is still running, and Pause and Stop still
+// apply, but "Running" would claim phones are ringing when none are.
+function StatusPill({ status, held }: { status: string; held?: boolean }) {
   const t = useT();
+  if (status === "running" && held) {
+    return (
+      <span className="shrink-0 text-xs text-[var(--muted-strong)]">
+        {t("bulk.statusWaiting")}
+      </span>
+    );
+  }
   const tone =
     status === "running"
       ? "text-emerald-600 dark:text-emerald-400"
@@ -456,6 +466,9 @@ function RunDetail({
   // still reads Running, nothing appears on screen, and the run keeps dialling
   // while the person who pressed Stop believes it stopped.
   const options = useQuery(api.bulkRuns.launchOptions, {});
+  // The business's zone, for when a waiting run resumes: the hold is the
+  // business's opening, so it is said on the business's clock.
+  const timezone = useQuery(api.orgs.current, {})?.org.timezone;
   const setStatus = useMutation(api.bulkRuns.setStatus);
   const [confirm, confirmDialog] = useConfirm();
   const [error, setError] = useState<string | null>(null);
@@ -507,7 +520,7 @@ function RunDetail({
         >
           ← {t("bulk.backToRuns")}
         </button>
-        <StatusPill status={run.status} />
+        <StatusPill status={run.status} held={run.heldUntil !== undefined} />
         {live && (
           <span className="ml-auto flex items-center gap-2">
             {run.status === "running" ? (
@@ -551,6 +564,17 @@ function RunDetail({
             skipped: run.skippedCount,
           })}
         </p>
+        {/* Why a running call run is not ringing anybody, and when it will.
+            Without this a run launched after closing reads as stuck. */}
+        {run.status === "running" && run.heldUntil !== undefined && (
+          <p className="mt-1 text-xs text-[var(--muted-strong)]">
+            {run.heldReason === "no-opening"
+              ? t("bulk.heldNoOpening")
+              : t("bulk.heldClosed", {
+                  when: formatDateTimeWithWeekday(run.heldUntil, language, timezone),
+                })}
+          </p>
+        )}
         {/* What was actually written, kept because a run is looked at weeks
             later and "which one was this" is answered by the words, not by
             the timestamp. */}

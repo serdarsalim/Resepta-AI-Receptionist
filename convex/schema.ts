@@ -16,6 +16,13 @@ export const appointmentStatus = v.union(
   v.literal("no_show"),
 );
 
+// Why a running call run is not dialling yet (bulkRuns.heldReason). Exported
+// so the run list's returns validator is this one and not a copy of it.
+export const bulkRunHoldReason = v.union(
+  v.literal("closed"),
+  v.literal("no-opening"),
+);
+
 export default defineSchema({
   ...authTables,
 
@@ -2229,6 +2236,16 @@ export default defineSchema({
     // reason templateName is. Every tenant shares one Retell account, so
     // re-resolving per call risks a different salon's line mid-run.
     fromNumber: v.optional(v.string()),
+    // A call run that is running but may not dial yet, and until when
+    // (2026-10-17, P6b of the Nudge port). Set and cleared ONLY by
+    // bulkRuns.claimNextCall, the one place a call is claimed, because the
+    // reaper restarts every running run every five minutes and a hold kept
+    // anywhere else would be dialled straight through. "closed": the business
+    // is shut (outside its hours or in blocked time) and heldUntil is when it
+    // opens. "no-opening": nothing opens within the horizon, and heldUntil is
+    // only when to look again. Unset: free to dial.
+    heldUntil: v.optional(v.number()),
+    heldReason: v.optional(bulkRunHoldReason),
 
     // ---- Denormalised counters -------------------------------------------
     //

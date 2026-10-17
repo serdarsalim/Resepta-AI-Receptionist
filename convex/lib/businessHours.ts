@@ -5,10 +5,11 @@
 // reminders.ts, zoneOffsetMs/localDayRangeUtc in lib/format.ts, and this. Add
 // callers, not more copies.
 //
-// Nudge's clampToWindow is deliberately NOT ported. It rolls a scheduled send
-// forward to the next open moment, which Resepta's reminder tick does not need:
-// a reminder held by the send window simply stays unstamped and the next tick
-// picks it up. Port it the day something actually schedules forward.
+// Nudge's clampToWindow was deliberately not ported while nothing here
+// scheduled forward: a reminder held by the send window simply stays
+// unstamped and the next tick picks it up. The bulk call queue does schedule
+// forward (it waits for the business to open, 2026-10-17), so its answer is
+// nextOpenAt below, written for this file's shapes rather than copied.
 //
 // Two vocabularies live here and they are not the same thing:
 //   - business hours: when the salon is OPEN. Drives the WhatsApp away-reply.
@@ -285,6 +286,66 @@ export function isWithinActiveWindow(
   if (p.minutesOfDay >= win.endMinute) return false;
   if (closureBlocks(closures, p, p.minutesOfDay, p.minutesOfDay)) return false;
   return true;
+}
+
+// The first moment at or after `fromMs` that is inside the window and outside
+// every closure, or null when nothing opens within `horizonDays` local days
+// (seven closed days, or a closure longer than the horizon). `fromMs` itself
+// comes back when it is already open, so "is it open now" and "when does it
+// open" are one question with one set of rules: the same half-open windows
+// and the same reading of a closure as isWithinActiveWindow.
+//
+// Nudge's clampToWindow with this file's shapes: a window per weekday, and
+// blocked time cut out of it, so a lunch closure moves the answer to 14:00
+// and a holiday to the next working day. Whole minutes: anything later than
+// fromMs lands on a minute boundary of the business's wall clock.
+export function nextOpenAt(
+  fromMs: number,
+  tz: string | undefined,
+  w: ActiveWindow,
+  closures?: Closure[] | null,
+  horizonDays = 60,
+): number | null {
+  // A zone Intl refuses would throw in localWallTimeToUtcMs below, so it is
+  // settled once, with getLocalPartsSafe's own fallback.
+  let zone = tz || "UTC";
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+  } catch {
+    zone = "UTC";
+  }
+  const from = getLocalParts(fromMs, zone);
+  for (let i = 0; i <= horizonDays; i++) {
+    // The civil date i days on. Date.UTC normalises a day past the end of the
+    // month, and the weekday of a civil date does not depend on the zone.
+    const date = new Date(Date.UTC(from.y, from.m0, from.d + i));
+    const p = {
+      y: date.getUTCFullYear(),
+      m0: date.getUTCMonth(),
+      d: date.getUTCDate(),
+      weekday: date.getUTCDay(),
+    };
+    const win = windowForWeekday(w, p.weekday);
+    if (!win) continue;
+    let minute = i === 0 ? Math.max(win.startMinute, from.minutesOfDay) : win.startMinute;
+    // Step past every closure the minute lands in. Closures can overlap or
+    // touch (a lunch break beside a dated afternoon off), so go round until
+    // none moves it.
+    const blocks = closuresOnDay(closures, p);
+    for (let moved = true; moved; ) {
+      moved = false;
+      for (const block of blocks) {
+        if (minute >= block.from && minute < block.to) {
+          minute = block.to;
+          moved = true;
+        }
+      }
+    }
+    if (minute >= win.endMinute) continue;
+    if (i === 0 && minute === from.minutesOfDay) return fromMs;
+    return localWallTimeToUtcMs(p.y, p.m0, p.d, Math.floor(minute / 60), minute % 60, zone);
+  }
+  return null;
 }
 
 // Deliberately NO default hours. Nudge defaults to Mon–Fri 09:00–18:00, which
