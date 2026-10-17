@@ -376,8 +376,11 @@ export function InboxView({
               // The last row's divider would land on the card's own bottom
               // edge and read as a double rule.
               <ul className="[&>li:last-child>div]:after:hidden">
-                {shown.map((c) => {
+                {shown.map((c, i) => {
                   const isActive = c.customerId === selected;
+                  // The row ABOVE the lit one drops its divider too, so the
+                  // fill has no rule on either side (Nudge efc036f1).
+                  const beforeActive = shown[i + 1]?.customerId === selected;
                   // TRIAL (2026-08-22): a row opens the CONTACT PAGE instead
                   // of filling the pane beside it. The inbox and the contact
                   // page were two master-detail screens sharing a right half,
@@ -421,39 +424,39 @@ export function InboxView({
                             open();
                           }
                         }}
-                        // The LEFT BAR separates hover from selection, not the
-                        // tint step: position survives fast scanning in a way
-                        // a few percent of wash doesn't.
+                        // The lit row is a NEUTRAL inset, rounded fill, not
+                        // a left bar (P21, Nudge b6fcaa09): WhatsApp Web's
+                        // shape, and the bar read heavier than a state needs.
+                        // Hover is the same shape one step lighter, on its
+                        // own --inbox-row-hover (Nudge 0e6126a8): the shared
+                        // --row-hover-bg is one step off a dark card and read
+                        // as no hover at all. The fill is the `before` layer
+                        // under the content (`isolate` + `-z-10`), so it can
+                        // be inset without moving anything.
                         //
-                        // The bar is NEUTRAL, not brand green, and that is a
-                        // decision. Green in this product means exactly one
-                        // thing, "I pinned this", and it is the marker on this
-                        // row plus the dot on the sidebar's inbox tab. A green
-                        // selection bar put that hue on a second job inside a
-                        // single row, so the reader had to tell two greens
-                        // apart at a glance. The bar only ever needed position and
-                        // shape, and --foreground gives it both without
-                        // borrowing the status hue. This is the only left-bar
-                        // selection in the app, so nothing else drifts.
-                        // The divider is INSET (after:inset-x-4) and starts
-                        // where the text does. A full-bleed rule cuts the card
-                        // into stacked boxes; an inset one reads as a list.
-                        // It stays on the row rather than the li so the hover
-                        // wash and the selection bar keep the full width.
+                        // The divider is INSET, starts where the NAME does
+                        // (past the dot column, WhatsApp's way, Nudge
+                        // 91735572) and ends with the age, at black 6% /
+                        // white 7%: a full-bleed or full-strength rule cuts
+                        // the card into stacked boxes; a faint inset one
+                        // reads as a list. The lit row drops its own.
+                        //
                         // TWO LINES, iMessage's shape: who, then what they
                         // said. The row carried only a name and an age, which
                         // made the list a directory rather than a triage
-                        // queue — every question you came here with ("who
+                        // queue: every question you came here with ("who
                         // still needs an answer", "did that confirmation go
-                        // out") cost a click each. The backend was already
-                        // handing over lastBody, lastChannel, lastDirection
-                        // and lastFailed; search had been reading lastBody the
-                        // whole time, so the row was the only thing on this
-                        // screen that could not see it.
-                        className={`group relative flex min-h-[3.5rem] w-full cursor-pointer items-center gap-2.5 px-4 py-2 text-left transition-colors before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:content-[''] after:absolute after:inset-x-4 after:bottom-0 after:h-px after:bg-[var(--border)] after:content-[''] ${
+                        // out") cost a click each.
+                        //
+                        // Each class string stands whole in quotes: Tailwind
+                        // does not read a candidate glued to `${` (Nudge
+                        // d4365e9a, where the hover never existed).
+                        className={`group relative isolate flex min-h-[3.5rem] w-full cursor-pointer items-start gap-2 px-3 py-2 text-left outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent)] before:absolute before:inset-x-1 before:inset-y-[3px] before:-z-10 before:rounded-lg before:transition-colors before:content-[''] after:absolute after:bottom-0 after:left-[2.125rem] after:right-3 after:h-px after:bg-black/[0.06] after:content-[''] dark:after:bg-white/[0.07] ${
                           isActive
-                            ? "bg-[var(--row-hover-bg)] before:bg-[var(--foreground)]"
-                            : "hover:bg-[var(--row-hover-bg)]"
+                            ? "before:bg-[var(--row-active-bg)] after:hidden"
+                            : beforeActive
+                              ? "hover:before:bg-[var(--inbox-row-hover)] after:hidden"
+                              : "hover:before:bg-[var(--inbox-row-hover)]"
                         }`}
                       >
                         {/* THE ROW'S ONE DOT, in a gutter down the left edge —
@@ -481,9 +484,19 @@ export function InboxView({
                             The slot is always rendered and only sometimes lit,
                             so names sit on one left edge whatever their state
                             and the row never re-indents; the hollow ring fades
-                            in on hover. It spans BOTH lines rather than
-                            sitting on line one, so the dot marks the
-                            conversation, not the name.
+                            in on hover.
+
+                            It sits on the NAME line, not the row's middle
+                            (Nudge c47c694c): dot and name are one fact, and
+                            centred on two lines it floated in the gap between
+                            name and preview. A 14px target (Nudge 2ef5a0b4),
+                            3px down to centre on the name's 20px line, with
+                            an 8px dot inside (Nudge 4b2c868c): a solid colour
+                            needs less area than the hollow ring to weigh the
+                            same, and the hit area stays whole. The green is
+                            softened to 75% so a list where most rows are new
+                            is not a bright column down the edge; the bold
+                            name already says "new".
 
                             This merges what were two markers — an unread dot
                             here and a pin dot after the name. Splitting them
@@ -516,16 +529,21 @@ export function InboxView({
                                 : t("inbox.notPinned")
                           }
                           aria-pressed={c.pinned}
-                          className={
-                            c.pinned
-                              ? "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full bg-violet-500 transition-transform hover:scale-125"
-                              : c.unseen
-                                ? "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full bg-[var(--brand)] transition-transform hover:scale-125"
-                                : "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full border border-dashed border-[var(--muted)] opacity-0 transition-opacity hover:border-[var(--foreground)] group-hover:opacity-100 [@media(hover:none)]:opacity-100"
-                          }
-                        />
+                          className="mt-[3px] flex h-3.5 w-3.5 shrink-0 cursor-pointer items-center justify-center rounded-full"
+                        >
+                          <span
+                            aria-hidden
+                            className={
+                              c.pinned
+                                ? "h-2 w-2 rounded-full bg-violet-500"
+                                : c.unseen
+                                  ? "h-2 w-2 rounded-full bg-[var(--brand)]/75"
+                                  : "h-3.5 w-3.5 rounded-full border border-dashed border-[var(--muted)] opacity-0 transition-opacity hover:border-[var(--foreground)] group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+                            }
+                          />
+                        </button>
                         </HoverTip>
-                        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+                        <div className="flex min-w-0 flex-1 flex-col gap-1">
                         {/* Line one — name and age. The pin used to sit
                             between them; it is the gutter dot now. */}
                         <div className="flex w-full items-center gap-2.5">

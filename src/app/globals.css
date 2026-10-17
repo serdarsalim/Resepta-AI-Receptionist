@@ -64,6 +64,15 @@
   --table-header-fg: #1c2b33;
   --table-divider: #e4e6eb;
   --row-hover-bg: #f5f6f7;
+  /* The Inbox list's own two steps (P21, Nudge b6fcaa09 and 0e6126a8). The
+     row whose menu is open (or that is open beside the list) takes
+     --row-active-bg, a neutral rounded fill one step PAST hover, so the step
+     itself tells them apart now that there is no left bar. The list's hover
+     sits between the card and that fill; the shared --row-hover-bg is one
+     step off a dark card and read as no hover at all there. Tables keep the
+     quieter shared one. */
+  --row-active-bg: #e6e8eb;
+  --inbox-row-hover: #f0f1f3;
   /* A card is neither lifted nor outlined. It is white paper on a tinted
      plane, and the fill difference is the whole edge (2026-08-25, Serdar:
      "maybe it's better when they're flat").
@@ -207,6 +216,8 @@
   --table-header-fg: #ededed;
   --table-divider: #2e2e2e;
   --row-hover-bg: #202020;
+  --row-active-bg: #2a2a2a;
+  --inbox-row-hover: #222222;
   /* Flat here too. This was a hairline ring, because a drop shadow is
      invisible on near-black and the ring did the same job — but the job is
      gone: --card #171717 on --pane #0c0c0c is eleven units, close enough to
