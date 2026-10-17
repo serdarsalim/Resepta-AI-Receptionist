@@ -11,6 +11,7 @@ import { InfoTip } from "./InfoTip";
 import { Sheet } from "./Sheet";
 import { SegmentedControl } from "./SegmentedControl";
 import { CheckSwitch } from "./CheckSwitch";
+import { ChatSimulator } from "./ChatSimulator";
 import { MultiSelectDropdown } from "./MultiSelectDropdown";
 
 
@@ -139,6 +140,10 @@ export function VoiceCard({
   const [wireError, setWireError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [openInfo, setOpenInfo] = useState<string | null>(null);
+  const [simOpen, setSimOpen] = useState(false);
+  // A test conversation is typed work: Escape and the backdrop leave it open.
+  const [simHolding, setSimHolding] = useState(false);
+  const onSimBusy = useCallback((held: boolean) => setSimHolding(held), []);
   const [roster, setRoster] = useState<Roster | null>(null);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -311,6 +316,18 @@ export function VoiceCard({
 
   const agentActions = (
     <>
+      {/* Try the WhatsApp assistant without a customer seeing anything
+          (P9b). Quiet: it changes nothing, so it must not out-rank the
+          card's own action beside it. */}
+      {isOwner && (
+        <button
+          type="button"
+          onClick={() => setSimOpen(true)}
+          className="inline-flex h-8 items-center rounded-lg px-2.5 text-sm text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+        >
+          {t("chatSim.open")}
+        </button>
+      )}
       {/* Refresh first, primary action last: the row is right-aligned, so the
           rightmost seat is the anchor position and the quiet icon should not
           sit outside the button people actually reach for. */}
@@ -934,6 +951,24 @@ export function VoiceCard({
         </Sheet>
       )}
 
+      {simOpen && (
+        <Sheet
+          title={t("chatSim.open")}
+          dirty={simHolding}
+          onClose={() => {
+            setSimOpen(false);
+            setSimHolding(false);
+          }}
+        >
+          <ChatSimulator
+            onBusyChange={onSimBusy}
+            onClose={() => {
+              setSimOpen(false);
+              setSimHolding(false);
+            }}
+          />
+        </Sheet>
+      )}
     </fieldset>
   );
 }

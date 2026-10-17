@@ -11,7 +11,7 @@ import {
 } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireOrg } from "./lib/orgAuth";
+import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { isDeleting } from "./lib/customerDeletion";
 import { monthKey } from "./lib/usage";
 
@@ -125,9 +125,17 @@ export const loadTurnContext = internalQuery({
     // and any future manual invocation have no inbound; when present it is
     // what the debounce check compares against.
     inboundMessageId: v.optional(v.id("messages")),
+    // The owner's chat simulator (simulateTurn, P9b): the same context a real
+    // turn reads, minus the four things that only matter when a customer is
+    // waiting. The agent being switched off, the hourly rate limit and the
+    // send lane do not stop a test, and the disclosure line is never added.
+    // The mode reads as suggest, so every write tool takes the draft path and
+    // a handover flags nothing.
+    simulate: v.optional(v.boolean()),
   },
   returns: v.any(),
   handler: async (ctx, args) => {
+    const simulate = args.simulate === true;
     const customer = await ctx.db.get(args.customerId);
     // A turn scheduled for a customer who has since been deleted stands down.
     if (!customer || isDeleting(customer)) return null;
@@ -144,7 +152,7 @@ export const loadTurnContext = internalQuery({
 
     // Guards, cheapest first. One verdict: the FIRST reason not to run.
     let skip: string | null = null;
-    if (mode === "off") skip = "agent-off";
+    if (mode === "off" && !simulate) skip = "agent-off";
     else if (org.demoMode) skip = "demo-org";
     else if ((org.status ?? "active") === "suspended") skip = "org-suspended";
     else if ((await platformValue(ctx, "chatAgentDisabled")) === "true")
@@ -236,7 +244,7 @@ export const loadTurnContext = internalQuery({
 
     // Rate limit: generated turns (sent or shadowed) in the last hour. A
     // skipped turn does not count, or the limit would extend itself.
-    if (!skip) {
+    if (!skip && !simulate) {
       const recent = await ctx.db
         .query("chatAgentTurns")
         .withIndex("by_customer_at", (q) =>
@@ -280,7 +288,7 @@ export const loadTurnContext = internalQuery({
       laneAvailability({ org, waAccount, evolutionConfigured: Boolean(evolution) }),
       customer,
     );
-    if (!skip && !lane) skip = "wa-not-configured";
+    if (!skip && !lane && !simulate) skip = "wa-not-configured";
 
     // Conversation history: the WhatsApp thread only, ascending, capped —
     // filtered out of the rows already read above. The trigger message is
@@ -425,7 +433,7 @@ export const loadTurnContext = internalQuery({
         businessHours: org.businessHours ?? null,
         calcomApiKey: org.calcomApiKey ?? null,
         calcomEventTypeId: org.calcomEventTypeId ?? null,
-        mode,
+        mode: simulate ? "suggest" : mode,
         // Whether asking for a person ENDS the agent's involvement in this
         // conversation or just marks it (schema orgs.chatAgentStopOnHandover).
         // Unset means keep answering.
@@ -442,7 +450,8 @@ export const loadTurnContext = internalQuery({
         // description, the branch that writes, and the fact the tool returns
         // — and three copies of this AND is how they start telling the model
         // three different stories.
-        stopOnHandover: mode === "live" && (org.chatAgentStopOnHandover ?? false),
+        stopOnHandover:
+          !simulate && mode === "live" && (org.chatAgentStopOnHandover ?? false),
         currency: org.currency ?? "TRY",
         priceDecimals: org.priceDecimals ?? false,
         // Product handover (schema orgs.pickupEnabled / deliveryEnabled).
@@ -475,7 +484,7 @@ export const loadTurnContext = internalQuery({
       evolution,
       month,
       history,
-      needsDisclosure: !disclosed,
+      needsDisclosure: !simulate && !disclosed,
       // The business context now travels as the SUBSTITUTED variables and
       // the Talimat itself, not as separate lists — one rendering, shared
       // with the voice lane (lib/agentVariables applies the noteText
@@ -1334,112 +1343,24 @@ export const respond = internalAction({
       return null;
     }
 
-    // The shut hours reach the system prompt too, not only the tools: a
-    // customer who asks "are you open Sunday" is answered from the prompt, and
-    // an agent that only learns about the lunch break when a booking is
-    // refused has already told somebody it was free.
-    const promptClosures = await ctx.runQuery(internal.closures.forOrg, {
-      orgId: context.orgId,
-    });
-    const openness = openHoursForAgent(context.org.businessHours, {
-      closures: promptClosures,
-      todayIso: todayInZone(context.org.timezone),
-    });
-    // Template v4: the adapter over the salon's own Talimat, with the shared
-    // built-ins rendered for text. Services, team, knowledge, the clock and
-    // the customer card all arrive through the substituted {{variables}} —
-    // one rendering, shared with the voice lane.
-    const system = chatAgentSystemPrompt({
-      businessName: context.org.name,
-      language: context.customer.language,
-      openHours: openness.open_hours,
-      closedDays: openness.closed_days,
-      closedTimes: openness.closed_times,
-      upcomingClosures: openness.upcoming_closures,
-      voicePrompt: context.voicePrompt,
-      variables: context.variables,
-      appointments: context.upcoming,
-      recentCalls: context.recentCalls,
-      sellsGoods: context.org.sellsGoods,
-      pickup: context.org.pickup,
-      delivery: context.org.delivery,
-    });
-
     // The skip verdict already refused a missing key; this narrows the type
     // and stands guard against a future reordering of those checks.
-    const apiKey = llm.apiKey;
-    if (!apiKey) {
+    if (!llm.apiKey) {
       await record({ status: "skipped", error: "llm-not-configured" });
       return null;
     }
-
-    const messages: ProviderMessage[] = merged.map((m) =>
-      textMessage(m.role, m.text),
-    );
-    const tools = chatAgentTools(context.org.stopOnHandover);
-    const toolLog: ToolCallLog[] = [];
-    let inputTokens = 0;
-    let outputTokens = 0;
-    let finalText = "";
-    // Whether a round came back with no tool call: the only kind of round
-    // whose text is a reply.
-    let answered = false;
-
-    for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
-      const result = await chatComplete({
-        provider: llm.provider,
-        apiKey,
-        model,
-        system,
-        messages,
-        tools,
+    const turn = await runTurn(ctx, context, merged, draft);
+    meteredMicroUsd = turn.costMicroUsd;
+    const { toolLog, inputTokens, outputTokens, finalText, answered } = turn;
+    if (turn.error) {
+      await record({
+        status: "error",
+        toolCalls: toolLog,
+        inputTokens,
+        outputTokens,
+        error: turn.error,
       });
-      if (!result.ok) {
-        await record({
-          status: "error",
-          toolCalls: toolLog,
-          inputTokens,
-          outputTokens,
-          error: result.error,
-        });
-        return null;
-      }
-      inputTokens += result.inputTokens;
-      outputTokens += result.outputTokens;
-      meteredMicroUsd += costMicroUsd(model, result.inputTokens, result.outputTokens);
-      // Only a round that calls no tool is an ANSWER (2026-10-13, Nudge's
-      // chatEngine rule: "a respond written beside a tool call is not sent").
-      // Text the model writes in the same breath as a tool call was written
-      // before the tool replied: "let me check" at best, "you're booked" for
-      // a booking the tool then refused at worst. It used to become the reply
-      // whenever no later round wrote anything.
-      if (result.toolUses.length === 0) {
-        finalText = result.text;
-        answered = true;
-        break;
-      }
-      if (round === MAX_TOOL_ROUNDS) {
-        // Still asking for tools at the cap, so there is no answer, and this
-        // round's text was written blind like any other. Recorded below as
-        // tool-limit, never sent; an unfinished plan must not loop the
-        // budget away either.
-        break;
-      }
-      // Execute every requested tool, then hand the results back in the
-      // provider's own dialect — appendToolRound owns that asymmetry.
-      const toolResults: { id: string; content: string }[] = [];
-      for (const use of result.toolUses) {
-        const toolResult = await executeTool(ctx, context, use.name, use.input, draft);
-        toolLog.push({
-          name: use.name,
-          args: use.input,
-          result: toolResult,
-          // The flight recorder must not read a dry "booked: true" as a booking.
-          ...(draft && WRITE_TOOLS.has(use.name) ? { dry: true } : {}),
-        });
-        toolResults.push({ id: use.id, content: JSON.stringify(toolResult) });
-      }
-      appendToolRound(llm.provider, messages, result, toolResults);
+      return null;
     }
 
     if (!answered || !finalText.trim()) {
@@ -1580,6 +1501,295 @@ export const respond = internalAction({
       customerId: args.customerId,
     });
     return null;
+  },
+});
+
+// One turn of the model: the system prompt from the context, then up to
+// MAX_TOOL_ROUNDS of tools until a round answers without calling one. Shared
+// by respond (a real customer) and simulateTurn (the owner's test chat), so a
+// test is the same prompt, the same tools and the same rules. `draft` present
+// means every write tool runs its checks and writes nothing.
+type SystemPromptArgs = Parameters<typeof chatAgentSystemPrompt>[0];
+// What loadTurnContext returns beyond the slice the tools read (TurnContext),
+// named off the prompt builder's own parameters so the two cannot drift.
+type LoadedTurn = TurnContext & {
+  llm: unknown;
+  voicePrompt: SystemPromptArgs["voicePrompt"];
+  variables: SystemPromptArgs["variables"];
+  upcoming: SystemPromptArgs["appointments"];
+  recentCalls: SystemPromptArgs["recentCalls"];
+  org: TurnContext["org"] & {
+    sellsGoods: SystemPromptArgs["sellsGoods"];
+    pickup: SystemPromptArgs["pickup"];
+    delivery: SystemPromptArgs["delivery"];
+  };
+};
+
+async function runTurn(
+  ctx: Pick<ActionCtx, "runQuery" | "runMutation">,
+  context: LoadedTurn,
+  merged: { role: "user" | "assistant"; text: string }[],
+  draft: DraftBuffer | undefined,
+): Promise<{
+  toolLog: ToolCallLog[];
+  inputTokens: number;
+  outputTokens: number;
+  costMicroUsd: number;
+  finalText: string;
+  answered: boolean;
+  error?: string;
+}> {
+  const llm = context.llm as {
+    provider: LlmProvider;
+    model: string;
+    apiKey: string | null;
+  };
+  const model = llm.model;
+  const empty = {
+    toolLog: [] as ToolCallLog[],
+    inputTokens: 0,
+    outputTokens: 0,
+    costMicroUsd: 0,
+    finalText: "",
+    answered: false,
+  };
+  let meteredMicroUsd = 0;
+  // The shut hours reach the system prompt too, not only the tools: a
+  // customer who asks "are you open Sunday" is answered from the prompt, and
+  // an agent that only learns about the lunch break when a booking is
+  // refused has already told somebody it was free.
+  const promptClosures = await ctx.runQuery(internal.closures.forOrg, {
+    orgId: context.orgId,
+  });
+  const openness = openHoursForAgent(context.org.businessHours, {
+    closures: promptClosures,
+    todayIso: todayInZone(context.org.timezone),
+  });
+  // Template v4: the adapter over the salon's own Talimat, with the shared
+  // built-ins rendered for text. Services, team, knowledge, the clock and
+  // the customer card all arrive through the substituted {{variables}} —
+  // one rendering, shared with the voice lane.
+  const system = chatAgentSystemPrompt({
+    businessName: context.org.name,
+    language: context.customer.language,
+    openHours: openness.open_hours,
+    closedDays: openness.closed_days,
+    closedTimes: openness.closed_times,
+    upcomingClosures: openness.upcoming_closures,
+    voicePrompt: context.voicePrompt,
+    variables: context.variables,
+    appointments: context.upcoming,
+    recentCalls: context.recentCalls,
+    sellsGoods: context.org.sellsGoods,
+    pickup: context.org.pickup,
+    delivery: context.org.delivery,
+  });
+
+  const apiKey = llm.apiKey;
+  if (!apiKey) {
+    return { ...empty, error: "llm-not-configured" };
+  }
+
+  const messages: ProviderMessage[] = merged.map((m) =>
+    textMessage(m.role, m.text),
+  );
+  const tools = chatAgentTools(context.org.stopOnHandover);
+  const toolLog: ToolCallLog[] = [];
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let finalText = "";
+  // Whether a round came back with no tool call: the only kind of round
+  // whose text is a reply.
+  let answered = false;
+
+  for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
+    const result = await chatComplete({
+      provider: llm.provider,
+      apiKey,
+      model,
+      system,
+      messages,
+      tools,
+    });
+    if (!result.ok) {
+      return {
+        toolLog,
+        inputTokens,
+        outputTokens,
+        costMicroUsd: meteredMicroUsd,
+        finalText,
+        answered,
+        error: result.error,
+      };
+    }
+    inputTokens += result.inputTokens;
+    outputTokens += result.outputTokens;
+    meteredMicroUsd += costMicroUsd(model, result.inputTokens, result.outputTokens);
+    // Only a round that calls no tool is an ANSWER (2026-10-13, Nudge's
+    // chatEngine rule: "a respond written beside a tool call is not sent").
+    // Text the model writes in the same breath as a tool call was written
+    // before the tool replied: "let me check" at best, "you're booked" for
+    // a booking the tool then refused at worst. It used to become the reply
+    // whenever no later round wrote anything.
+    if (result.toolUses.length === 0) {
+      finalText = result.text;
+      answered = true;
+      break;
+    }
+    if (round === MAX_TOOL_ROUNDS) {
+      // Still asking for tools at the cap, so there is no answer, and this
+      // round's text was written blind like any other. Recorded below as
+      // tool-limit, never sent; an unfinished plan must not loop the
+      // budget away either.
+      break;
+    }
+    // Execute every requested tool, then hand the results back in the
+    // provider's own dialect — appendToolRound owns that asymmetry.
+    const toolResults: { id: string; content: string }[] = [];
+    for (const use of result.toolUses) {
+      const toolResult = await executeTool(ctx, context, use.name, use.input, draft);
+      toolLog.push({
+        name: use.name,
+        args: use.input,
+        result: toolResult,
+        // The flight recorder must not read a dry "booked: true" as a booking.
+        ...(draft && WRITE_TOOLS.has(use.name) ? { dry: true } : {}),
+      });
+      toolResults.push({ id: use.id, content: JSON.stringify(toolResult) });
+    }
+    appendToolRound(llm.provider, messages, result, toolResults);
+  }
+  return {
+    toolLog,
+    inputTokens,
+    outputTokens,
+    costMicroUsd: meteredMicroUsd,
+    finalText,
+    answered,
+  };
+}
+
+// ── The owner's chat simulator (P9b) ────────────────────────────────────────
+
+// The owner chats with the WhatsApp assistant as one of their customers and
+// sees what it would answer and what it would book, move, cancel or save.
+// Nothing is sent and nothing changes (Nudge 3951e57c, adapted to this
+// agent): the turn runs the real prompt and the real tools on the DRAFT path,
+// so every write is judged and none is made. STATELESS on purpose: the page
+// holds the test conversation and hands it over each turn, so there is no
+// turn row, no thread entry, no inbox mark, no disclosure line and no rate
+// limit to dodge, and nothing to delete afterwards. Each turn is metered to
+// the org like a shadow turn: its cost counts toward the month's budget, and
+// it is not billed per turn, because no reply went to anybody.
+
+const SIMULATOR_MAX_TURNS = 40;
+
+export const simulatorAccess = internalQuery({
+  args: { customerId: v.id("customers") },
+  returns: v.null(),
+  handler: async (ctx, { customerId }) => {
+    const { orgId } = await requireOwner(ctx);
+    const customer = await ctx.db.get(customerId);
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) {
+      throw new Error("not-found");
+    }
+    return null;
+  },
+});
+
+export const meterSimulatedTurn = internalMutation({
+  args: {
+    orgId: v.id("orgs"),
+    month: v.string(),
+    inputTokens: v.number(),
+    outputTokens: v.number(),
+    costMicroUsd: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const org = await ctx.db.get(args.orgId);
+    await countTurnUsage(ctx, args, org, undefined, Date.now());
+    return null;
+  },
+});
+
+export const simulateTurn = action({
+  args: {
+    customerId: v.id("customers"),
+    // The test conversation so far, oldest first, ending on the owner's
+    // newest line (as the customer).
+    history: v.array(
+      v.object({
+        role: v.union(v.literal("user"), v.literal("assistant")),
+        text: v.string(),
+      }),
+    ),
+  },
+  returns: v.object({
+    reply: v.union(v.string(), v.null()),
+    // Why there is no reply: a skip reason (the demo org, no model key, the
+    // budget) or the turn's own failure.
+    error: v.union(v.string(), v.null()),
+    changes: v.array(changeLineValidator),
+    tools: v.array(v.string()),
+    // The business's zone, which the change lines' times are read in.
+    timezone: v.string(),
+  }),
+  handler: async (
+    ctx,
+    { customerId, history },
+  ): Promise<{
+    reply: string | null;
+    error: string | null;
+    changes: Infer<typeof changeLineValidator>[];
+    tools: string[];
+    timezone: string;
+  }> => {
+    await ctx.runQuery(internal.chatAgent.simulatorAccess, { customerId });
+    const context = await ctx.runQuery(internal.chatAgent.loadTurnContext, {
+      customerId,
+      simulate: true,
+    });
+    if (!context) throw new Error("not-found");
+    const none = { reply: null, changes: [], tools: [], timezone: String(context.org.timezone) };
+    if (context.skip) return { ...none, error: String(context.skip) };
+
+    const merged: { role: "user" | "assistant"; text: string }[] = [];
+    for (const m of history.slice(-SIMULATOR_MAX_TURNS)) {
+      const text = m.text.trim();
+      if (!text) continue;
+      const last = merged[merged.length - 1];
+      if (last && last.role === m.role) last.text += `\n${text}`;
+      else merged.push({ role: m.role, text });
+    }
+    while (merged.length && merged[0].role === "assistant") merged.shift();
+    if (!merged.length || merged[merged.length - 1].role !== "user") {
+      return { ...none, error: "nothing-to-answer" };
+    }
+
+    const draft: DraftBuffer = { intents: [] };
+    const turn = await runTurn(ctx, context, merged, draft);
+    if (turn.inputTokens > 0 || turn.outputTokens > 0) {
+      await ctx.runMutation(internal.chatAgent.meterSimulatedTurn, {
+        orgId: context.orgId,
+        month: context.month,
+        inputTokens: turn.inputTokens,
+        outputTokens: turn.outputTokens,
+        costMicroUsd: turn.costMicroUsd,
+      });
+    }
+    const tools = turn.toolLog.map((call) => call.name);
+    if (turn.error) return { ...none, tools, error: turn.error };
+    if (!turn.answered || !turn.finalText.trim()) {
+      return { ...none, tools, error: turn.answered ? "empty-reply" : "tool-limit" };
+    }
+    return {
+      reply: turn.finalText.trim(),
+      error: null,
+      changes: changeLines(draft.intents),
+      tools,
+      timezone: String(context.org.timezone),
+    };
   },
 });
 

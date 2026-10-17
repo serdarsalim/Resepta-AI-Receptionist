@@ -1384,6 +1384,19 @@ before the browser joins and is fatal if it fails.
   next publish of that same draft) writes them to the registry, and
   `discardDraft` or any publish clears them.
 
+- **The owner's simulator (P9b, 2026-10-17).** The agents table's "Try the
+  WhatsApp assistant" opens a sheet where the owner writes as one of their
+  customers (required: the card, appointments and language come from them).
+  Each line calls `chatAgent.simulateTurn` with the conversation so far;
+  `loadTurnContext({ simulate: true })` ignores the agent being off, the
+  hourly rate limit and the send lane, never adds the disclosure and reads
+  the mode as suggest, and `runTurn` (shared with `respond`) answers on the
+  draft path. The reply comes back with the change lines it would make. No
+  turn row is written; `meterSimulatedTurn` counts the tokens and cost into
+  `usageMonthly` unbilled. The demo org, a suspended business, a missing or
+  unpriced model, an exhausted budget and an unselected chat agent refuse
+  as they would for a real turn.
+
 ## The calendar and booking sheet after 2026-08-19 (the Google pass — read this before the 2026-07-29 entry in `journal/2026-07.md`)
 
 Serdar's brief: make the calendar and its popup read like Google Calendar,

@@ -1,16 +1,14 @@
 "use client";
 
-import { useAction, useQuery } from "convex/react";
+import { useAction } from "convex/react";
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
-import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { buttonClass, fieldClass } from "./Control";
 import { InfoTip } from "./InfoTip";
 import { SegmentedControl } from "./SegmentedControl";
+import { CustomerPickField, type PickedCustomer } from "./CustomerPickField";
 
 // A test of the agent in the browser (P9 of the Nudge port; Nudge's
 // AgentTestPanel). The owner talks to the agent through the microphone, as a
@@ -33,7 +31,6 @@ import { SegmentedControl } from "./SegmentedControl";
 
 type Phase = "idle" | "connecting" | "live" | "ended";
 type Direction = "outbound" | "inbound";
-type Picked = { id: Id<"customers">; name: string; phone: string };
 type Action = { tool: string; detail: string; ok: boolean; at: number };
 type Result = {
   ready: boolean;
@@ -73,8 +70,7 @@ export function AgentBrowserTest({
   const startTest = useAction(api.retellAgent.startBrowserTest);
   const readResult = useAction(api.retellAgent.browserTestResult);
 
-  const [picked, setPicked] = useState<Picked | null>(null);
-  const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<PickedCustomer | null>(null);
   const [direction, setDirection] = useState<Direction>("outbound");
   const [vars, setVars] = useState<Record<string, string> | null>(null);
   const [unavailable, setUnavailable] = useState(false);
@@ -89,21 +85,6 @@ export function AgentBrowserTest({
   // The live client. A ref, not state: it is an event emitter with a socket
   // behind it, and a re-render must never be what tears a call down.
   const clientRef = useRef<{ stopCall: () => void } | null>(null);
-
-  const term = query.trim();
-  const results = useQuery(
-    api.customers.quickSearch,
-    !picked && term.length >= 2 ? { q: term } : "skip",
-  );
-  const { triggerRef, panelRef, pos, show, close } = useAnchoredPanel<HTMLInputElement>(
-    "trigger",
-    240,
-  );
-  const hasResults = !!results && results.length > 0;
-  useEffect(() => {
-    if (hasResults) show();
-    else close();
-  }, [hasResults, show, close]);
 
   const live = phase === "connecting" || phase === "live";
   useEffect(() => onLiveChange?.(live), [live, onLiveChange]);
@@ -229,36 +210,13 @@ export function AgentBrowserTest({
       <div className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-x-4 gap-y-2.5">
         <span className="text-xs font-medium">{t("agentTest.callAs")}</span>
         <div className="min-w-0">
-          {picked ? (
-            <div className="flex min-h-8 items-center gap-2 text-sm">
-              <span className="truncate">{picked.name || picked.phone}</span>
-              <span className="shrink-0 text-xs text-[var(--muted)] tabular-nums">
-                {picked.phone}
-              </span>
-              <button
-                type="button"
-                disabled={live}
-                onClick={() => {
-                  setPicked(null);
-                  setQuery("");
-                }}
-                aria-label={t("agentTest.stranger")}
-                title={t("agentTest.stranger")}
-                className="ml-auto shrink-0 rounded px-1.5 text-[var(--muted)] hover:bg-[var(--control-hover)] hover:text-[var(--foreground)]"
-              >
-                ×
-              </button>
-            </div>
-          ) : (
-            <input
-              ref={triggerRef}
-              value={query}
-              disabled={live}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={`${t("agentTest.stranger")} · ${t("agentTest.searchCustomer")}`}
-              className={`${fieldClass("sm")} w-full`}
-            />
-          )}
+          <CustomerPickField
+            value={picked}
+            onChange={setPicked}
+            disabled={live}
+            placeholder={`${t("agentTest.stranger")} · ${t("agentTest.searchCustomer")}`}
+            clearLabel={t("agentTest.stranger")}
+          />
         </div>
 
         <span className="text-xs font-medium">{t("agentTest.direction")}</span>
@@ -367,37 +325,6 @@ export function AgentBrowserTest({
         <TestResultView result={result} draft={usedDraft} />
       )}
 
-      {pos &&
-        results &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div
-            ref={panelRef}
-            role="listbox"
-            style={{ position: "fixed", top: pos.top, bottom: pos.bottom, left: pos.left, width: pos.width }}
-            className="thin-scroll z-[100] max-h-60 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg"
-          >
-            {results.map((row) => (
-              <button
-                key={row.id}
-                type="button"
-                role="option"
-                aria-selected={false}
-                onClick={() => {
-                  setPicked(row);
-                  close();
-                }}
-                className="flex w-full items-baseline gap-2 px-3 py-1.5 text-left text-sm hover:bg-[var(--control-hover)]"
-              >
-                <span className="truncate">{row.name || row.phone}</span>
-                <span className="ml-auto shrink-0 text-xs text-[var(--muted)] tabular-nums">
-                  {row.phone}
-                </span>
-              </button>
-            ))}
-          </div>,
-          document.body,
-        )}
     </div>
   );
 }

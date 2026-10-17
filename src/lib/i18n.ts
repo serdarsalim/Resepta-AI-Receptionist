@@ -4375,6 +4375,102 @@ const dictionary = {
     en: "No summary",
     de: "Keine Zusammenfassung",
   },
+  // The chat simulator (P9b): the owner writes as a customer, nothing sent.
+  "chatSim.open": {
+    tr: "WhatsApp asistanını dene",
+    en: "Try the WhatsApp assistant",
+    de: "WhatsApp-Assistenten testen",
+  },
+  "chatSim.hint": {
+    tr: "Bir müşteriniz gibi yazın, asistanın ne cevap vereceğini ve neyi değiştireceğini görün. Hiçbir mesaj gitmez, hiçbir şey değişmez. Kullanılan yapay zeka aylık bütçeye sayılır.",
+    en: "Write as one of your customers and see what the assistant would answer and change. No message is sent and nothing changes. The AI it uses counts toward the monthly budget.",
+    de: "Schreiben Sie wie einer Ihrer Kunden und sehen Sie, was der Assistent antworten und ändern würde. Es wird nichts gesendet und nichts geändert. Die genutzte KI zählt zum Monatsbudget.",
+  },
+  "chatSim.chatAs": {
+    tr: "Kim olarak",
+    en: "Write as",
+    de: "Schreiben als",
+  },
+  "chatSim.pickFirst": {
+    tr: "Önce bir müşteri seçin.",
+    en: "Pick a customer first.",
+    de: "Wählen Sie zuerst einen Kunden.",
+  },
+  "chatSim.placeholder": {
+    tr: "Müşteri olarak yazın…",
+    en: "Write as the customer…",
+    de: "Als Kunde schreiben…",
+  },
+  "chatSim.send": {
+    tr: "Gönder",
+    en: "Send",
+    de: "Senden",
+  },
+  "chatSim.reset": {
+    tr: "Baştan başla",
+    en: "Start over",
+    de: "Neu beginnen",
+  },
+  "chatSim.thinking": {
+    tr: "Asistan yazıyor…",
+    en: "The assistant is writing…",
+    de: "Der Assistent schreibt…",
+  },
+  "chatSim.book": {
+    tr: "Randevu alırdı: {when}",
+    en: "Would book {when}",
+    de: "Würde buchen: {when}",
+  },
+  "chatSim.bookAsap": {
+    tr: "Hemen sipariş alırdı",
+    en: "Would take an order for now",
+    de: "Würde eine Bestellung für sofort aufnehmen",
+  },
+  "chatSim.move": {
+    tr: "Taşırdı: {from} → {to}",
+    en: "Would move {from} → {to}",
+    de: "Würde verschieben: {from} → {to}",
+  },
+  "chatSim.cancel": {
+    tr: "İptal ederdi: {when}",
+    en: "Would cancel {when}",
+    de: "Würde stornieren: {when}",
+  },
+  "chatSim.save": {
+    tr: "Kaydederdi: {fields}",
+    en: "Would save {fields}",
+    de: "Würde speichern: {fields}",
+  },
+  "chatSim.errorDemo": {
+    tr: "Demo hesabında asistan denenemez.",
+    en: "The assistant cannot be tried in the demo.",
+    de: "Im Demo kann der Assistent nicht getestet werden.",
+  },
+  "chatSim.errorNoModel": {
+    tr: "Asistan için bir yapay zeka modeli ayarlı değil.",
+    en: "No AI model is set up for the assistant.",
+    de: "Für den Assistenten ist kein KI-Modell eingerichtet.",
+  },
+  "chatSim.errorBudget": {
+    tr: "Bu ayın asistan bütçesi doldu.",
+    en: "This month's assistant budget is used up.",
+    de: "Das Assistenten-Budget dieses Monats ist aufgebraucht.",
+  },
+  "chatSim.errorSuspended": {
+    tr: "İşletme askıya alınmış.",
+    en: "The business is suspended.",
+    de: "Das Geschäft ist gesperrt.",
+  },
+  "chatSim.errorNotSelected": {
+    tr: "WhatsApp'a cevap verecek asistan seçilmedi. Tablodaki Sohbet sütunundan birini açın.",
+    en: "No assistant is chosen to answer WhatsApp. Switch one on in the table's Chat column.",
+    de: "Kein Assistent beantwortet WhatsApp. Schalten Sie einen in der Chat-Spalte der Tabelle ein.",
+  },
+  "chatSim.errorGeneric": {
+    tr: "Asistan şu an cevap veremedi.",
+    en: "The assistant could not answer just now.",
+    de: "Der Assistent konnte gerade nicht antworten.",
+  },
   "voiceDetail.callMe": {
     tr: "Beni ara",
     en: "Call me",

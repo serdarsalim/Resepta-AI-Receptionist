@@ -1012,7 +1012,12 @@ Nudge's `meetingTools.ts`; do not grow a second path.
   (`simulateDraft`), so each change is judged after the draft's earlier ones.
   A change cal.com would have to make is refused in a draft. The composer
   shows the change above the box. Live writes as it goes. Any new write tool
-  must take the draft path too.
+  must take the draft path too. The owner's chat simulator (`chatAgent.simulateTurn`,
+  2026-10-17, P9b) rides the same path: `loadTurnContext` with `simulate`
+  reads as suggest, every write is a draft never sent, and the turn writes no
+  row (the page holds the conversation), so it never meets the disclosure,
+  the rate limit or the inbox. Its cost counts toward the month like a shadow
+  turn; it is not billed.
 
 ## An action belongs to the card it acts on (2026-08-21)
 
