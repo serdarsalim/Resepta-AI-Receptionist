@@ -14,9 +14,10 @@
 - Team members see read-only cards as plain values instead of a dimmed form.
 - The Inbox scrolls through every conversation (no more 700 cap), with counts and search done on the server; a pin stays until you unpin it; email sent as HTML previews as words.
 - Searching for a customer (header search, booking sheet) finds anyone, not only the newest 1,000; the Customers table loads up to 5,000.
+- A bulk run's page says who booked and who replied after it; tap a count to see just them, and Follow up sends those people a new message or call.
 
-**Ready to look at:** Voice agent page: edit, Publish, open the version number, Restore, the voicemail row, Test in the browser. Agents table: Try the WhatsApp assistant. A customer's WhatsApp thread, calls tab and notes tab. Admin templates table's category column. The Inbox: scroll far, Unread and Pinned counts, search. The booking sheet's customer picker.
+**Ready to look at:** Voice agent page: edit, Publish, open the version number, Restore, the voicemail row, Test in the browser. Agents table: Try the WhatsApp assistant. A customer's WhatsApp thread, calls tab and notes tab. Admin templates table's category column. The Inbox: scroll far, Unread and Pinned counts, search. The booking sheet's customer picker. A past bulk run's page.
 
 **Before shipping:** Deploy Convex first (new tables agentTests; new optional fields on retellAgents, calls, waTemplates, usageMonthly). Subscribe the Meta app to template_category_update. Check on one real call that inbound answers with the published version. After the deploy run `customers:backfillSearch` and `threads:backfill`, or search finds nobody.
 
-**Up next:** P13b bulk-run outcomes and follow-up selection, then P14 media library.
+**Up next:** P14 media library, then P15 token chips.
