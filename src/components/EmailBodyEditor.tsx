@@ -26,6 +26,7 @@ import type { TokenVariable } from "@/lib/tokenLabels";
 import { SegmentedControl } from "./SegmentedControl";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
+import { HoverTip } from "./HoverTip";
 
 // WYSIWYG email-body editor with an HTML toggle, ported from Nudge and
 // trimmed to what a rule's email needs: no media library, no saved-signature
@@ -99,7 +100,10 @@ function ToolbarButton({
   children: React.ReactNode;
   ref?: React.Ref<HTMLButtonElement>;
 }) {
+  // The label is a HoverTip: instant, the app's one tooltip look, and through
+  // a portal, where the old absolute span clipped on the card it sat in (P20).
   return (
+    <HoverTip text={title}>
     <button
       ref={ref}
       type="button"
@@ -110,28 +114,19 @@ function ToolbarButton({
         e.preventDefault();
         onClick();
       }}
-      // NAMED group, not a bare one. A bare `group-hover:` matches ANY ancestor
-      // carrying the class, so the moment this toolbar was dropped inside
-      // something that had one — the note bubble, whose row is a group so its
-      // delete button can appear on hover — every tooltip in the row lit up at
-      // once and stacked on top of each other. A named group only answers to
-      // its own name, which makes this component safe wherever it is mounted.
       // h-7, the control scale's xs (Control.tsx): the same 28px as the
       // variable and emoji pickers at the end of this strip, which were the
       // strip's odd ones out at 22px with a border. Nudge's EditorToolbar is
       // h-7 too. The hover is the foreground wash, which shows in dark.
-      className={`group/tip relative inline-flex h-7 min-w-7 items-center justify-center rounded-md px-1.5 text-xs ${
+      className={`inline-flex h-7 min-w-7 items-center justify-center rounded-md px-1.5 text-xs ${
         active
           ? "bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] text-[var(--accent)]"
           : "text-[var(--muted)] hover:bg-[var(--control-hover)] hover:text-[var(--foreground)]"
       }`}
     >
       {children}
-      {/* Instant tooltip — native title waits ~1s, too slow to learn icons by. */}
-      <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-1 hidden -translate-x-1/2 whitespace-nowrap rounded bg-[var(--foreground)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--background)] group-hover/tip:block">
-        {title}
-      </span>
     </button>
+    </HoverTip>
   );
 }
 
@@ -242,10 +237,10 @@ function Toolbar({
             className="fixed z-50 flex gap-1 rounded-md border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-md"
           >
             {PALETTE.map((c) => (
+              <HoverTip key={c} text={c}>
               <button
-                key={c}
                 type="button"
-                title={c}
+                aria-label={c}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   editor.chain().focus().setColor(c).run();
@@ -254,10 +249,12 @@ function Toolbar({
                 className="h-4 w-4 rounded-full border border-[var(--border)]"
                 style={{ backgroundColor: c }}
               />
+              </HoverTip>
             ))}
+            <HoverTip text={t("editor.clearColor")}>
             <button
               type="button"
-              title={t("editor.clearColor")}
+              aria-label={t("editor.clearColor")}
               onMouseDown={(e) => {
                 e.preventDefault();
                 editor.chain().focus().unsetColor().run();
@@ -267,6 +264,7 @@ function Toolbar({
             >
               ×
             </button>
+            </HoverTip>
           </div>,
           document.body,
         )}

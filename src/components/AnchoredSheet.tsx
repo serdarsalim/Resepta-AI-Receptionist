@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { placeBeside, type Placement, type Rect } from "@/lib/anchoredSheet";
+import { HoverTip } from "./HoverTip";
 
 // The popover the calendar opens beside the thing it belongs to: the booking
 // sheet and the blocked-time sheet. They carried two copies of this chrome
@@ -247,10 +248,10 @@ export function SheetIconButton({
   children: React.ReactNode;
 }) {
   return (
+    <HoverTip text={label}>
     <button
       type="button"
       aria-label={label}
-      title={label}
       aria-pressed={pressed}
       disabled={disabled}
       onClick={onClick}
@@ -262,6 +263,7 @@ export function SheetIconButton({
     >
       {children}
     </button>
+    </HoverTip>
   );
 }
 

@@ -31,6 +31,7 @@ import { TagPillsEditor } from "./TagPillsEditor";
 import { keyFromLabel, normaliseKey } from "../../convex/lib/keys";
 import { slugifyInboundAddress } from "../../convex/lib/inboundAddress";
 import { MAX_MIN_NOTICE_HOURS, type NoticeUnit } from "../../convex/lib/minNotice";
+import { HoverTip } from "./HoverTip";
 
 // Business: how this business is SHAPED. Its identity, who works here, what it
 // sells, and what a customer record holds. Settings next door is the other
@@ -322,9 +323,9 @@ function BookingRow() {
                   change leaves you wondering whether the click landed, so the
                   sheet turns into a check for the same 1200ms the word used
                   to. */}
+              <HoverTip text={copied ? t("common.copied") : t("common.copy")} className="inline-flex shrink-0">
               <button
                 type="button"
-                title={copied ? t("common.copied") : t("common.copy")}
                 aria-label={copied ? t("common.copied") : t("common.copy")}
                 onClick={() => {
                   void navigator.clipboard.writeText(nativeBookingUrl).then(() => {
@@ -340,6 +341,7 @@ function BookingRow() {
               >
                 {copied ? <CopiedIcon /> : <CopyIcon />}
               </button>
+              </HoverTip>
             </>
           )}
         </div>
@@ -1271,11 +1273,11 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                         layout fights scrolling, and the fields table already
                         made this call. */}
                     {isOwner && (
+                      <HoverTip text={t("fields.reorder")} className="contents">
                       <span
                         draggable
                         onDragStart={() => setDragId(service._id)}
                         onDragEnd={() => setDragId(null)}
-                        title={t("fields.reorder")}
                         aria-label={t("fields.reorder")}
                         className="hidden shrink-0 cursor-grab select-none text-[var(--muted-strong)] hover:text-[var(--foreground)] active:cursor-grabbing sm:inline-flex"
                       >
@@ -1288,6 +1290,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                           <circle cx="15" cy="18" r="1.5" />
                         </svg>
                       </span>
+                      </HoverTip>
                     )}
                     <span className="min-w-0 flex-1">
                       <InlineEditValue
@@ -1413,6 +1416,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                       fitted and pushed the toggle ~68px in. Whether a row's
                       switch aligns is not allowed to depend on how much that
                       service costs. */}
+                  <HoverTip text={t("common.delete")} className="contents">
                   <button
                     onClick={() => {
                       void (async () => {
@@ -1427,12 +1431,12 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                       })();
                     }}
                     aria-label={`${service.name} — ${t("common.delete")}`}
-                    title={t("common.delete")}
                     data-edit-only
                     className="flex h-7 w-7 items-center justify-center rounded-md text-lg leading-none text-[var(--muted)] opacity-0 transition-colors transition-opacity hover:bg-[var(--muted-bg)] hover:text-red-600 focus-visible:opacity-100 group-hover:opacity-100 dark:hover:text-red-400 max-sm:absolute max-sm:right-0 max-sm:top-0.5 sm:justify-self-end [@media(hover:none)]:opacity-100"
                   >
                     ×
                   </button>
+                  </HoverTip>
                 </li>
               ))}
             </ul>
@@ -1587,11 +1591,11 @@ function FieldTableRow({
         onDrop={onDrop}
       >
         <td className="pl-0.5 text-[var(--muted-strong)]">
+          <HoverTip text={t("fields.reorder")} className="contents">
           <span
             draggable
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
-            title={t("fields.reorder")}
             aria-label={t("fields.reorder")}
             className="inline-flex cursor-grab select-none active:cursor-grabbing hover:text-[var(--foreground)]"
           >
@@ -1604,6 +1608,7 @@ function FieldTableRow({
               <circle cx="15" cy="18" r="1.5" />
             </svg>
           </span>
+          </HoverTip>
         </td>
         <td className="py-1.5 pr-3">
           <InlineEditValue value={field.label} onSave={(next) => next && onRename(next)} />

@@ -10,6 +10,7 @@ import { useToast } from "@/lib/ToastProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { staffSwatch } from "@/lib/staffTint";
+import { HoverTip } from "./HoverTip";
 
 // A team member's calendar colour, picked from the dot before their name: on
 // the Team card and on the calendar's side panel, where the dot IS the colour
@@ -64,30 +65,32 @@ export function StaffColorPicker({
 
   if (readOnly) {
     return (
+      <HoverTip text={colorName(current.key)} className="inline-flex shrink-0">
       <span
         aria-label={t("staffColor.of", { name, color: colorName(current.key) })}
-        title={colorName(current.key)}
         className="flex h-6 w-6 shrink-0 items-center justify-center"
       >
         <span className="h-3 w-3 rounded-full" style={{ backgroundColor: staffSwatch(current.key) }} />
       </span>
+      </HoverTip>
     );
   }
 
   return (
     <>
+      <HoverTip text={colorName(current.key)} className="inline-flex shrink-0">
       <button
         ref={triggerRef}
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={t("staffColor.change", { name, color: colorName(current.key) })}
-        title={colorName(current.key)}
         onClick={toggle}
         className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-[var(--control-hover)] ${className}`}
       >
         <span className="h-3 w-3 rounded-full" style={{ backgroundColor: staffSwatch(current.key) }} />
       </button>
+      </HoverTip>
       {open &&
         pos &&
         createPortal(
@@ -103,17 +106,23 @@ export function StaffColorPicker({
                 const owner = taken.get(c.key);
                 const selected = c.key === current.key;
                 return (
-                  <button
+                  // On a wrapper that fills the cell, and the disabled swatch
+                  // lets the pointer through to it: a disabled button fires no
+                  // mouse events, and a taken colour has to say whose it is.
+                  <HoverTip
                     key={c.key}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={selected}
-                    disabled={owner !== undefined}
-                    title={
+                    text={
                       owner !== undefined
                         ? t("staffColor.takenBy", { name: owner })
                         : colorName(c.key)
                     }
+                    className="flex justify-center"
+                  >
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={selected}
+                    disabled={owner !== undefined}
                     aria-label={
                       owner !== undefined
                         ? `${colorName(c.key)}, ${t("staffColor.takenBy", { name: owner })}`
@@ -134,7 +143,7 @@ export function StaffColorPicker({
                         )
                         .catch(() => toast(t("common.error")));
                     }}
-                    className="mx-auto flex h-7 w-7 items-center justify-center rounded-full transition-shadow hover:ring-2 hover:ring-[var(--muted)] hover:ring-offset-2 hover:ring-offset-[var(--card)] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:ring-0"
+                    className="mx-auto flex h-7 w-7 items-center justify-center rounded-full transition-shadow hover:ring-2 hover:ring-[var(--muted)] hover:ring-offset-2 hover:ring-offset-[var(--card)] disabled:pointer-events-none disabled:opacity-30 disabled:hover:ring-0"
                     style={{ backgroundColor: staffSwatch(c.key), color: c.fg }}
                   >
                     {selected && (
@@ -143,6 +152,7 @@ export function StaffColorPicker({
                       </svg>
                     )}
                   </button>
+                  </HoverTip>
                 );
               })}
             </div>

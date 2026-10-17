@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import Picker, { Theme, EmojiStyle, type EmojiClickData } from "emoji-picker-react";
 import { iconButtonClass } from "./Control";
+import { HoverTip } from "./HoverTip";
 
 const PANEL_W = 320;
 const PANEL_H = 400;
@@ -48,10 +49,10 @@ export function EmojiPicker({
 
   return (
     <>
+      <HoverTip text={title} disabled={disabled || Boolean(pos)}>
       <button
         ref={triggerRef}
         type="button"
-        title={title}
         aria-label={title}
         disabled={disabled}
         onClick={toggle}
@@ -59,6 +60,7 @@ export function EmojiPicker({
       >
         {children ?? "🙂"}
       </button>
+      </HoverTip>
       {pos &&
         typeof document !== "undefined" &&
         createPortal(

@@ -18,6 +18,7 @@ import { TWO_PANE_COLUMNS } from "./ContactView";
 import { FeedFilterPills } from "./FeedFilterPills";
 import { FeedIcon, type FeedIconType } from "./FeedIcon";
 import { RowMenu } from "./RowMenu";
+import { HoverTip } from "./HoverTip";
 
 // Which slice of the list the chips are showing. Persisted per browser under
 // this key; the .v1 suffix is the escape hatch if the shape ever changes.
@@ -467,6 +468,13 @@ export function InboxView({
                             read one conversation, and the pin sat in the
                             column where the age lives. Nudge's inbox has run
                             the merged control long enough to trust it. */}
+                        <HoverTip text={
+                            c.pinned
+                              ? t("inbox.pinnedHint")
+                              : c.unseen
+                                ? t("inbox.unseenPinHint")
+                                : t("inbox.pinHint")
+                          }>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -476,13 +484,6 @@ export function InboxView({
                               pinned: !c.pinned,
                             });
                           }}
-                          title={
-                            c.pinned
-                              ? t("inbox.pinnedHint")
-                              : c.unseen
-                                ? t("inbox.unseenPinHint")
-                                : t("inbox.pinHint")
-                          }
                           aria-label={
                             c.pinned
                               ? t("inbox.pinned")
@@ -499,6 +500,7 @@ export function InboxView({
                                 : "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full border border-dashed border-[var(--muted)] opacity-0 transition-opacity hover:border-[var(--foreground)] group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                           }
                         />
+                        </HoverTip>
                         <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
                         {/* Line one — name and age. The pin used to sit
                             between them; it is the gutter dot now. */}
@@ -574,15 +576,16 @@ export function InboxView({
                               two columns left is the unseen dot, so coloured
                               arrows would be read as states before they were
                               read as directions. The words survive as the
-                              title, so nothing is lost to a screen reader. */}
+                              hover label and the aria-label, so nothing is
+                              lost to a screen reader. */}
                           {c.lastChannel === "call" && (
-                            <span
-                              className="shrink-0 leading-none text-[var(--muted)]"
-                              title={t(
+                            <HoverTip text={t(
                                 c.lastDirection === "out"
                                   ? "inbox.calledOut"
                                   : "inbox.calledIn",
-                              )}
+                              )} className="inline-flex shrink-0">
+                            <span
+                              className="shrink-0 leading-none text-[var(--muted)]"
                               aria-label={t(
                                 c.lastDirection === "out"
                                   ? "inbox.calledOut"
@@ -591,15 +594,17 @@ export function InboxView({
                             >
                               {c.lastDirection === "out" ? "↗" : "↙"}
                             </span>
+                            </HoverTip>
                           )}
                           {c.lastFailed && (
+                            <HoverTip text={t("message.failed")} className="inline-flex shrink-0">
                             <span
                               className="shrink-0 font-semibold leading-none text-[var(--muted)]"
-                              title={t("message.failed")}
                               aria-label={t("message.failed")}
                             >
                               ✕
                             </span>
+                            </HoverTip>
                           )}
                           <span
                             className={`min-w-0 flex-1 truncate ${

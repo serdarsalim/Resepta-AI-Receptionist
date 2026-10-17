@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { OnboardingWizard } from "./OnboardingWizard";
+import { HoverTip } from "./HoverTip";
 import { useLanguage, useT } from "@/lib/LanguageProvider";
 import { isLanguage, type TranslationKey } from "@/lib/i18n";
 import { useTheme, type Theme } from "@/lib/theme";
@@ -537,10 +538,10 @@ function PinDot({ customerId }: { customerId: Id<"customers"> }) {
   // slot holds its width and says nothing until it knows.
   if (pinned === undefined) return <span className="h-2.5 w-2.5 shrink-0" />;
   return (
+    <HoverTip text={t(pinned ? "inbox.pinnedHint" : "inbox.pinHint")}>
     <button
       type="button"
       onClick={() => void setInboxPin({ customerId, pinned: !pinned })}
-      title={t(pinned ? "inbox.pinnedHint" : "inbox.pinHint")}
       aria-label={t(pinned ? "inbox.pinned" : "inbox.notPinned")}
       aria-pressed={pinned}
       className={
@@ -549,8 +550,17 @@ function PinDot({ customerId }: { customerId: Id<"customers"> }) {
           : "h-2.5 w-2.5 shrink-0 cursor-pointer rounded-full border border-dashed border-[var(--muted)] opacity-0 transition-opacity hover:border-[var(--foreground)] group-hover/title:opacity-100 [@media(hover:none)]:opacity-100"
       }
     />
+    </HoverTip>
   );
 }
+
+// The names of the record header's pane switcher, which shows glyphs only.
+const PANE_LABEL = {
+  call: "channel.call",
+  whatsapp: "channel.whatsapp",
+  email: "channel.email",
+  note: "notes.title",
+} as const satisfies Record<string, TranslationKey>;
 
 function ShellHeader({
   titleKey,
@@ -634,6 +644,7 @@ function ShellHeader({
         {overrideTitle !== undefined && onOverrideBack && (
           // Same drawn arrow the contact page used to carry. A "←" glyph is
           // whatever the reader's font decides it is.
+          <HoverTip text={t("common.back")} className="inline-flex shrink-0">
           <button
             type="button"
             onClick={onOverrideBack}
@@ -645,6 +656,7 @@ function ShellHeader({
               <path d="m12 19-7-7 7-7" />
             </svg>
           </button>
+          </HoverTip>
         )}
         <h1 className="page-title truncate text-sm font-semibold md:text-base">
           {overrideTitle ?? t(titleKey)}
@@ -662,6 +674,7 @@ function ShellHeader({
             title accepts. */}
         {panes && !expanded && (
           <div className="flex shrink-0 items-center gap-0.5 lg:hidden">
+            <HoverTip text={t("fields.title")}>
             <button
               type="button"
               onClick={() => panes.select("record")}
@@ -678,11 +691,13 @@ function ShellHeader({
                 <path d="M4 21c0-3.9 3.6-6.5 8-6.5s8 2.6 8 6.5" />
               </svg>
             </button>
+            </HoverTip>
             {(["call", "whatsapp", "email", "note"] as const).map((target) => (
+              <HoverTip key={target} text={t(PANE_LABEL[target])}>
               <button
-                key={target}
                 type="button"
                 onClick={() => panes.select(target)}
+                aria-label={t(PANE_LABEL[target])}
                 aria-pressed={panes.active === target}
                 className={`rounded-md p-1.5 transition-colors ${
                   panes.active === target
@@ -692,6 +707,7 @@ function ShellHeader({
               >
                 <FeedIcon type={target} size={16} />
               </button>
+              </HoverTip>
             ))}
           </div>
         )}
@@ -980,6 +996,16 @@ function UserMenu({
 
   return (
     <>
+      {/* Always labelled, the folded rail included (Nudge 70e62b45): a long
+          address is cut off with an ellipsis on the row, so the hover is the
+          one place the whole of it can be read before opening anything. The
+          rail's label sits beside it, like every folded row's (P20). */}
+      <HoverTip
+        text={name && email ? `${name} · ${email}` : name || email || t("menu.account")}
+        side={variant === "row" ? "right" : "bottom"}
+        disabled={open}
+        className={variant === "row" && !collapsed ? "flex w-full" : "inline-flex"}
+      >
       <button
         ref={btnRef}
         type="button"
@@ -987,10 +1013,6 @@ function UserMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={t("menu.account")}
-        // Always titled, the folded rail included (Nudge 70e62b45): a long
-        // address is cut off with an ellipsis on the row, so the hover is the
-        // one place the whole of it can be read before opening anything.
-        title={name && email ? `${name} · ${email}` : name || email}
         // A resting SURFACE so the row reads as a control, not a caption
         // (Nudge 615321e2, Serdar there: "since this is a button we could make
         // it look like a button"). Nudge tints it with 4% ink; here it is the
@@ -1045,6 +1067,7 @@ function UserMenu({
           />
         )}
       </button>
+      </HoverTip>
       {/* Through a portal with fixed positioning, never an absolute child: the
           sidebar and the content column are overflow-hidden, so an in-flow
           menu gets clipped at their edge (see AGENTS.md — this recurs). */}
@@ -1209,7 +1232,9 @@ function WorkspaceSwitcher({
   // query lands.
   if (!data || (data.workspaces.length < 2 && !data.canFound)) {
     return collapsed ? (
-      <WorkspaceMark logoUrl={logoUrl} name={label} size={24} />
+      <HoverTip text={label} side="right">
+        <WorkspaceMark logoUrl={logoUrl} name={label} size={24} />
+      </HoverTip>
     ) : (
       <div className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5">
         <WorkspaceMark logoUrl={logoUrl} name={label} size={24} />
@@ -1229,12 +1254,20 @@ function WorkspaceSwitcher({
 
   return (
     <>
+      {/* Folded, the mark is all there is: its name shows beside it at once,
+          as every folded row's does (P20). */}
+      <HoverTip
+        text={label}
+        side="right"
+        disabled={!collapsed || open}
+        className={collapsed ? "inline-flex" : "flex w-full"}
+      >
       <button
         ref={btnRef}
         onClick={toggle}
         aria-haspopup="menu"
         aria-expanded={open}
-        title={collapsed ? label : undefined}
+        aria-label={collapsed ? label : undefined}
         // A resting SURFACE, not a wash. The old trigger was bare text with a
         // 10px caret parked at the far end of a flex-1 span, so at rest it read
         // as the page's title and the only thing saying "control" arrived once
@@ -1272,6 +1305,7 @@ function WorkspaceSwitcher({
           </>
         )}
       </button>
+      </HoverTip>
       {/* Through a portal with fixed positioning, never an absolute child: the
           sidebar is overflow-hidden, so an in-flow menu gets clipped at the
           pane edge (see AGENTS.md — this recurs). */}
@@ -1360,10 +1394,17 @@ function SidebarButton({
   const { Icon, color } = entry;
   const label = t(entry.key);
   return (
+    // Folded, the label shows at once beside the icon (P20, Nudge 258c9316);
+    // the native title waited a second and wore the operating system's look.
+    <HoverTip text={label} side="right" disabled={!collapsed} className="flex w-full">
     <button
       onClick={onClick}
       aria-current={active ? "page" : undefined}
-      title={collapsed ? label : undefined}
+      // Folded there is no label text inside, so the name is given; the
+      // attention dot's own label joins it, as it does when the text shows.
+      aria-label={
+        collapsed ? (dot ? `${label}, ${t("inbox.needsAttention")}` : label) : undefined
+      }
       // The tab's hue as a variable so the collapsed active pill can tint with
       // it. Harmless when inactive.
       style={{ "--tab-hue": color } as React.CSSProperties}
@@ -1417,6 +1458,7 @@ function SidebarButton({
         />
       )}
     </button>
+    </HoverTip>
   );
 }
 
@@ -1677,6 +1719,15 @@ export function AppShell({
               {/* One control, one glyph: on desktop it folds the sidebar down
                 to symbols, on the phone it slides the drawer away. Both mean
                 "put the sidebar back", which is why the icon does not change. */}
+              {/* Its label waits half a second: the toggle sits where the
+                  pointer crosses on the way into the rail, and an instant
+                  label flashed on every pass (Nudge fa6a0d95). */}
+              <HoverTip
+                text={showCollapsed ? t("nav.expand") : t("nav.collapse")}
+                side="right"
+                delay={500}
+                className="inline-flex shrink-0"
+              >
               <button
                 type="button"
                 onClick={() =>
@@ -1687,6 +1738,7 @@ export function AppShell({
               >
                 <PanelLeftIcon />
               </button>
+              </HoverTip>
             </div>
             <WorkspaceSwitcher
               fallbackName={settings?.org.name}
@@ -1740,11 +1792,12 @@ export function AppShell({
                 and this row renders for platform admins alone, never for any
                 salon user. */}
               {isPlatformAdmin && (
+                <HoverTip text="Admin" side="right" disabled={!showCollapsed} className="flex w-full">
                 <a
                   href="/admin"
                   target="_blank"
                   rel="noopener"
-                  title={showCollapsed ? "Admin" : undefined}
+                  aria-label={showCollapsed ? "Admin" : undefined}
                   className={`group relative flex h-9 items-center rounded-lg text-sm font-medium text-[var(--muted-strong)] transition-colors hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05] ${
                     showCollapsed
                       ? "mx-auto h-9 w-9 justify-center px-0"
@@ -1759,6 +1812,7 @@ export function AppShell({
                     <span className="flex-1 truncate text-left">Admin</span>
                   )}
                 </a>
+                </HoverTip>
               )}
               {/* The acting-as chip, right under the door it was entered
                 through. Self-gating: renders nothing unless the operator is

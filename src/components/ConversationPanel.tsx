@@ -60,6 +60,7 @@ import {
   plainToHtml,
 } from "../../convex/lib/noteBody";
 import { splitQuotedHtml, splitQuotedText } from "../../convex/lib/emailQuote";
+import { HoverTip } from "./HoverTip";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
 
@@ -1591,9 +1592,9 @@ export function ConversationPanel({
                 quoted (canQuote): a quote the customer's phone can't render
                 is a quote we must not offer. Same hover treatment as react. */}
             {canCompose && item.channel === "whatsapp" && item.canQuote && (
+              <HoverTip text={t("message.reply")}>
               <button
                 type="button"
-                title={t("message.reply")}
                 aria-label={t("message.reply")}
                 onClick={() => {
                   setActionsFor(null);
@@ -1615,6 +1616,7 @@ export function ConversationPanel({
                   <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
                 </svg>
               </button>
+              </HoverTip>
             )}
             </div>
             </Fragment>
@@ -2063,11 +2065,11 @@ function MediaStrip({
                 </button>
                 {/* Delete off the library, hover-revealed so the strip stays
                     a row of files. Refused while a sent message shows it. */}
+                <HoverTip text={t("media.delete")} className="contents">
                 <button
                   type="button"
                   onClick={() => void deleteAsset(asset)}
                   aria-label={t("media.delete")}
-                  title={t("media.delete")}
                   className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--card)] text-[var(--muted)] opacity-0 shadow-sm transition-opacity hover:text-red-600 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
                 >
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
@@ -2075,6 +2077,7 @@ function MediaStrip({
                     <path d="m6 6 12 12" />
                   </svg>
                 </button>
+                </HoverTip>
               </div>
             ),
         )}
@@ -2577,12 +2580,12 @@ function QuotedToggle({
 }) {
   const { t } = useLanguage();
   return (
+    <HoverTip text={t("email.showQuoted")} className="flex w-fit">
     <button
       type="button"
       onClick={onToggle}
       aria-expanded={open}
       aria-label={t("email.showQuoted")}
-      title={t("email.showQuoted")}
       // Small, grey, and it does not say a word. Every mail client draws this
       // control as three dots for the same reason: the thing it reveals is
       // text the reader has already seen, so a labelled button would give it
@@ -2595,6 +2598,7 @@ function QuotedToggle({
     >
       •••
     </button>
+    </HoverTip>
   );
 }
 
@@ -2938,11 +2942,11 @@ function AgentThreadStrip({
           {/* The way to keep the words and not the change: retires the
               draft, so whatever the reader typed goes out as an ordinary
               message. An × in a quiet square, the word on its label. */}
+          <HoverTip text={t("agent.change.drop")} className="inline-flex shrink-0">
           <button
             type="button"
             onClick={onDropChanges}
             aria-label={t("agent.change.drop")}
-            title={t("agent.change.drop")}
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:bg-[var(--background)] hover:text-[var(--foreground)]"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
@@ -2950,6 +2954,7 @@ function AgentThreadStrip({
               <path d="m6 6 12 12" />
             </svg>
           </button>
+          </HoverTip>
         </div>
       )}
 

@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { iconButtonClass } from "./Control";
+import { HoverTip } from "./HoverTip";
 
 // A quiet copy-to-clipboard glyph beside a value people paste elsewhere (the
 // customer's phone, P12 of the Nudge port). The glyph turns into a check for a
-// moment so the click visibly took; the word lives on aria-label and title.
+// moment so the click visibly took; the word lives on aria-label and a HoverTip.
 // Revealed on hover by the row it sits in when the caller wants that.
 export function CopyButton({ value, className = "" }: { value: string; className?: string }) {
   const { t } = useLanguage();
@@ -18,6 +19,7 @@ export function CopyButton({ value, className = "" }: { value: string; className
   }, [copied]);
   if (!value) return null;
   return (
+    <HoverTip text={copied ? t("common.copied") : t("common.copy")} className="inline-flex shrink-0">
     <button
       type="button"
       onClick={() => {
@@ -27,7 +29,6 @@ export function CopyButton({ value, className = "" }: { value: string; className
           .catch(() => undefined);
       }}
       aria-label={copied ? t("common.copied") : t("common.copy")}
-      title={copied ? t("common.copied") : t("common.copy")}
       className={`${iconButtonClass("quiet", "xs")} shrink-0 ${className}`}
     >
       {copied ? (
@@ -41,5 +42,6 @@ export function CopyButton({ value, className = "" }: { value: string; className
         </svg>
       )}
     </button>
+    </HoverTip>
   );
 }

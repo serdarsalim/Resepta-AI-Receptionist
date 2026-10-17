@@ -13,6 +13,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { FeedIcon, CHANNELS, type Channel } from "./FeedIcon";
+import { HoverTip } from "./HoverTip";
 import type { FeedFilter } from "./ConversationPanel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
@@ -93,8 +94,11 @@ export function FeedFilterPills({
           ? t("forms.title")
           : t(CHANNEL_LABEL[tab]);
     return (
+      // The word left the pill, so the name has to live somewhere a mouse can
+      // reach: aria-label covers the screen reader, the hover label everyone
+      // else, at once and in the app's one tooltip look (P20).
+      <HoverTip key={tab} text={label}>
       <button
-        key={tab}
         type="button"
         // Picking the open one clears it. This is the only route back to the
         // merged feed now, and it has to keep working: the composer is live on
@@ -102,9 +106,6 @@ export function FeedFilterPills({
         // could not unfilter would be a thread you could not reply to.
         onClick={() => onChange(active ? "all" : tab)}
         aria-label={label}
-        // The word left the pill, so the name has to live somewhere a mouse can
-        // reach. aria-label covers the screen reader; this covers everyone else.
-        title={label}
         aria-pressed={active}
         // Geometry and the three states are Nudge's, read off its live DOM
         // rather than eyeballed: no explicit height (the text sets it), no
@@ -150,6 +151,7 @@ export function FeedFilterPills({
             every pill, counted or not. */}
         {count > 0 && <span className="leading-none tabular-nums">{count}</span>}
       </button>
+      </HoverTip>
     );
   };
 

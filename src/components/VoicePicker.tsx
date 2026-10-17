@@ -7,6 +7,7 @@ import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 // The table's search folding, not a second copy: it handles the dotted/dotless
 // i BEFORE lowercasing, so "sarkici" typed on a Turkish keyboard still matches.
 import { foldSearch } from "@/lib/useTableState";
+import { HoverTip } from "./HoverTip";
 
 // The one voice picker, used by the create sheet and the agent editor
 // (Serdar, 2026-08-21). Both were a native <select> plus one play button
@@ -201,6 +202,11 @@ export function VoicePicker({
                     </button>
                     {/* Auditioning must not choose. The row selects; this
                         only makes a noise, so it stops the click here. */}
+                    <HoverTip text={
+                        playing === voice.id
+                          ? t("voiceCreate.stopPreview")
+                          : t("voiceCreate.preview")
+                      }>
                     <button
                       type="button"
                       disabled={!voice.previewUrl}
@@ -213,11 +219,6 @@ export function VoicePicker({
                           ? t("voiceCreate.stopPreview")
                           : t("voiceCreate.preview")
                       }
-                      title={
-                        playing === voice.id
-                          ? t("voiceCreate.stopPreview")
-                          : t("voiceCreate.preview")
-                      }
                       className={`mr-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors disabled:opacity-30 ${
                         playing === voice.id
                           ? "bg-[var(--accent)] text-[var(--accent-fg)]"
@@ -226,6 +227,7 @@ export function VoicePicker({
                     >
                       <PlayIcon playing={playing === voice.id} />
                     </button>
+                    </HoverTip>
                   </div>
                 ))
               )}

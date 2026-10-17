@@ -8,6 +8,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { fieldClass } from "./Control";
+import { HoverTip } from "./HoverTip";
 
 // Pick one of this business's customers by typing part of a name, number or
 // address (customers.quickSearch, two characters or more). Used where a test
@@ -53,6 +54,7 @@ export function CustomerPickField({
       <div className="flex min-h-8 min-w-0 items-center gap-2 text-sm">
         <span className="truncate">{value.name || value.phone}</span>
         <span className="shrink-0 text-xs text-[var(--muted)] tabular-nums">{value.phone}</span>
+        <HoverTip text={clearLabel} className="ml-auto inline-flex shrink-0">
         <button
           type="button"
           disabled={disabled}
@@ -61,11 +63,11 @@ export function CustomerPickField({
             setQuery("");
           }}
           aria-label={clearLabel}
-          title={clearLabel}
           className="ml-auto shrink-0 rounded px-1.5 text-[var(--muted)] hover:bg-[var(--control-hover)] hover:text-[var(--foreground)]"
         >
           ×
         </button>
+        </HoverTip>
       </div>
     );
   }

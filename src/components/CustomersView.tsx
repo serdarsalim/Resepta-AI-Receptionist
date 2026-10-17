@@ -20,6 +20,7 @@ import { PhoneInput } from "./PhoneField";
 import { Sheet } from "./Sheet";
 import { FieldsCard } from "./BusinessView";
 import { BulkComposer, BulkRunsCard, type BulkChannel } from "./BulkActions";
+import { HoverTip } from "./HoverTip";
 
 // The list, and the definition of what the list HOLDS. Contact fields moved
 // here from the voice agent's strip on 2026-08-25 (Serdar: the app is for
@@ -113,9 +114,9 @@ function fullName(customer: Customer): string {
 function NewMark({ onDismiss }: { onDismiss: () => void }) {
   const t = useT();
   return (
+    <HoverTip text={t("customers.dismissLook")} className="inline-flex shrink-0">
     <button
       type="button"
-      title={t("customers.dismissLook")}
       aria-label={t("customers.dismissLook")}
       onClick={(event) => {
         event.stopPropagation();
@@ -128,6 +129,7 @@ function NewMark({ onDismiss }: { onDismiss: () => void }) {
     >
       <span className="h-2 w-2 rounded-full bg-[var(--brand)]" />
     </button>
+    </HoverTip>
   );
 }
 
@@ -147,8 +149,8 @@ function NewMark({ onDismiss }: { onDismiss: () => void }) {
 function NoConsentMark() {
   const t = useT();
   return (
+    <HoverTip text={t("customers.cannotBeMessaged")} className="inline-flex shrink-0">
     <span
-      title={t("customers.cannotBeMessaged")}
       aria-label={t("customers.cannotBeMessaged")}
       className="inline-flex shrink-0 items-center text-amber-600 dark:text-amber-500"
     >
@@ -170,6 +172,7 @@ function NoConsentMark() {
         <path d="m2 2 20 20" />
       </svg>
     </span>
+    </HoverTip>
   );
 }
 
@@ -184,8 +187,8 @@ function NoConsentMark() {
 function MutedMark() {
   const t = useT();
   return (
+    <HoverTip text={t("customers.mutedMark")} className="inline-flex shrink-0">
     <span
-      title={t("customers.mutedMark")}
       aria-label={t("customers.mute")}
       className="inline-flex shrink-0 items-center text-[var(--muted)]"
     >
@@ -205,6 +208,7 @@ function MutedMark() {
         <line x1="17" y1="9" x2="23" y2="15" />
       </svg>
     </span>
+    </HoverTip>
   );
 }
 

@@ -20,6 +20,7 @@
 import { useQuery, useMutation } from "convex/react";
 import { useRouter } from "next/navigation";
 import { api } from "../../convex/_generated/api";
+import { HoverTip } from "./HoverTip";
 
 export function OperatorBanner({ collapsed }: { collapsed?: boolean }) {
   const acting = useQuery(api.platform.actingAs, {});
@@ -39,16 +40,18 @@ export function OperatorBanner({ collapsed }: { collapsed?: boolean }) {
   // the title spells out both the org and the consequence first.
   if (collapsed) {
     return (
+      <HoverTip text={`${acting.name} — Leave`} side="right" className="flex w-full">
       <button
         type="button"
         onClick={leave}
-        title={`${acting.name} — Leave`}
+        aria-label={`${acting.name} — Leave`}
         className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-black/[0.045] dark:hover:bg-white/[0.05]"
       >
         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/15 text-[11px] font-semibold text-amber-800 ring-1 ring-inset ring-amber-500/25 dark:text-amber-300">
           {acting.name.charAt(0).toUpperCase()}
         </span>
       </button>
+      </HoverTip>
     );
   }
 

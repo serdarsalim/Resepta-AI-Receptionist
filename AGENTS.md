@@ -664,6 +664,29 @@ a component that reads its own trigger, `show()` to open or re-place, `room`
 for a list that shrinks to fit, and it re-places a panel whose size changes
 while open. A ⋯ of verbs is `RowMenu`, not a new copy.
 
+## A hover label is one look (2026-10-17)
+
+A LABEL a control wears on hover is `HoverTip` (`src/components/HoverTip.tsx`,
+Nudge's, P20 of the port): a dark chip (`TOOLTIP_LOOK`), instant, centred
+under the control and clamped by its measured width, through a portal like
+every popover. `side="right"` is the folded sidebar's: every row, the
+business switcher, the account row and the operator chip name themselves
+beside the icon at once. The fold toggle alone waits 500ms, because the
+pointer crosses it on the way into the rail. `ActionTip` wears the same chip
+(`TOOLTIP_CHIP`, which may wrap).
+
+- **Never a native `title` on an icon-only control.** It waits about a
+  second and wears the operating system's look. Wrap the control in
+  `HoverTip` and keep the words on `aria-label`.
+- The wrapper is `inline-flex` by default. A full-width row takes
+  `className="flex w-full"`; a child placed absolutely or by a grid takes
+  `"contents"`, so the wrapper adds no box. A disabled button fires no mouse
+  events: put `disabled:pointer-events-none` on it and let the wrapper own
+  the hover, as the taken team colours do.
+- An explanation is not a label: that is InfoTip's (i), a card that opens on
+  click. Data previews (a calendar booking's chip, a truncated name's full
+  text) may keep a native `title`; they are not controls.
+
 ## Tabs are underlined, never pills
 
 Canonical version is in Mana, `50_Knowledge/design-language.md` (2026-08-12),

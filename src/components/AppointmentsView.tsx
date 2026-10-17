@@ -45,6 +45,7 @@ import { useBookingSheet } from "./useBookingSheet";
 import { useConfirm } from "./ConfirmDialog";
 import { conflictText } from "@/lib/slotVerdict";
 import type { Rect } from "@/lib/anchoredSheet";
+import { HoverTip } from "./HoverTip";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
   scheduled: "status.scheduled",
@@ -597,10 +598,10 @@ export function AppointmentsView({
             mr-4 makes up the panel's gap-6 against this row's gap-2. Not on
             a phone, where the toolbar's pickers do the panel's job. */}
         <span className={`hidden shrink-0 md:inline-flex ${panelOpen ? "md:mr-4 md:w-56" : ""}`}>
+          <HoverTip text={panelOpen ? t("calendar.panelHide") : t("calendar.panelShow")}>
           <button
             type="button"
             aria-label={panelOpen ? t("calendar.panelHide") : t("calendar.panelShow")}
-            title={panelOpen ? t("calendar.panelHide") : t("calendar.panelShow")}
             aria-expanded={panelOpen}
             aria-controls="calendar-panel"
             onClick={togglePanel}
@@ -610,6 +611,7 @@ export function AppointmentsView({
               <path d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
+          </HoverTip>
         </span>
         {view !== "list" && (
           <>

@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { TOOLTIP_CHIP } from "./HoverTip";
 
 // Small (i) icon with a hover/focus tooltip. Lets us push verbose help
 // text out of the visible form line — the explanation is one hover away.
@@ -152,7 +153,9 @@ export function ActionTip({
               // the layout effect resolves the real top before paint.
               ...(top === null ? { visibility: "hidden" as const } : {}),
             }}
-            className={`pointer-events-none z-[100] rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs text-[var(--foreground)] shadow-lg ${
+            // The app's one label look (HoverTip's TOOLTIP_CHIP, P20): a
+            // label, even a sentence-long one, is not InfoTip's card.
+            className={`pointer-events-none z-[100] ${TOOLTIP_CHIP} ${
               multiline ? "" : "whitespace-nowrap"
             }`}
           >
