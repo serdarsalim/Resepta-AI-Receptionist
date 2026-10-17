@@ -2785,3 +2785,35 @@ that reply.
   (`lib/signature.swapSignature`, matched by text). Bulk email keeps its own
   composer: it is marketing mail to many customers on another path.
 
+## Learning a customer's language (2026-10-17, P30)
+
+`customers.language` unset means the business's language. Nudge 9670941f's
+rule, adapted: evidence replaces a guess, and nothing replaces a person.
+
+- **Evidence** is the customer's own words. `webhook.processInboundMessage`
+  reads a typed message or a caption (not a tapped button, whose words are
+  the template's) on either lane. `voiceEvents.process` reads the user
+  turns of the transcript (`transcript_object`, else the plain transcript's
+  `User:` lines) only on an event whose disconnect code says answered
+  (`lib/callOutcome`): the analysis event carries none, and a voicemail
+  greeting speaks the network's language. `retell.learnLanguageFromCall`
+  resolves the customer the way `markNoAiCallsFromCall` does.
+- **The detector** (`lib/textLanguage`, a leaf, tested by
+  `scripts/text-language.test.mjs`) knows Turkish, English and German by
+  letters only one of them uses, then common words, and returns nothing for
+  one word, a number, an emoji, another script or a close call.
+- **The write** (`lib/customerLanguage.learnCustomerLanguage`) happens only
+  while the field is unset, outside the demo org, and when `orgCanSendIn`
+  finds every kind the business sends in its own language also worded in the
+  learned one, approved with Meta wherever the original is. Otherwise the
+  customer keeps the business's language, because sends have no
+  cross-language fallback. It stamps `languageLearnedAt` and a system
+  `customer_updated` activity row (detail `language`).
+- **A person** sets it on the record's Language row (Business language,
+  Türkçe, English, Deutsch), which clears `languageLearnedAt`; the row's (i)
+  says when the value was learned. Choosing Business language again makes
+  it a guess that the next reply may replace.
+- Not learned: the booking page's language (it speaks the business's unless
+  the embed asks for another, which says what the website speaks, not the
+  visitor), and anything an assistant writes.
+

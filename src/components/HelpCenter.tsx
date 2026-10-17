@@ -330,6 +330,7 @@ const CATEGORIES: Category[] = [
           "Connect the business WhatsApp account with your Resepta operator.",
           "Register and approve the templates used for confirmations, reminders, cancellations, and campaigns.",
           "Keep a matching template for every customer language you serve.",
+          "A customer's language is the business language until they write or speak in another. Their own WhatsApp reply or an answered call sets it when the business has templates in that language, and you can change it on the customer record under Language.",
           "Check failed messages in the customer conversation when a template is missing or rejected.",
         ],
         note: "Resepta does not send a template in the wrong language as a fallback. A missing language fails visibly so the customer never receives misleading copy.",

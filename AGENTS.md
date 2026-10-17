@@ -443,6 +443,19 @@ above).
    lesson). The Cloud send additionally requires `status === "approved"` plus
    a `metaName` on that same row. Dates inside messages format through
    `convex/lib/format.ts` in the ORG's timezone and the message language.
+
+   **Who sets `customers.language`** (2026-10-17, P30). Unset is the
+   business's language, a guess. A person sets it (the record's Language
+   row, `customers.update`; the office connector; an import), and that clears
+   `languageLearnedAt`. The system sets it only through
+   `learnCustomerLanguage` (`lib/customerLanguage`): from a typed WhatsApp
+   reply (never a button tap) or the customer's own words on a call whose
+   disconnect code says answered, read by the local detector
+   `lib/textLanguage`, only while the field is unset, never in the demo org,
+   and only when `orgCanSendIn` finds wording (and Meta approval where the
+   business's own language has it) for every kind the business sends. A new
+   path that learns a language goes through that function; nothing calls an
+   LLM to guess one.
 2. **App UI.** A typed dictionary in `src/lib/i18n.ts` (`tr`/`en`/`de`)
    behind `LanguageProvider` + `useT()`. Adding a language = adding a column;
    adding a string = adding a key (the union type makes a missing key or a
