@@ -730,7 +730,14 @@ async function settleRun(ctx: MutationCtx, runId: Id<"bulkRuns">): Promise<void>
       .first();
     if (outstanding) return;
   }
-  await ctx.db.patch(runId, { status: "done", finishedAt: Date.now() });
+  // A hold that outlived its last customer (their records deleted while the
+  // run waited) is not left on a finished run.
+  await ctx.db.patch(runId, {
+    status: "done",
+    finishedAt: Date.now(),
+    heldUntil: undefined,
+    heldReason: undefined,
+  });
   await recordActivity(ctx, {
     orgId: run.orgId,
     kind: "settings_changed",
