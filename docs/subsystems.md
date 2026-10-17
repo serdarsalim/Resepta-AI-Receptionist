@@ -1482,10 +1482,16 @@ Meetings tab, measured it against Google side by side, and P5 of the port
   ONLY "now", never danger: a 1.5px line and a 10px dot, with no clock badge
   in the gutter (it sat on an hour label for twenty minutes of every hour).
   Today's circles (week header, month, year) are `--accent` blue.
-- **Hour lines are 1px borders in Google's `#dde3ea`** (dark `#2e2e2e`), one
-  per hour, drawn after the closed shading so they show across it. They were
-  a repeating gradient, which smeared over two pixels at browser zoom; the
-  half-hour line is gone as clutter, and drags still snap to 15 minutes.
+- **Every grid line is a 0.5px hairline in Google's `#dde3ea`** (dark
+  `#2e2e2e`): the hour lines, the rule under the day header, the columns'
+  edges and the month's cells (P24, Nudge f360cad5). Google declares 1px but
+  is read at 90% zoom, where that is one device pixel on a 2x screen; ours at
+  100% was two. 0.5px is one device pixel on a 2x screen at any zoom and
+  still 1px on a 1x screen, so compare zoom AND devicePixelRatio before
+  calling a line thicker. One per hour, drawn after the closed shading so
+  they show across it. They were a repeating gradient, which smeared over two
+  pixels at browser zoom; the half-hour line is gone as clutter, and drags
+  still snap to 15 minutes.
 - **The day header is a small weekday over a 22px date** in a 40px circle
   (today filled accent, its weekday accent), sentence case, and the period
   heading beside the arrows is 22px regular. Chips read who before when:
@@ -1520,7 +1526,17 @@ Meetings tab, measured it against Google side by side, and P5 of the port
   all; the last ticked row cannot be unticked. ☰ folds the panel away; while
   it is closed, and on a phone, two toolbar pickers (`FilterPicker`) stand in,
   so a filter is never out of sight. Panel state per browser, filters per
-  browser per business, both in localStorage.
+  browser per business, both in localStorage. 192px wide, Google's, with a
+  compact small month (24px rows, 11px dates, a 12px title); it SLIDES open
+  and closed over 200ms, its column animating width and gap to zero while
+  the panel inside keeps its width, and ☰'s slot slides with it so Today
+  travels with the grid's edge (P24, Nudge 14e9ee88, dda32be5).
+- **The calendar's ground** (P24, Nudge 5904ddbc): the toolbar and the side
+  panel sit on the pane, and only the grid (week, day, month) is a card.
+  The view root carries `data-calendar-ground`, and AppShell's `main` then
+  paints the plain `--pane` without the content wash and, from sm, draws a
+  12px frame with 8px under a grid. The page gutter stays, so switching
+  between the list and a grid never moves the toolbar.
 - **Day view's columns are the shown TEAM**, in the Team card's order, booked
   that day or not (an empty column answers "who is free"), each headed by a
   dot of their colour; Unassigned trails when something that day has nobody;

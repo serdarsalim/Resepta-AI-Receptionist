@@ -114,7 +114,7 @@ export function CalendarPanel({
     <aside
       id="calendar-panel"
       aria-label={t("calendar.panelLabel")}
-      className={`w-56 shrink-0 flex-col gap-6 ${className}`}
+      className={`w-full shrink-0 flex-col gap-4 ${className}`}
     >
       <MiniMonth anchor={anchor} highlight={highlight} onPick={onPickDay} />
 
@@ -250,6 +250,8 @@ function TickRow({
 
 // The small month. It follows the main view; its own arrows page it until the
 // main view moves again. Today is the filled circle, the days on screen a band.
+// Google's size (Nudge 14e9ee88): 24px rows with no gap, 11px dates, a 12px
+// title; the 24px day target is unchanged.
 function MiniMonth({
   anchor,
   highlight,
@@ -279,7 +281,7 @@ function MiniMonth({
   return (
     <div>
       <div className="mb-1 flex items-center justify-between pl-1">
-        <span className="text-sm font-medium">{title}</span>
+        <span className="text-xs font-medium">{title}</span>
         <div className="flex items-center">
           <button
             type="button"
@@ -287,7 +289,7 @@ function MiniMonth({
             className={arrow}
             onClick={() => setNav({ base: anchor, offset: offset - 1 })}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="m15 18-6-6 6-6" />
             </svg>
           </button>
@@ -297,20 +299,20 @@ function MiniMonth({
             className={arrow}
             onClick={() => setNav({ base: anchor, offset: offset + 1 })}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="m9 18 6-6-6-6" />
             </svg>
           </button>
         </div>
       </div>
-      <div aria-hidden className="grid grid-cols-7 text-center text-[11px] text-[var(--muted-strong)]">
+      <div aria-hidden className="grid grid-cols-7 text-center text-[10px] leading-4 text-[var(--muted-strong)]">
         {days.slice(0, 7).map((d) => (
-          <span key={d} className="py-1">
+          <span key={d} className="py-0.5">
             {weekday.format(new Date(d))}
           </span>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-y-0.5 text-center text-xs">
+      <div className="grid grid-cols-7 text-center text-[11px] leading-4">
         {days.map((d, i) => {
           const inBand = lit(d);
           const col = i % 7;
@@ -321,7 +323,7 @@ function MiniMonth({
           return (
             <div
               key={d}
-              className={`flex h-7 items-center justify-center ${
+              className={`flex h-6 items-center justify-center ${
                 inBand ? "bg-[color-mix(in_srgb,var(--accent)_14%,transparent)]" : ""
               } ${bandStart ? "rounded-l-full" : ""} ${bandEnd ? "rounded-r-full" : ""}`}
             >

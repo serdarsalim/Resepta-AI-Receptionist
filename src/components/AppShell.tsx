@@ -1908,8 +1908,16 @@ export function AppShell({
             and stretches the DOCUMENT to reach it, scrolling the whole shell
             up over a blank page. Overflow here and on the shell cannot clip
             a box whose containing block is above them. Nothing in the views
-            relied on the body (checked on every tab, 2026-10-13). */}
-        <main className="thin-scroll page-scroll stable-gutter relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 max-sm:px-2 max-sm:has-[[data-fills-pane]]:pb-0">
+            relied on the body (checked on every tab, 2026-10-13).
+
+            The calendar declares `data-calendar-ground` (Nudge 5904ddbc,
+            14e9ee88): under it this pane is the plain --pane without the
+            content wash, so the toolbar and the side panel share one quiet
+            ground and only the grid sits on paper, and from sm the frame is
+            12px with 8px under a grid, so the calendar takes the pane. The
+            list page-scrolls and keeps its bottom padding. The gutter stays:
+            switching between the list and a grid must not move the toolbar. */}
+        <main className="thin-scroll page-scroll stable-gutter relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 max-sm:px-2 max-sm:has-[[data-fills-pane]]:pb-0 has-[[data-calendar-ground]]:bg-[var(--pane)] sm:has-[[data-calendar-ground]]:px-3 sm:has-[[data-calendar-ground]]:pt-3 sm:has-[[data-fills-pane]]:has-[[data-calendar-ground]]:pb-2">
             {/* Above the content rather than in a corner: someone clicking
               through a demo should never be a minute into it before working
               out that the salon isn't real. Inside the scrolling pane so it

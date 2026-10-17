@@ -150,7 +150,9 @@ export function MonthGrid({
         ))}
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 border-l border-t border-[var(--grid-line)]">
+      {/* Hairlines, the week grid's 0.5px (Nudge f360cad5): one device pixel
+          on a 2x screen at any zoom, still 1px on a 1x screen. */}
+      <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 border-l-[0.5px] border-t-[0.5px] border-[var(--grid-line)]">
         {days.map((day) => {
           const inMonth = new Date(day).getMonth() === month;
           const isToday = day === today;
@@ -196,7 +198,7 @@ export function MonthGrid({
               // to share the same fill, which made the July days at the top
               // of August read as shut on a Tuesday; Google marks them with
               // a muted date number and nothing else, and so do we.
-              className={`relative min-w-0 overflow-hidden border-b border-r border-[var(--grid-line)] p-1 text-left transition-colors hover:bg-[var(--row-hover-bg)] ${
+              className={`relative min-w-0 overflow-hidden border-b-[0.5px] border-r-[0.5px] border-[var(--grid-line)] p-1 text-left transition-colors hover:bg-[var(--row-hover-bg)] ${
                 closed ? "bg-[var(--closed-bg)]" : ""
               }`}
             >

@@ -565,10 +565,15 @@ export function AppointmentsView({
     // data-fills-pane only in the grid views. The list PAGE-scrolls and its
     // content ends, so it keeps the shell's bottom padding; the grids scroll
     // inside themselves and take the phone's bottom edge. See AppShell's main.
+    // data-calendar-ground: AppShell's main paints itself the plain --pane
+    // under this view, without the content wash, and draws a narrower frame
+    // (Nudge 5904ddbc: the controls and the side panel share one quiet
+    // ground, and only the grid sits on paper).
     <div
       data-fills-pane={view === "list" ? undefined : ""}
+      data-calendar-ground=""
       className={
-        view === "list" ? "space-y-4" : "flex h-full min-h-0 flex-col gap-4"
+        view === "list" ? "space-y-3" : "flex h-full min-h-0 flex-col gap-3"
       }
     >
       {/* One row: which view, where in it, and the way out. The period nav
@@ -595,9 +600,15 @@ export function AppointmentsView({
             per viewer. While the panel is open the button sits over it, as
             wide as it is, so Today and the period start where the grid does
             (Nudge, Serdar 2026-10-12: "that's how it is in Google Calendar").
-            mr-4 makes up the panel's gap-6 against this row's gap-2. Not on
-            a phone, where the toolbar's pickers do the panel's job. */}
-        <span className={`hidden shrink-0 md:inline-flex ${panelOpen ? "md:mr-4 md:w-56" : ""}`}>
+            mr-2 makes up the panel's 16px margin against this row's gap-2.
+            Its width slides with the panel's, so Today travels with the
+            grid's edge instead of jumping ahead of it. Not on a phone, where
+            the toolbar's pickers do the panel's job. */}
+        <span
+          className={`hidden shrink-0 transition-[width,margin-right] duration-200 ease-out motion-reduce:transition-none md:inline-flex ${
+            panelOpen ? "md:mr-2 md:w-48" : "md:mr-0 md:w-8"
+          }`}
+        >
           <HoverTip text={panelOpen ? t("calendar.panelHide") : t("calendar.panelShow")}>
           <button
             type="button"
@@ -689,14 +700,25 @@ export function AppointmentsView({
       </div>
 
       {/* The side panel beside the views. In the list it is sticky, since the
-          page scrolls there; beside a grid it scrolls on its own. */}
-      <div className={view === "list" ? "flex items-start gap-6" : "flex min-h-0 flex-1 gap-6"}>
-      {panelOpen && (
+          page scrolls there; beside a grid it scrolls on its own.
+
+          192px, Google's (Nudge 14e9ee88), and always mounted so it can
+          SLIDE (dda32be5): the outer column animates its width and its gap
+          (a margin) to zero while the panel inside keeps its 192px, so
+          nothing reflows mid-slide. `inert` while closed keeps its controls
+          out of the tab order. */}
+      <div className={view === "list" ? "flex items-start" : "flex min-h-0 flex-1"}>
+      <div
+        inert={!panelOpen}
+        className={`hidden shrink-0 overflow-hidden transition-[width,margin-right,opacity] duration-200 ease-out motion-reduce:transition-none md:flex ${
+          panelOpen ? "mr-4 w-48 opacity-100" : "mr-0 w-0 opacity-0"
+        } ${view === "list" ? "sticky top-0 self-start" : "min-h-0"}`}
+      >
         <CalendarPanel
           className={
             view === "list"
-              ? "sticky top-0 hidden self-start md:flex"
-              : "thin-scroll hidden overflow-y-auto md:flex"
+              ? "flex w-48"
+              : "thin-scroll flex w-48 min-h-0 overflow-y-auto"
           }
           anchor={anchor}
           highlight={view === "week" || view === "day" ? visiblePeriod : null}
@@ -715,7 +737,7 @@ export function AppointmentsView({
           onStaffFilter={(next) => changeFilters({ staff: next })}
           isOwner={isOwner}
         />
-      )}
+      </div>
       <div className={view === "list" ? "min-w-0 flex-1 space-y-4" : "flex min-h-0 min-w-0 flex-1 flex-col gap-4"}>
 
       {appointments !== undefined && byDay.length === 0 && view === "list" && (
@@ -1101,6 +1123,9 @@ function AppointmentRowMenu({
 // It is a VIEW of our appointments table. cal.com stays the availability
 // brain (spec, Phase D), so nothing here writes a slot.
 
+// The side panel's slide (Tailwind's duration-200 on its column); the grid
+// re-measures its columns once it has finished.
+const PANEL_SLIDE_MS = 200;
 const HOUR_PX = 56; // one hour of column height; a 30-min booking is 28px
 // Not the grid's bounds any more — the grid is a full 24 hours. This is where
 // the view SCROLLS to when a period holds no bookings, so an empty week opens
@@ -1638,7 +1663,9 @@ function Calendar({
   // The day columns' width, measured: after layout, on a window resize, and
   // whenever the side panel opens or closes or the columns change. A layout
   // effect and a resize listener, not a ResizeObserver, whose callbacks never
-  // arrived in this app (AnchoredSheet's note).
+  // arrived in this app (AnchoredSheet's note). The panel SLIDES (200ms), so
+  // the width at the toggle is the old one; a second measure lands after the
+  // slide, or a drag right after closing it would snap to narrow columns.
   const [gridWidth, setGridWidth] = useState(APPROX_GRID_PX);
   useLayoutEffect(() => {
     const measure = () => {
@@ -1648,8 +1675,12 @@ function Calendar({
       if (width > 0) setGridWidth(width);
     };
     measure();
+    const afterSlide = window.setTimeout(measure, PANEL_SLIDE_MS + 50);
     window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    return () => {
+      window.clearTimeout(afterSlide);
+      window.removeEventListener("resize", measure);
+    };
   }, [panelOpen, columns.length]);
   const columnPx = gridWidth / columns.length;
 
@@ -1965,7 +1996,8 @@ function Calendar({
   })();
 
   return (
-    // The grid is a card, the plane around it is the page gradient. Everything
+    // The grid is a card, the plane around it the calendar's plain --pane
+    // ground (AppShell, data-calendar-ground). Everything
     // INSIDE stays exactly as it was — white paper with the closed hours
     // shaded on it and every hour line drawn on top. The alternative (letting
     // the gradient show through closed hours and painting only open time
@@ -1982,7 +2014,7 @@ function Calendar({
           under the header runs the FULL card width, gutter included — the
           hour lines start after the gutter, so without this the divider
           looked like it stopped short of the GMT corner. */}
-      <div className="flex border-b border-[var(--grid-line)] pr-[10px] pt-3">
+      <div className="flex border-b-[0.5px] border-[var(--grid-line)] pr-[10px] pt-3">
         {/* The gutter's slice of the header carries the UTC offset, exactly
             where Google puts it: it labels the hour column under it. The
             VIEWER's offset, because the hours under it are the viewer's clock
@@ -2090,9 +2122,9 @@ function Calendar({
                 // holds them — the row also contains the hour gutter, and a
                 // border there hangs a stray line under the last time label
                 // where no column exists.
-                className={`relative min-w-0 flex-1 border-b border-l border-[var(--grid-line)] ${
+                className={`relative min-w-0 flex-1 border-b-[0.5px] border-l-[0.5px] border-[var(--grid-line)] ${
                   columnIndex === columns.length - 1
-                    ? "border-r border-[var(--grid-line)]"
+                    ? "border-r-[0.5px] border-[var(--grid-line)]"
                     : ""
                 }`}
                 // Pointer down on the column ITSELF (never on a block, which
@@ -2138,15 +2170,22 @@ function Calendar({
                     110% browser zoom a line smeared across two and read dark
                     and rough; a border lands on one. Hours only: the faint
                     half-hour line went as clutter (Nudge 8fee4481), and a drag
-                    still snaps to 15 minutes. The first hour's line is the
-                    header's own bottom border. Drawn AFTER the closed bands,
+                    still snaps to 15 minutes. HALF a CSS pixel, every grid
+                    line (Nudge f360cad5): Google declares 1px but is read at
+                    90% zoom, where that is ONE device pixel on a 2x screen;
+                    our 1px at 100% was two, the same colour at twice the
+                    weight. 0.5px is one device pixel on a 2x screen at any
+                    zoom, and a 1x screen still draws 1px. Compare zoom AND
+                    devicePixelRatio before calling a line thicker. The first
+                    hour's line is the header's own bottom border. Drawn AFTER
+                    the closed bands,
                     so every hour line sits over the shading (the calendar
                     rule in design-language.md). */}
                 {hours.slice(1).map((hour) => (
                   <div
                     key={`line-${hour}`}
                     aria-hidden
-                    className="pointer-events-none absolute inset-x-0 border-t border-[var(--grid-line)]"
+                    className="pointer-events-none absolute inset-x-0 border-t-[0.5px] border-[var(--grid-line)]"
                     style={{ top: (hour - dayStart) * HOUR_PX }}
                   />
                 ))}
