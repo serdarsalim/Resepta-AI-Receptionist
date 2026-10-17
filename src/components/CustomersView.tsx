@@ -630,9 +630,9 @@ export function CustomersView({
   const minWidth =
     260 + SELECT_COL_W + visibleColumns.reduce((total, column) => total + widthOf(column), 0);
 
-  // The table's own controls, lifted out of the return so they can be mounted
-  // in the card header on desktop and left out entirely on a phone, without
-  // the markup existing twice.
+  // The table's own controls, lifted out of the return so the toolbar above
+  // the card can show them on desktop and leave Columns out on a phone,
+  // without the markup existing twice.
   //
   // Search is NOT here — it moved to the shell header, where it sits in the
   // same place on every tab.
@@ -692,19 +692,47 @@ export function CustomersView({
 
   const list = (
     <>
-      {/* A phone has no table to hang a header on — it gets the card list
-          below — so the one action it needs keeps its own row. Columns is
-          desktop-only either way: below sm there is no table to pick columns
-          for. */}
-      <div className="flex sm:hidden">{addButton}</div>
+      {/* The list's toolbar sits ABOVE the card, outside it (P32, Nudge
+          e07ff7ae): view controls left, the creating action right, and the
+          card is the table and nothing else. One row at every width, shown
+          before the book loads so nothing moves when it lands. Columns is
+          desktop-only: below sm there is no table to pick columns for. Every
+          menu in the row portals, so leaving the card clips nothing.
+
+          The verbs take the whole row while a selection stands. Columns and
+          Add customer are both about the LIST, and neither is what anyone
+          reaches for with twenty rows ticked; leaving them there puts "Add
+          customer" one slip away from "Call 20 people". A selection is made
+          in the desktop table, so a phone keeps its Add button. Both kinds of
+          control are h-9, and min-h-9 holds the row while it swaps. */}
+      <div className="flex min-h-9 flex-wrap items-center gap-2">
+        {picked.length > 0 ? (
+          <>
+            <div className="hidden sm:contents">
+              <BulkBar
+                count={picked.length}
+                noConsent={picked.filter((c) => c.consentAt === undefined).length}
+                onCompose={setComposing}
+                onClear={clearSelection}
+              />
+            </div>
+            <div className="contents sm:hidden">{addButton}</div>
+          </>
+        ) : (
+          <>
+            <div className="hidden sm:contents">{columnPicker}</div>
+            {addButton}
+          </>
+        )}
+      </div>
 
       {adding && <NewCustomerSheet onClose={() => setAdding(false)} />}
 
       {customers === undefined && (
         <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
       )}
-      {/* Desktop reads this inside the card, under the header, so the Add
-          customer button is still on screen for a salon with no customers
+      {/* Desktop reads this inside the card, under the toolbar's Add
+          customer, so the button is on screen for a salon with no customers
           yet. */}
       {customers?.length === 0 && (
         <p className="text-sm text-[var(--muted)] sm:hidden">{t("customers.none")}</p>
@@ -753,39 +781,11 @@ export function CustomersView({
         </ul>
       )}
 
-      {/* Gated on LOADED, not on having rows: the header carries Add customer
-          now, and a salon whose first customer has not been added yet still
-          has to be able to add one. */}
+      {/* Gated on LOADED, not on having rows, so a salon with no customers
+          yet sees the card's "no customers" line under the toolbar's Add
+          customer rather than nothing at all. */}
       {customers !== undefined && (
         <div className="hidden rounded-lg bg-[var(--card)] shadow-[var(--card-shadow)] sm:block">
-          {/* The table's controls, in the card they belong to rather than
-              floating on the page gradient above it. Both are h-9 so the
-              bordered picker and the filled button share a baseline; Team's
-              header action is h-8 because it has nothing to line up with.
-
-              px-4 matches the scroller below, so the button's right edge lands
-              on the same line as the table's last column rule, and pt-4/pb-3
-              is Card's own header metric (p-4 with mb-3 under it) rather than
-              a number picked to look right in one screenshot. */}
-          <div className="flex flex-wrap items-center gap-2 px-4 pb-3 pt-4">
-            {/* The verbs take the whole row while a selection stands. Columns
-                and Add customer are both about the LIST, and neither is what
-                anyone reaches for with twenty rows ticked; leaving them there
-                puts "Add customer" one slip away from "Call 20 people". */}
-            {picked.length > 0 ? (
-              <BulkBar
-                count={picked.length}
-                noConsent={picked.filter((c) => c.consentAt === undefined).length}
-                onCompose={setComposing}
-                onClear={clearSelection}
-              />
-            ) : (
-              <>
-                {columnPicker}
-                {addButton}
-              </>
-            )}
-          </div>
           {/* The table scrolls sideways inside its own card. The page body
               never does.
 
@@ -797,7 +797,7 @@ export function CustomersView({
               padding drops to px-3 in exchange, so the first column's text
               lands about where it did before. */}
           {hasCustomers ? (
-          <div className="thin-scroll overflow-x-auto overscroll-x-contain px-4 py-1">
+          <div className="thin-scroll overflow-x-auto overscroll-x-contain px-4 pb-1 pt-2">
             <table className="w-full text-sm" style={{ tableLayout: "fixed", minWidth }}>
               <colgroup>
                 {/* The tick column. Fixed and narrow, ahead of the pinned
@@ -960,7 +960,7 @@ export function CustomersView({
             </table>
           </div>
           ) : (
-            <p className="px-4 pb-4 text-sm text-[var(--muted)]">
+            <p className="p-4 text-sm text-[var(--muted)]">
               {t("customers.none")}
             </p>
           )}

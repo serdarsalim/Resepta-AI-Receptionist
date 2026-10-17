@@ -1158,8 +1158,9 @@ Nudge's `meetingTools.ts`; do not grow a second path.
 ## An action belongs to the card it acts on (2026-08-21)
 
 `Card` takes an **`action`** node, rendered hard right on the title line. Add
-agent, Add message, Add customer, Add member, Add field, Add sale, Add product
-and Add knowledge all sit there now; before this they floated above their card,
+message, Add member, Add field, Add sale, Add product and Add knowledge all
+sit there now (Add customer and Add agent moved to their page's toolbar
+above the card with P32, below); before this they floated above their card,
 sat at the foot of a list, or were shared between two cards.
 
 - **Two tiers, and they are different jobs.** A CARD's own action lives in the
@@ -1175,7 +1176,8 @@ sat at the foot of a list, or were shared between two cards.
   stacks, so Voice opened on three solid blue buttons down one edge and Business
   on more. One loud thing per screen is the budget. A filled button now means
   the single action a screen is FOR: the sheet's confirm, the composer's Send,
-  the Customers toolbar's Add customer (that page IS the list it adds to).
+  the Customers toolbar's Add customer and the Voice agents toolbar's Add
+  agent (each page IS the list it adds to).
   **"No bg" means the FILL, not the outline** — a first pass dropped both and
   Serdar corrected it ("i said remove bg from secondary buttons not the border
   line"). The border is what keeps it reading as a button at rest; the fill
@@ -1195,13 +1197,27 @@ sat at the foot of a list, or were shared between two cards.
   changes something carries `data-edit-only` and is gone. The page says
   "View only" once (`ViewOnlyPill`). A new row ×, add or remove control on a
   card a member can read carries `data-edit-only`.
-- **A card that is the PAGE keeps its toolbar row instead** (Customers, Voice
-  agent). Same visual corner; the difference is that a page-level table's
-  controls are a toolbar, not a card header — and the Customers table is a
-  `DataTable`, which has no header slot at all. Its row moved INSIDE the
-  card's own padding for the same reason, and that card is now gated on
-  LOADED rather than on having rows: it carries the button a salon needs
-  before it has a single customer.
+- **A list page's toolbar sits ABOVE the card, outside it** (P32,
+  2026-10-17, Nudge e07ff7ae; this replaced "a card that is the PAGE keeps
+  its toolbar row inside"). View controls left, the creating action right,
+  and the card is the table and nothing else: alone inside, the row was an
+  empty strip over the table with one button in it. Customers and the Voice
+  agents table do this. One row at every width, rendered before the list
+  loads and whether or not it has rows, so the first row arriving moves
+  nothing and the add button is there in the EMPTY state, where it matters
+  most; the card itself is gated on LOADED and says "none yet" inside.
+  Every menu in the row portals, so leaving the card clips nothing. The
+  creating action is filled: the page IS the list it adds to, so it is the
+  one action the screen is for. A selection's verbs replace the whole row
+  while it stands (Customers' bulk bar), never sit beside Add.
+  **Scope: a page-level list, not a titled card.** A `Card` with a title
+  keeps its `action` on the title line: the title already fills that row, so
+  the empty strip this fixes never forms, and moving every titled card's
+  title out of its card is a different change nobody asked for. Nudge also
+  lifted its channel-settings cards' titles out (13bcfad1); Resepta's
+  equivalents are titled Cards and stay so. Revenue's history keeps its row
+  inside too: its select-all sits in the checkbox column, and that position
+  is the label.
 - **Never park an add at the foot of a list.** It puts the primary action
   below however many rows the business happens to have, and it is the branch
   that loses the button in the EMPTY state — the state where you need it most.

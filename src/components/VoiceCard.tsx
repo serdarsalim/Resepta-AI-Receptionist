@@ -314,23 +314,15 @@ export function VoiceCard({
     ? null
     : t("settings.voiceUnreachable");
 
-  const agentActions = (
-    <>
-      {/* Try the WhatsApp assistant without a customer seeing anything
-          (P9b). Quiet: it changes nothing, so it must not out-rank the
-          card's own action beside it. */}
-      {isOwner && (
-        <button
-          type="button"
-          onClick={() => setSimOpen(true)}
-          className="inline-flex h-8 items-center rounded-lg px-2.5 text-sm text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-        >
-          {t("chatSim.open")}
-        </button>
-      )}
-      {/* Refresh first, primary action last: the row is right-aligned, so the
-          rightmost seat is the anchor position and the quiet icon should not
-          sit outside the button people actually reach for. */}
+  // The list's toolbar, ABOVE the table's frame (P32, Nudge e07ff7ae and
+  // 13bcfad1): view controls left, the creating action right, and the frame
+  // holds the table and nothing else. One row whether or not an agent exists
+  // yet, so the first agent arriving moves nothing, and Add agent is on
+  // screen in the empty state, where it is the only way to get one.
+  const toolbar = (
+    <div className="mb-2 flex min-h-8 flex-wrap items-center gap-1">
+      {/* Refresh re-reads the roster: it changes what you SEE, so it sits
+          with the view's side of the row. */}
       <button
         type="button"
         onClick={load}
@@ -340,8 +332,22 @@ export function VoiceCard({
       >
         <RefreshIcon spinning={loading} />
       </button>
+      {/* Try the WhatsApp assistant without a customer seeing anything
+          (P9b). Quiet: it changes nothing, so it must not out-rank the
+          page's own action. */}
+      {isOwner && (
+        <button
+          type="button"
+          onClick={() => setSimOpen(true)}
+          className="inline-flex h-8 items-center rounded-lg px-2.5 text-sm text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+        >
+          {t("chatSim.open")}
+        </button>
+      )}
       {/* Adding opens a sheet. A permanent picker under the table would be a
-          question the page asks on every visit to pay for a task done once. */}
+          question the page asks on every visit to pay for a task done once.
+          Filled, like Add customer: this tab IS the list it adds to, so this
+          is the one action the screen is for. */}
       <button
         type="button"
         onClick={openAdd}
@@ -350,11 +356,11 @@ export function VoiceCard({
           !provisioningReady ||
           (!canCreate && !canConnect)
         }
-        className="card-action"
+        className="ml-auto h-8 shrink-0 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-50"
       >
         {t("settings.voiceConnect")}
       </button>
-    </>
+    </div>
   );
 
   return (
@@ -362,29 +368,16 @@ export function VoiceCard({
     // is the one job the card chrome was doing — staff see all of this
     // read-only — and it stays, invisible (min-w-0 per Card's own lesson).
     <fieldset disabled={!isOwner} className={`min-w-0 ${!isOwner ? "readonly-form" : ""}`}>
-      {/* No agents yet: nothing to frame, so the actions keep a row of their
-          own. This is the ONE case where they sit outside — and it is the
-          case where Add agent matters most, since it is the only way to get
-          the first one. */}
-      {connected.length === 0 && (
-        <div className="mb-2 flex items-center justify-end gap-1">{agentActions}</div>
-      )}
+      {toolbar}
 
       {connected.length > 0 && (
         // overflow-hidden moved here from the scroller so the frame still
         // clips the table's bottom corners; overflow-x-auto went to the inner
-        // div, which is now the only thing that scrolls. If the header row
-        // scrolled with the table, Add agent would slide out of reach on a
-        // narrow window — the exact thing this frame's min-w-full note warns
+        // div, which is now the only thing that scrolls. The toolbar above
+        // never scrolls with the table, so Add agent cannot slide out of reach
+        // on a narrow window, the thing this frame's min-w-full note warns
         // about for the Enabled toggle.
         <div className="mb-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
-          {/* The frame's own header. Same corner as every Card action, and
-              the reason this table gets one at all despite not being a Card:
-              a control that belongs to a list should sit in the list's frame,
-              not float on the page above it. */}
-          <div className="flex items-center justify-end gap-1 px-3 pb-3 pt-3">
-            {agentActions}
-          </div>
           <div className="overflow-x-auto">
           {/* min-w-full, not w-full. w-full pins the table to the container and
               the cells overflow it anyway — the Enabled toggle and the
