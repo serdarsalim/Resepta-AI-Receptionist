@@ -15,6 +15,7 @@ import { internalQuery } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { channelOfMessage } from "./messages";
 import { isDeleting } from "./lib/customerDeletion";
+import { callOutcome } from "./lib/callOutcome";
 
 const DAY = 86_400_000;
 
@@ -62,13 +63,17 @@ export const activityReport = internalQuery({
       .collect();
     let inboundCalls = 0;
     let answeredCalls = 0;
+    let voicemailCalls = 0;
     let callSeconds = 0;
     for (const c of calls) {
       if (c.direction === "inbound") inboundCalls += 1;
-      // Duration is the only honest answer to "was it a real call": an
-      // unanswered leg lands with no duration at all, and disconnectionReason
-      // is only stamped on rows written since it landed.
-      if ((c.durationSec ?? 0) > 0) answeredCalls += 1;
+      // What the call came to, from the provider's disconnect code
+      // (lib/callOutcome). Duration alone counted a voicemail the agent
+      // talked into as answered; rows written before the code was kept still
+      // fall back to it, which is all they ever had.
+      const outcome = callOutcome(c.disconnectionReason, c.durationSec);
+      if (outcome === "answered") answeredCalls += 1;
+      else if (outcome === "voicemail") voicemailCalls += 1;
       callSeconds += c.durationSec ?? 0;
     }
 
@@ -136,6 +141,7 @@ export const activityReport = internalQuery({
         inbound: inboundCalls,
         outbound: calls.length - inboundCalls,
         answered: answeredCalls,
+        voicemail: voicemailCalls,
         answeredRatePct: pct(answeredCalls, calls.length),
         totalMinutes: Math.round(callSeconds / 60),
       },
@@ -217,6 +223,10 @@ export const customerHistory = internalQuery({
         body: c.summary,
         durationSec: c.durationSec,
         outcome: c.outcome,
+        // answered, voicemail, busy, declined, no-answer, refused or failed:
+        // what happened on the line, where `outcome` is whether the agent got
+        // what it called for.
+        result: callOutcome(c.disconnectionReason, c.durationSec),
       })),
       ...notes.map((n) => ({
         at: n._creationTime,

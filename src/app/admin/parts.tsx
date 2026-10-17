@@ -509,6 +509,7 @@ const FIELD_SAVE_ERRORS: Record<string, string> = {
   "no-platform-token":
     "Set the platform token first (fleet page, WhatsApp section) — clearing this now would leave the number with nothing to authenticate as.",
   "bad-email": "That doesn't look like an email address.",
+  "bad-count": "A whole number from 1, or empty for no limit.",
 };
 
 function fieldSaveError(error: unknown): string {
@@ -555,6 +556,7 @@ export function Row({
   current,
   placeholder,
   money,
+  count,
   onSave,
 }: {
   label: string;
@@ -563,6 +565,8 @@ export function Row({
   placeholder?: string;
   // A USD amount: narrow field, $ inside the border. See the input below.
   money?: boolean;
+  // A small whole number: the money field's short box, with no unit.
+  count?: boolean;
   onSave: (value: string) => unknown;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
@@ -610,6 +614,15 @@ export function Row({
               className="w-full min-w-0 border-0 bg-transparent p-0 text-sm outline-none"
             />
           </div>
+        ) : count ? (
+          <input
+            value={draft ?? current ?? ""}
+            onChange={(e) => type(e.target.value)}
+            onBlur={save}
+            inputMode="numeric"
+            placeholder={placeholder}
+            className={`${fieldClass("sm")} w-28`}
+          />
         ) : (
           <input
             value={draft ?? current ?? ""}

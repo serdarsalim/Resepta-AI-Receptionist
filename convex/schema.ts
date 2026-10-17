@@ -16,6 +16,14 @@ export const appointmentStatus = v.union(
   v.literal("no_show"),
 );
 
+// Why a running call run is not dialling yet (bulkRuns.heldReason). Exported
+// so the run list's returns validator is this one and not a copy of it.
+export const bulkRunHoldReason = v.union(
+  v.literal("closed"),
+  v.literal("no-opening"),
+  v.literal("busy"),
+);
+
 export default defineSchema({
   ...authTables,
 
@@ -2246,6 +2254,18 @@ export default defineSchema({
     // reason templateName is. Every tenant shares one Retell account, so
     // re-resolving per call risks a different salon's line mid-run.
     fromNumber: v.optional(v.string()),
+    // A call run that is running but may not dial yet, and until when
+    // (2026-10-17, P6b of the Nudge port). Set and cleared ONLY by
+    // bulkRuns.claimNextCall, the one place a call is claimed, because the
+    // reaper restarts every running run every five minutes and a hold kept
+    // anywhere else would be dialled straight through. "closed": the business
+    // is shut (outside its hours or in blocked time) and heldUntil is when it
+    // opens. "no-opening": nothing opens within the horizon, and heldUntil is
+    // only when to look again. "busy": a dial was refused for want of a free
+    // line (the provider's capacity, the carrier, the platform's own cap) and
+    // heldUntil is the next try. Unset: free to dial.
+    heldUntil: v.optional(v.number()),
+    heldReason: v.optional(bulkRunHoldReason),
 
     // ---- Denormalised counters -------------------------------------------
     //
@@ -2280,8 +2300,10 @@ export default defineSchema({
   //   queued     a messages row exists; delivery.ts owns it from here
   //   dialing    THE CALL IN FLIGHT, and the concurrency token — see
   //              bulkRuns.claimNextCall. Exactly one per run may hold this.
-  //   done       finished, whatever the outcome was on the wire
-  //   failed     we could not place it / the provider refused it
+  //   done       the call reached the phone, whatever happened next (answered,
+  //              voicemail, busy, declined, no answer: lib/callOutcome)
+  //   failed     we could not place it, or the network or the provider
+  //              refused it and nothing rang
   //   skipped    never attempted, and WHY is in reason: no email address, no
   //              consent, an unusable number. A bulk sender that quietly
   //              drops rows is how "I sent it to everyone" becomes false.
@@ -2316,7 +2338,9 @@ export default defineSchema({
     dialedAt: v.optional(v.number()),
     durationSec: v.optional(v.number()),
     // Retell's disconnect code, copied off the calls row when the call ends.
-    // The run detail's "no answer" comes from here.
+    // What the run detail says happened (answered, voicemail, busy, no
+    // answer, refused) is read from it by lib/callOutcome, and a call that
+    // never reached the phone makes the item "failed" rather than "done".
     disconnectionReason: v.optional(v.string()),
     attempts: v.optional(v.number()),
     // Why this was skipped, or how placing it failed. Shown verbatim in the
@@ -2337,7 +2361,14 @@ export default defineSchema({
     // The webhook's way home.
     .index("by_retell_call", ["retellCallId"])
     // One customer's items across every run, for deleting that customer.
-    .index("by_org_customer", ["orgId", "customerId"]),
+    .index("by_org_customer", ["orgId", "customerId"])
+    // Status ACROSS orgs, for the platform-wide cap on bulk calls ringing at
+    // once (claimNextCall, platformConfig bulkCallConcurrency): the one
+    // provider account carries every business's calls. Only a COUNT of
+    // "dialing" rows is ever read through it, inside the claim, and nothing
+    // read here reaches a business; bulkRuns.by_status is the same shape for
+    // the reaper.
+    .index("by_status", ["status"]),
 
   // Images the salon sends OUT — a price list, a before-and-after, the card
   // machine being broken today. Inbound images already land in Convex storage

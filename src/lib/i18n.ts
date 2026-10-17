@@ -879,10 +879,12 @@ const dictionary = {
   },
   "bulk.agent": { tr: "Asistan", en: "Agent", de: "Assistent" },
   "bulk.pickAgent": { tr: "Seçin", en: "Pick one", de: "Auswählen" },
+  // Opening hours since 2026-10-17: a run waits while the business is
+  // closed and picks up when it opens.
   "bulk.callHint": {
-    tr: "Teker teker aranır. Bir görüşme bitmeden sonraki başlamaz.",
-    en: "Dialled one at a time. The next call waits for the current one to end.",
-    de: "Nacheinander. Der nächste Anruf beginnt erst nach dem laufenden.",
+    tr: "Teker teker ve yalnızca açık olduğunuz saatlerde aranır. Yaklaşan randevusu olanlar ve o gün zaten aranmış olanlar atlanır.",
+    en: "Dialled one at a time, and only during your opening hours. Anyone with an appointment coming up, or already called that day, is skipped.",
+    de: "Nacheinander und nur während Ihrer Öffnungszeiten. Wer schon einen anstehenden Termin hat oder an dem Tag schon angerufen wurde, wird übersprungen.",
   },
   "bulk.confirmSend.one": {
     tr: "{n} kişiye gönderilsin mi? Geri alınamaz.",
@@ -984,6 +986,26 @@ const dictionary = {
   "bulk.statusPaused": { tr: "Duraklatıldı", en: "Paused", de: "Pausiert" },
   "bulk.statusCancelled": { tr: "Durduruldu", en: "Stopped", de: "Gestoppt" },
   "bulk.statusDone": { tr: "Bitti", en: "Done", de: "Fertig" },
+  // A running call run held until the business opens (bulkRuns.heldUntil).
+  "bulk.statusWaiting": { tr: "Bekliyor", en: "Waiting", de: "Wartet" },
+  // {when} is the business's own clock, weekday first: "Sal 14 Eki 09:00".
+  "bulk.heldClosed": {
+    tr: "Şu an kapalı. Aramalar {when} itibarıyla sürecek.",
+    en: "Closed now. Calling resumes {when}.",
+    de: "Gerade geschlossen. Die Anrufe laufen ab {when} weiter.",
+  },
+  // The provider or the network refused a dial for want of a free line, and
+  // the run tries again at {time} (bulkRuns.requeueRefusedCall).
+  "bulk.heldBusy": {
+    tr: "Şu an boş hat yok. {time} itibarıyla yeniden denenecek.",
+    en: "No free line right now. Trying again at {time}.",
+    de: "Gerade keine freie Leitung. Neuer Versuch um {time}.",
+  },
+  "bulk.heldNoOpening": {
+    tr: "Önümüzdeki haftalarda açık saatiniz görünmüyor. Açık olduğunuz ilk saatte aramalar sürecek.",
+    en: "No opening hours in the coming weeks. Calling resumes once you are open.",
+    de: "In den nächsten Wochen sind keine Öffnungszeiten eingetragen. Die Anrufe laufen weiter, sobald Sie geöffnet haben.",
+  },
   "bulk.counts": {
     tr: "{done}/{total} tamam · {failed} hata · {skipped} atlandı",
     en: "{done}/{total} done · {failed} failed · {skipped} skipped",
@@ -1016,8 +1038,32 @@ const dictionary = {
     en: "Asked for no AI calls",
     de: "Möchte keine KI-Anrufe",
   },
+  // Judged at their turn in a call run (bulkRuns.turnSkipReason): an open
+  // booking still ahead of them, or a call with them already that day.
+  "bulk.skipAlreadyBooked": {
+    tr: "Zaten randevusu var",
+    en: "Already booked",
+    de: "Hat schon einen Termin",
+  },
+  "bulk.skipCalledToday": {
+    tr: "Bugün zaten bir arama yapıldı",
+    en: "Already had a call today",
+    de: "Heute schon ein Anruf",
+  },
   "bulk.skipOther": { tr: "Atlandı", en: "Skipped", de: "Übersprungen" },
   "bulk.itemPending": { tr: "Sırada", en: "Waiting", de: "Wartet" },
+  // Back in line after a refused dial: nothing rang, and it will be tried
+  // again shortly.
+  "bulk.itemRetrying": {
+    tr: "Birazdan yeniden denenecek",
+    en: "Trying again shortly",
+    de: "Wird gleich erneut versucht",
+  },
+  "bulk.gaveUpTitle": {
+    tr: "Birkaç denemede de boş hat bulunamadı, telefon hiç çalmadı",
+    en: "No free line on any of several tries; the phone never rang",
+    de: "Auch nach mehreren Versuchen keine freie Leitung; es hat nie geklingelt",
+  },
   "bulk.itemQueued": { tr: "Kuyrukta", en: "Queued", de: "In Warteschlange" },
   "bulk.itemRinging": { tr: "Çalıyor", en: "Ringing", de: "Klingelt" },
   "bulk.itemSent": { tr: "Gönderildi", en: "Sent", de: "Gesendet" },
@@ -1025,6 +1071,20 @@ const dictionary = {
   "bulk.itemReplied": { tr: "Yanıtladı", en: "Replied", de: "Geantwortet" },
   "bulk.itemAnswered": { tr: "{s} sn görüştü", en: "Talked {s}s", de: "{s} s gesprochen" },
   "bulk.itemNoAnswer": { tr: "Açmadı", en: "No answer", de: "Nicht abgenommen" },
+  // What a finished call came to (lib/callOutcome), beside "No answer" and
+  // "Talked {s}s". Refused is the network's no: nothing rang, so it is told
+  // apart from Declined, which is the customer's.
+  "bulk.outcomeAnswered": { tr: "Açtı", en: "Answered", de: "Angenommen" },
+  "bulk.outcomeVoicemail": { tr: "Telesekreter", en: "Voicemail", de: "Mailbox" },
+  "bulk.outcomeBusy": { tr: "Meşgul", en: "Busy", de: "Besetzt" },
+  "bulk.outcomeDeclined": { tr: "Reddetti", en: "Declined", de: "Abgelehnt" },
+  "bulk.outcomeRefused": {
+    tr: "Şebeke reddetti",
+    en: "Refused by the network",
+    de: "Vom Netz abgewiesen",
+  },
+  // A call that ended with nothing on record to say how (no code, no length).
+  "bulk.itemCalled": { tr: "Arandı", en: "Called", de: "Angerufen" },
   "bulk.itemFailed": { tr: "Başarısız", en: "Failed", de: "Fehlgeschlagen" },
   "bulk.itemCancelled": { tr: "İptal", en: "Cancelled", de: "Abgebrochen" },
   "customers.new": {
@@ -2998,6 +3058,23 @@ const dictionary = {
     de: "Limit gleichzeitiger Anrufe erreicht",
   },
   "calls.end.error": { tr: "Arama hatası", en: "Call error", de: "Anruffehler" },
+  "calls.end.user_declined": {
+    tr: "Aranan kişi aramayı reddetti",
+    en: "They declined the call",
+    de: "Der Anruf wurde abgelehnt",
+  },
+  // The carrier rejected the number before it rang: not the customer
+  // ignoring the call.
+  "calls.end.refused": {
+    tr: "Telefon şebekesi aramayı reddetti, telefon çalmadı",
+    en: "The phone network refused the call; the phone never rang",
+    de: "Das Telefonnetz hat den Anruf abgewiesen; es hat nicht geklingelt",
+  },
+  "calls.end.network_unavailable": {
+    tr: "Telefon şebekesine ulaşılamadı",
+    en: "The phone network was unavailable",
+    de: "Das Telefonnetz war nicht erreichbar",
+  },
   // The sidebar destination. Was "Sesli asistan / Voice agent"; the qualifier
   // came off (Serdar, 2026-08-26) when the chat lane started composing over
   // the same Talimat — one agent, two channels, and a door named after one

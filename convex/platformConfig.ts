@@ -18,6 +18,7 @@ import { requirePlatformAdmin } from "./lib/platformAuth";
 import { maskSecret } from "./lib/connections";
 import {
   DEFAULT_PRODUCT_NAME,
+  bulkCallLimitOf,
   emailConfig,
   inboundWebhookSecret,
   platformValue,
@@ -116,6 +117,8 @@ export const status = query({
     // The public legal pages' contact address, plain: it exists to be
     // published (see legalContact below).
     legalContactEmail: v.union(v.string(), v.null()),
+    // The platform-wide limit on bulk calls ringing at once; null = none.
+    bulkCallConcurrency: v.union(v.number(), v.null()),
     // Whether each value is coming from an env var rather than a row, so the
     // operator knows why editing the field appears to do nothing on a
     // deployment still configured the old way.
@@ -202,6 +205,7 @@ export const status = query({
       stripeSecretKey: stripeKey ? maskSecret(stripeKey) : null,
       stripeWebhookSecret: stripeWebhook ? maskSecret(stripeWebhook) : null,
       legalContactEmail: row("legalContactEmail"),
+      bulkCallConcurrency: bulkCallLimitOf(row("bulkCallConcurrency")),
       fromEnv: {
         apiKey: Boolean(config.apiKey) && !row("resendApiKey"),
         domain: Boolean(config.domain) && !row("resendInboundDomain"),
@@ -263,6 +267,9 @@ const settableKey = v.union(
   // The public legal pages' contact address. Checked below: a typo here is
   // printed on the privacy policy as the place to send KVKK requests.
   v.literal("legalContactEmail"),
+  // The platform-wide limit on bulk calls ringing at once. Checked below: a
+  // whole number from 1, or empty for no limit.
+  v.literal("bulkCallConcurrency"),
 );
 
 // Deliberately loose: something@something.tld with no spaces. The address is
@@ -288,6 +295,13 @@ function cleanedValue(key: PlatformKey, value: string): string {
     const email = value.replace(/^mailto:/i, "").toLowerCase();
     if (!EMAIL_SHAPE.test(email)) throw new Error("bad-email");
     return email;
+  }
+  // A limit that could not be read would silently mean "no limit", which is
+  // the one reading the field exists to prevent, so a value that is not a
+  // whole number from 1 is refused rather than stored.
+  if (key === "bulkCallConcurrency") {
+    if (bulkCallLimitOf(value) === null) throw new Error("bad-count");
+    return String(Number(value));
   }
   return value;
 }

@@ -27,7 +27,8 @@
 // would notice. Do not add one.
 //
 // The call channel is the exception and has to be, because there is no queue
-// for calls. It gets its own, and its rule is one at a time — see dialNext.
+// for calls. It gets its own, and its rules are one at a time and only while
+// the business is open — see claimNextCall.
 //
 // ── CONSENT ─────────────────────────────────────────────────────────────────
 //
@@ -56,10 +57,27 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { isDemo } from "./demo";
 import { customerSender, emailBodyHtml, emailLaneConfigured } from "./lib/email";
-import { emailConfig, resolveWaAccount } from "./lib/platformConfig";
+import { bulkCallLimit, emailConfig, resolveWaAccount } from "./lib/platformConfig";
 import { renderTokens } from "./lib/renderTokens";
 import { resolvePublicPhone } from "./lib/publicPhone";
 import { recordActivity } from "./lib/activity";
+import { loadClosures } from "./lib/closureRows";
+import {
+  getLocalPartsSafe,
+  hasBusinessHours,
+  hasClockBounds,
+  nextOpenAt,
+  type ActiveWindow,
+} from "./lib/businessHours";
+import { DEFAULT_QUIET_HOURS } from "./orgs";
+import { bulkRunHoldReason } from "./schema";
+import {
+  callOutcome,
+  isAccountRefusal,
+  isRetryableCallEnd,
+  isRetryableDialError,
+  reachedPhone,
+} from "./lib/callOutcome";
 
 // A run is capped, for campaigns' reason word for word: a salon with more
 // customers than this wants a filter, not a bigger blast, and a send nobody
@@ -82,6 +100,24 @@ const FANOUT_BATCH = 100;
 // call queue is not a delayed message — it is a run that has silently stopped
 // with the owner watching a progress bar that will never move again.
 const CALL_STUCK_MS = 20 * 60_000;
+// How long a call run that finds no opening ahead (seven closed days, or a
+// closure longer than nextOpenAt's horizon) waits before it looks again. Long
+// enough to cost nothing, short enough that hours set in the morning are read
+// the same day.
+const NO_OPENING_RECHECK_MS = 6 * 60 * 60_000;
+// A dial refused for want of a free line goes back in line (requeueCall).
+// This many tries per customer, the run waiting one step longer after each
+// (1, 2, 3, 4, 5 minutes: Nudge abbbbdff's numbers), before the customer is
+// counted as failed and the run moves on. High enough that a busy hour on the
+// shared account drains rather than sheds; low enough that a number the
+// network refuses every time cannot hold the whole list up.
+const MAX_DIAL_ATTEMPTS = 6;
+const DIAL_RETRY_STEP_MS = 60_000;
+// How long a run waits when the platform-wide limit on bulk calls ringing at
+// once is reached before it looks again. A call ending frees a line for its
+// own run at once (finishByCallId); every other waiting run finds it within
+// this.
+const PLATFORM_LIMIT_WAIT_MS = 30_000;
 
 export type BulkChannel = "email" | "whatsapp" | "call";
 
@@ -582,6 +618,13 @@ export const setStatus = mutation({
     await ctx.db.patch(args.runId, {
       status: args.status,
       ...(args.status === "cancelled" ? { finishedAt: Date.now() } : {}),
+      // Any hold ends here. A resume judges the clock afresh in claimNextCall,
+      // so hours changed while the run waited (open late tonight, say) count
+      // at once rather than at a wake-up worked out from the old ones; if it
+      // is still closed, the claim holds it again. A paused or stopped run is
+      // not waiting for anything.
+      heldUntil: undefined,
+      heldReason: undefined,
     });
 
     if (args.status === "cancelled") {
@@ -687,7 +730,14 @@ async function settleRun(ctx: MutationCtx, runId: Id<"bulkRuns">): Promise<void>
       .first();
     if (outstanding) return;
   }
-  await ctx.db.patch(runId, { status: "done", finishedAt: Date.now() });
+  // A hold that outlived its last customer (their records deleted while the
+  // run waited) is not left on a finished run.
+  await ctx.db.patch(runId, {
+    status: "done",
+    finishedAt: Date.now(),
+    heldUntil: undefined,
+    heldReason: undefined,
+  });
   await recordActivity(ctx, {
     orgId: run.orgId,
     kind: "settings_changed",
@@ -786,6 +836,136 @@ export async function bulkRunGate(
 //
 // Drop any one and a single bad call strands the run forever, silently.
 
+// ── When a call may ring ────────────────────────────────────────────────────
+//
+// A run rings only while the business is open (2026-10-17, P6b of the Nudge
+// port; its b013a43b and 69100df8 for the agent's calling hours). Until then
+// nothing in this chain read a clock: a run launched at 17:55 kept dialling
+// through the evening and the night until its list ran out, and the
+// reminders' send window was the only time-of-day gate in the product.
+//
+// The hours are the business's opening hours with its closures cut out (a
+// lunch break, a holiday), in its own timezone. They are what a caller who
+// rings back meets, and a call that may end "a colleague will call you" should
+// come while there is a colleague. A business that never set its hours rings
+// inside its message send window instead (Reminders), the one clock it has
+// given us about when its customers may be contacted.
+function callHoursFor(org: Doc<"orgs">): ActiveWindow {
+  const hours = org.businessHours;
+  // hasClockBounds too: a legacy row naming days but no times reads as open
+  // around the clock, and 03:00 on an open day is no time to ring anybody.
+  if (hours && hasBusinessHours(hours) && hasClockBounds(hours)) return hours;
+  let start: number = org.quietHoursStart ?? DEFAULT_QUIET_HOURS[0];
+  let end: number = org.quietHoursEnd ?? DEFAULT_QUIET_HOURS[1];
+  // An overnight send window (start after end) is a choice about messages
+  // arriving late. Nobody's phone should ring at 03:00 because of it.
+  if (start >= end) {
+    start = DEFAULT_QUIET_HOURS[0];
+    end = DEFAULT_QUIET_HOURS[1];
+  }
+  const day = { startMinute: start * 60, endMinute: end * 60 };
+  return { days: [day, day, day, day, day, day, day] };
+}
+
+type CallWindow =
+  | { open: true }
+  | { open: false; until: number; reason: "closed" | "no-opening" };
+
+// Open now, or closed until when. One computation for both (nextOpenAt), so
+// the moment a run is told it may resume is the moment the same rules call
+// open.
+async function callWindowAt(
+  ctx: MutationCtx,
+  org: Doc<"orgs">,
+  now: number,
+): Promise<CallWindow> {
+  const opensAt = nextOpenAt(
+    now,
+    org.timezone,
+    callHoursFor(org),
+    await loadClosures(ctx, org._id),
+  );
+  if (opensAt === null) {
+    return { open: false, until: now + NO_OPENING_RECHECK_MS, reason: "no-opening" };
+  }
+  if (opensAt <= now) return { open: true };
+  return { open: false, until: opensAt, reason: "closed" };
+}
+
+// ── Who is not rung, at their turn ──────────────────────────────────────────
+//
+// What has happened to this customer since the run was launched that makes a
+// call now the wrong call (2026-10-17, Nudge ac5988a5). Asked in
+// claimNextCall at their turn, never at fan-out: a run can wait overnight for
+// opening hours, so "today" has to be the day the phone would ring, and a
+// booking made while they waited in line (by WhatsApp, on the booking page,
+// on another run's call) has to count. Each answer becomes the item's skip
+// reason, which the run detail prints: never a silent gap.
+async function turnSkipReason(
+  ctx: MutationCtx,
+  run: Doc<"bulkRuns">,
+  item: Doc<"bulkRunItems">,
+  customer: Doc<"customers">,
+  org: Doc<"orgs">,
+  now: number,
+): Promise<"already-booked" | "called-today" | null> {
+  // An open booking still ahead of them, read the way the booking page and
+  // the assistants read "upcoming" (booking.ts, retell.bookingProblem), an
+  // open ASAP order included. A call asking someone to book who already has,
+  // or ringing them about the booking they hold, is the call nobody wants.
+  const appointments = await ctx.db
+    .query("appointments")
+    .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+    .collect();
+  if (
+    appointments.some(
+      (row) =>
+        row.orgId === run.orgId &&
+        (row.startAt > now || row.fulfillment?.asap === true) &&
+        (row.status === "scheduled" || row.status === "confirmed"),
+    )
+  ) {
+    return "already-booked";
+  }
+
+  // A call with them already today, in the business's day: from this run or
+  // another, a test call, or one they made to us. One a day is enough; the
+  // bulk chase behind Nudge's version rang people 51 minutes after they had
+  // said no. A call that never reached their phone (refused, failed) does
+  // not count, because they have not been called.
+  const today = getLocalPartsSafe(now, org.timezone);
+  const isToday = (ms: number) => {
+    const p = getLocalPartsSafe(ms, org.timezone);
+    return p.y === today.y && p.m0 === today.m0 && p.d === today.d;
+  };
+  // Newest first: a day's calls are the head of the list, and twenty covers
+  // any real day without reading a regular's whole history.
+  const calls = await ctx.db
+    .query("calls")
+    .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+    .order("desc")
+    .take(20);
+  for (const call of calls) {
+    if (call.orgId !== run.orgId || !isToday(call.startedAt)) continue;
+    const outcome = callOutcome(call.disconnectionReason, call.durationSec);
+    if (outcome === undefined || reachedPhone(outcome)) return "called-today";
+  }
+  // And a call to them live right now in another run, whose calls row is
+  // only written when it ends. Reading this range also makes two runs that
+  // reach the same customer at once conflict, so one of them waits and then
+  // sees the other's call.
+  const items = await ctx.db
+    .query("bulkRunItems")
+    .withIndex("by_org_customer", (q) =>
+      q.eq("orgId", run.orgId).eq("customerId", customer._id),
+    )
+    .take(100);
+  if (items.some((other) => other._id !== item._id && other.status === "dialing")) {
+    return "called-today";
+  }
+  return null;
+}
+
 // The agent's line, resolved and checked before a run is allowed to start.
 export const callLineFor = internalQuery({
   args: { retellAgentId: v.string() },
@@ -847,6 +1027,14 @@ export const claimNextCall = internalMutation({
       .first();
     if (inFlight) return { state: "in-flight" as const };
 
+    // A hold still in force. Its wake-up was scheduled when it was set
+    // (below), so this answers the reaper, a resume or a duplicate wake-up
+    // without scheduling another.
+    const now = Date.now();
+    if (run.heldUntil !== undefined && run.heldUntil > now) {
+      return { state: "held" as const, until: run.heldUntil };
+    }
+
     // Oldest pending first. Convex appends _creationTime to every index, and
     // fan-out inserts in position order, so ascending IS the dial order.
     const next = await ctx.db
@@ -860,15 +1048,67 @@ export const claimNextCall = internalMutation({
       return { state: "empty" as const };
     }
 
+    // The business's hours (callHoursFor), judged HERE and nowhere else. The
+    // reaper restarts every running run every five minutes and a resume
+    // schedules dialNext at once, so a hold kept in the scheduler alone
+    // would be dialled straight through; kept on the run and read in the
+    // transaction that claims, nothing can. One wake-up is scheduled with the
+    // hold, at the minute the business opens.
+    const org = await ctx.db.get(run.orgId);
+    if (!org) return { state: "stopped" as const };
+    const window = await callWindowAt(ctx, org, now);
+    if (!window.open) {
+      await ctx.db.patch(args.runId, {
+        heldUntil: window.until,
+        heldReason: window.reason,
+      });
+      await ctx.scheduler.runAfter(window.until - now, internal.bulkRuns.dialNext, {
+        runId: args.runId,
+      });
+      return { state: "held" as const, until: window.until };
+    }
+    // Open: whatever held the run is over.
+    if (run.heldUntil !== undefined) {
+      await ctx.db.patch(args.runId, { heldUntil: undefined, heldReason: undefined });
+    }
+
     const customer = await ctx.db.get(next.customerId);
     // Consent can be withdrawn between fan-out and this customer's turn, which
     // on a long run is minutes to hours. Third check, and the last one before
-    // a phone actually rings.
-    const reason = customer ? skipReason(customer, "call") : "missing-customer";
+    // a phone actually rings; then what happened to them since the run began
+    // (booked, already called today: turnSkipReason).
+    const reason = !customer
+      ? "missing-customer"
+      : (skipReason(customer, "call") ??
+        (await turnSkipReason(ctx, run, next, customer, org, now)));
     if (reason) {
       await ctx.db.patch(next._id, { status: "skipped", reason });
       await ctx.db.patch(args.runId, { skippedCount: run.skippedCount + 1 });
       return { state: "skipped" as const };
+    }
+
+    // The platform's own limit on bulk calls ringing at once, across every
+    // business (platformConfig bulkCallConcurrency). One provider account
+    // carries every business's calls and every inbound call, and its lines
+    // are one pool: a few businesses' runs at once could take the lines a
+    // caller ringing in needs. Unset, nothing is read here and every run
+    // keeps its one call at a time. Counted in the transaction that claims,
+    // so two runs claiming at once conflict and the second sees the first's
+    // call; only the count of live calls is read, nothing about whose.
+    const limit = await bulkCallLimit(ctx);
+    if (limit !== null) {
+      const live = await ctx.db
+        .query("bulkRunItems")
+        .withIndex("by_status", (q) => q.eq("status", "dialing"))
+        .take(limit);
+      if (live.length >= limit) {
+        const until = now + PLATFORM_LIMIT_WAIT_MS;
+        await ctx.db.patch(args.runId, { heldUntil: until, heldReason: "busy" });
+        await ctx.scheduler.runAfter(PLATFORM_LIMIT_WAIT_MS, internal.bulkRuns.dialNext, {
+          runId: args.runId,
+        });
+        return { state: "held" as const, until };
+      }
     }
 
     // A call run without an agent or a line cannot dial anything, and every
@@ -917,6 +1157,57 @@ export const failItem = internalMutation({
     await ctx.db.patch(args.itemId, { status: "failed", reason: args.reason });
     const run = await ctx.db.get(item.runId);
     if (run) await ctx.db.patch(run._id, { failedCount: run.failedCount + 1 });
+    return null;
+  },
+});
+
+// A dial refused for a reason a later try can pass (2026-10-17, Nudge
+// abbbbdff): no free line on the shared account, a carrier briefly
+// unavailable, the provider failing. The phone never rang, so failing the
+// item would burn a customer nobody called. It goes back to the head of the
+// line instead (its place is its _creationTime, which a patch does not move),
+// and the run is held one step longer per try, through claimNextCall's own
+// hold so the reaper cannot dial through it. After MAX_DIAL_ATTEMPTS it rests
+// as failed with the last refusal as its reason, and the run moves on.
+async function requeueRefusedCall(
+  ctx: MutationCtx,
+  item: Doc<"bulkRunItems">,
+  reason: string,
+): Promise<void> {
+  const run = await ctx.db.get(item.runId);
+  if (!run) return;
+  const attempts = item.attempts ?? 1;
+  if (attempts >= MAX_DIAL_ATTEMPTS) {
+    await ctx.db.patch(item._id, { status: "failed", reason });
+    await ctx.db.patch(run._id, { failedCount: run.failedCount + 1 });
+    if (run.status === "running") {
+      await ctx.scheduler.runAfter(0, internal.bulkRuns.dialNext, { runId: run._id });
+    }
+    return;
+  }
+  // Stopped while this one was being refused: there is no line to go back to.
+  if (run.status === "cancelled" || run.status === "done") {
+    await ctx.db.patch(item._id, { status: "cancelled", reason });
+    return;
+  }
+  await ctx.db.patch(item._id, { status: "pending", reason, retellCallId: undefined });
+  // Paused: the resume restarts the chain, and this customer is first.
+  if (run.status !== "running") return;
+  const now = Date.now();
+  const until = now + attempts * DIAL_RETRY_STEP_MS;
+  await ctx.db.patch(run._id, { heldUntil: until, heldReason: "busy" });
+  await ctx.scheduler.runAfter(until - now, internal.bulkRuns.dialNext, {
+    runId: run._id,
+  });
+}
+
+export const requeueCall = internalMutation({
+  args: { itemId: v.id("bulkRunItems"), reason: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.itemId);
+    if (!item || item.status !== "dialing") return null;
+    await requeueRefusedCall(ctx, item, args.reason);
     return null;
   },
 });
@@ -997,6 +1288,16 @@ export const dialNext = internalAction({
       // The reason, not the "Uncaught Error … at handler" frame placeCall's
       // error arrives in across runAction.
       const message = cleanError(error);
+      // The provider said "not now": no free line, too many calls at once,
+      // its own fault. Nothing rang, so the customer goes back in line and
+      // the run waits a little (requeueCall), which schedules the next try.
+      if (isRetryableDialError(message)) {
+        await ctx.runMutation(internal.bulkRuns.requeueCall, {
+          itemId: claim.itemId,
+          reason: message.slice(0, 200),
+        });
+        return null;
+      }
       await ctx.runMutation(internal.bulkRuns.failItem, {
         itemId: claim.itemId,
         reason: message.slice(0, 200),
@@ -1034,14 +1335,55 @@ export const finishByCallId = internalMutation({
       .withIndex("by_retell_call", (q) => q.eq("retellCallId", args.retellCallId))
       .unique();
 
+    const ended = call?.disconnectionReason;
+    // The provider refused it for want of a free line, or the carrier was
+    // briefly away: nothing rang, so back in line rather than counted
+    // (requeueRefusedCall, which holds the run and schedules the next try).
+    if (isRetryableCallEnd(ended)) {
+      await requeueRefusedCall(ctx, item, ended!);
+      return null;
+    }
+    // Refused because of the ACCOUNT the calls go out on: every next call in
+    // this run would end the same way, so the customer goes back in line and
+    // the run pauses rather than spend its list on it (abortRun's reasoning).
+    if (isAccountRefusal(ended)) {
+      const owner = await ctx.db.get(item.runId);
+      const stopped = !owner || owner.status === "cancelled" || owner.status === "done";
+      await ctx.db.patch(item._id, {
+        status: stopped ? "cancelled" : "pending",
+        reason: ended,
+        retellCallId: undefined,
+      });
+      if (owner && owner.status === "running") {
+        await ctx.db.patch(owner._id, { status: "paused" });
+      }
+      return null;
+    }
+
+    // What the call came to, from the provider's disconnect code
+    // (lib/callOutcome). One that never reached the phone (the network
+    // refused it, it broke on the way) is not a call this customer got, so
+    // it counts as failed with the code as its reason; anything that rang
+    // counts as done, whatever happened next. A row with no code and no
+    // duration is counted done, as every call was before.
+    const outcome = callOutcome(ended, call?.durationSec);
+    const reached = outcome === undefined || reachedPhone(outcome);
     await ctx.db.patch(item._id, {
-      status: "done",
+      status: reached ? "done" : "failed",
       durationSec: call?.durationSec,
       disconnectionReason: call?.disconnectionReason,
+      // A refusal an earlier try left on the item is history once a call
+      // gets through.
+      reason: reached ? undefined : (call?.disconnectionReason ?? "call-failed"),
     });
     const run = await ctx.db.get(item.runId);
     if (!run) return null;
-    await ctx.db.patch(run._id, { doneCount: run.doneCount + 1 });
+    await ctx.db.patch(
+      run._id,
+      reached
+        ? { doneCount: run.doneCount + 1 }
+        : { failedCount: run.failedCount + 1 },
+    );
 
     if (run.status === "running") {
       await ctx.scheduler.runAfter(0, internal.bulkRuns.dialNext, { runId: item.runId });
@@ -1087,6 +1429,11 @@ export const reapStuckCalls = internalMutation({
         if (Date.now() - (stuck.dialedAt ?? 0) < CALL_STUCK_MS) continue;
         await ctx.db.patch(stuck._id, { status: "failed", reason: "dial-timeout" });
         await ctx.db.patch(run._id, { failedCount: run.failedCount + 1 });
+      } else if (run.heldUntil !== undefined && run.heldUntil > Date.now()) {
+        // Waiting on purpose (claimNextCall's hold), with its wake-up already
+        // scheduled. Starting it now would only be answered "held"; once the
+        // hold has passed, this sweep is the net under a lost wake-up.
+        continue;
       }
 
       // Either we just cleared a stuck call, or the chain broke with nothing
@@ -1123,6 +1470,10 @@ export const list = query({
       skippedCount: v.number(),
       startedAt: v.number(),
       finishedAt: v.optional(v.number()),
+      // A running call run that is waiting (claimNextCall's hold), so the
+      // list can say Waiting rather than Running.
+      heldUntil: v.optional(v.number()),
+      heldReason: v.optional(bulkRunHoldReason),
     }),
   ),
   handler: async (ctx) => {
@@ -1143,6 +1494,8 @@ export const list = query({
       skippedCount: run.skippedCount,
       startedAt: run.startedAt,
       finishedAt: run.finishedAt,
+      heldUntil: run.heldUntil,
+      heldReason: run.heldReason,
     }));
   },
 });
