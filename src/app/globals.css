@@ -154,6 +154,10 @@
      carried a full 1px border AND Tailwind's shadow-sm, so every incoming
      bubble drew its edge twice and read heavier than anything around it. */
   --bubble-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+  /* The tail's shadow, the bubble's own shadow as a shape one pixel lower
+     (P10, Nudge's WhatsApp-measured thread). Declared here, above .dark,
+     because .dark redefines it and source order decides between the two. */
+  --bubble-tail-shadow: rgba(11, 20, 26, 0.13);
   /* The thread's own plane, and the reason a borderless bubble works at all:
      a white bubble on a white card is invisible without a line around it, so
      dropping the border means the ground under it has to step back. WhatsApp
@@ -243,6 +247,7 @@
   /* Lifted off the near-black card rather than sunk into it. */
   --sheet-bg: #202124;
   --bubble-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.4);
+  --bubble-tail-shadow: rgba(0, 0, 0, 0.4);
   --thread-bg: #101010;
   --scrollbar-thumb: rgba(255, 255, 255, 0.16);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
@@ -703,9 +708,11 @@ thead {
    short thread before the image loads, and covers the sub-pixel row a
    fractional tile can leave at the bottom. */
 :root {
-  /* The tile's measured ground (chat-bg-doodle.webp, Serdar's pick
-     2026-08-31) — WhatsApp's own classic beige. */
-  --chat-paper: #e5ddd5;
+  /* WhatsApp Web's plain paper, measured (P10 of the Nudge port, 2026-10-17;
+     Nudge 2026-10-12). The doodle tile (chat-bg-doodle.webp, Serdar's pick
+     2026-08-31, on #e5ddd5) is gone: WhatsApp Web itself draws none now, and
+     the pattern was the busiest thing on the most-read screen. */
+  --chat-paper: #f5f2ec;
   /* The composer's field, which has to sit ON the paper and read as a field in
      both themes. It cannot be --card (that IS the dark paper) and it cannot be
      --muted-bg (identical to --card in dark). */
@@ -732,15 +739,15 @@ thead {
   /* A lighter veil than the old tile wore (0.4): this one ships its doodles
      already faint, and 0.4 of paper on top erased them. Old tile stays in
      public/ as chat-bg.webp if this one doesn't stick. */
-  background-image: linear-gradient(
-      rgba(229, 221, 213, 0.25),
-      rgba(229, 221, 213, 0.25)
-    ),
-    url("/chat-bg-doodle.webp");
-  background-repeat: repeat;
-  /* Tile width, not natural size: the source is 760px, a 2x asset — 380
-     renders it crisp on retina and small enough to read as texture. */
-  background-size: 380px auto;
+  /* Plain since P10 (see --chat-paper). The tile and its veil lived here; the
+     images stay in public/ in case the pattern is ever wanted back. */
+}
+/* The chat's own face: Roboto, as WhatsApp Web ships it ("Roboto Variable",
+   then Roboto, Helvetica Neue, Helvetica; Nudge measured it 2026-10-18).
+   ONLY inside the conversation's WhatsApp thread; the rest of the app keeps
+   its face. Loaded by app/layout.tsx as --font-chat. */
+.chat-font {
+  font-family: var(--font-chat), Roboto, "Helvetica Neue", Helvetica, sans-serif;
 }
 /* The email timeline's ground: the chat PAPER without the doodles (Serdar,
    2026-09-01, ported from Nudge the same day — "just use a beige bg instead

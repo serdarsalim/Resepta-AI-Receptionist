@@ -746,6 +746,20 @@ Keep it as `calc(1rem + 9px)`, never a resolved pixel value. Nothing sets a root
 font-size, so `rem` tracks the browser's font preference and Serdar's Chrome runs
 17px, where a hardcoded 25px is out by a pixel and a half.
 
+## The WhatsApp thread copies WhatsApp, measured (2026-10-17, P10)
+
+Nudge's thread, measured off WhatsApp Web, brought back: plain `#f5f2ec`
+paper with no doodles, Roboto inside the thread only (`.chat-font`,
+`--font-chat` from `app/layout.tsx`), WhatsApp's own tail SVG on the first
+bubble of a run with that top corner squared, 2px between bubbles of a run
+and 12px between runs (margins collapsing with the list's `space-y-2`), and a
+65% cap. Bodies render WhatsApp's `*bold*`, `_italic_`, `~strike~` and
+```` ```mono``` ```` through `src/lib/waFormat.tsx`, which every surface that
+shows a WhatsApp body the way the customer sees it uses (bubbles, quotes,
+the message preview). A failed send's cause comes from `lib/waFailure` (Meta
+codes we are sure of, never a guess), in the bubble and in the alert mail.
+Measure against WhatsApp Web before changing any of it.
+
 ## Borders only when absolutely necessary (Serdar's design language)
 
 Borders belong to CONTAINERS (cards, inputs, dropdown panels) — never to

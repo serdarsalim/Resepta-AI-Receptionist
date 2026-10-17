@@ -943,7 +943,9 @@ export function ConversationPanel({
           // WhatsApp gets the WALLPAPER and an open email thread gets the flat
           // tint. Mail is not a chat: no client wallpapers it, and giving it
           // one would say the two channels are the same thing.
-          chatOrder ? "space-y-2" : filter === "note" ? "space-y-3" : ""
+          // The WhatsApp thread also takes WhatsApp Web's own face
+          // (.chat-font, P10); nothing else in the app does.
+          chatOrder ? "chat-font space-y-2" : filter === "note" ? "space-y-3" : ""
         }`}
       >
         {feed === undefined && (
@@ -1162,6 +1164,17 @@ export function ConversationPanel({
                 </span>
               </li>
             ) : null;
+          // WhatsApp's RUN (P10, Nudge's measured thread): a bubble under one
+          // from the same side on the same day sits 2px below it with no tail;
+          // the first of a run carries the tail and a 12px gap above. The
+          // margins collapse with the list's space-y-2 (8px): mt-3 makes 12,
+          // -mt-1.5 makes 2.
+          const previous = index > 0 ? thread[index - 1] : undefined;
+          const runStart =
+            daySeparator !== null ||
+            !previous ||
+            previous.channel === "note" ||
+            previous.direction !== item.direction;
           return (
             <Fragment key={item.id}>
             {daySeparator}
@@ -1174,9 +1187,10 @@ export function ConversationPanel({
             <div
               className={`group flex items-end gap-1 ${
                 outbound ? "flex-row-reverse" : ""
-              }`}
+              } ${chatOrder ? (runStart ? "mt-3" : "-mt-1.5") : ""}`}
             >
-            <div className="flex max-w-[78%] flex-col">
+            {/* 65%, WhatsApp Web's own cap (P10; it was 78%). */}
+            <div className="flex max-w-[65%] flex-col">
             <div
               // Ours right and green, theirs left and white — the arrangement
               // every WhatsApp user already reads without being taught. The
@@ -1211,10 +1225,13 @@ export function ConversationPanel({
               onClick={() =>
                 setActionsFor((current) => (current === item.id ? null : item.id))
               }
-              className={`w-fit max-w-full rounded-lg text-sm text-[var(--chat-ink)] shadow-[var(--bubble-shadow)] ${
+              // The tail is WhatsApp's: on the first bubble of a run, at its TOP
+              // corner, with that corner squared off (P10; the squared bottom
+              // corner it replaced was this app's own paraphrase).
+              className={`relative w-fit max-w-full rounded-lg text-sm text-[var(--chat-ink)] shadow-[var(--bubble-shadow)] ${
                 outbound
-                  ? "self-end rounded-br-sm bg-[var(--chat-out)]"
-                  : "rounded-bl-sm bg-[var(--chat-in)]"
+                  ? `self-end ${runStart ? "rounded-tr-none " : ""}bg-[var(--chat-out)]`
+                  : `${runStart ? "rounded-tl-none " : ""}bg-[var(--chat-in)]`
               } ${
                 // A send that never left keeps its side and its colour and
                 // wears a red ring instead. Recolouring the whole bubble made
@@ -1222,6 +1239,41 @@ export function ConversationPanel({
                 failed ? "opacity-70 ring-1 ring-red-400/50" : ""
               }`}
             >
+              {/* WhatsApp's own tail, its paths and size (Nudge took them from
+                  WhatsApp Web), overlapping the body by 1px so its edge
+                  shadow leaves no seam. The tail's shadow is the same shape
+                  1px lower, under it. Decorative, inside the bubble: not a
+                  floating panel, so the portal rule does not apply. */}
+              {runStart && (
+                <svg
+                  aria-hidden
+                  viewBox="0 0 8 13"
+                  width="8"
+                  height="13"
+                  className={`pointer-events-none absolute top-0 ${
+                    outbound
+                      ? "-right-[7px] text-[var(--chat-out)]"
+                      : "-left-[7px] text-[var(--chat-in)]"
+                  }`}
+                >
+                  <path
+                    fill="var(--bubble-tail-shadow)"
+                    d={
+                      outbound
+                        ? "M5.188 1H0v11.193l6.467-8.625C7.526 2.156 6.958 1 5.188 1z"
+                        : "M1.533 3.568 8 12.193V1H2.812C1.042 1 .474 2.156 1.533 3.568z"
+                    }
+                  />
+                  <path
+                    fill="currentColor"
+                    d={
+                      outbound
+                        ? "M5.188 0H0v11.193l6.467-8.625C7.526 1.156 6.958 0 5.188 0z"
+                        : "M1.533 2.568 8 11.193V0H2.812C1.042 0 .474 1.156 1.533 2.568z"
+                    }
+                  />
+                </svg>
+              )}
               {/* The text row is its own flex box rather than the bubble
                   itself being one, because a template send's quick-reply rows
                   (below) have to span the bubble edge to edge, under the

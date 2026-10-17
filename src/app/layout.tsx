@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Nunito } from "next/font/google";
+import { Geist, Nunito, Roboto } from "next/font/google";
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import { ConvexClientProvider } from "./ConvexClientProvider";
 import { LanguageProvider } from "@/lib/LanguageProvider";
@@ -25,6 +25,16 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 // (`text-xl font-extrabold tracking-tight`). Naming the weight rather than
 // omitting it ships the static cut instead of the whole variable range, so the
 // signature costs one small file rather than an axis nothing here animates.
+// The WhatsApp thread's face, and only that (P10; read through .chat-font in
+// globals.css). Not preloaded: most pages never open a thread.
+const chatSans = Roboto({
+  variable: "--font-chat",
+  subsets: ["latin", "latin-ext"],
+  weight: "variable",
+  display: "swap",
+  preload: false,
+});
+
 const nunito = Nunito({
   variable: "--font-nunito",
   subsets: ["latin"],
@@ -85,7 +95,7 @@ export default function RootLayout({
       <html
         lang={DEFAULT_LANGUAGE}
         suppressHydrationWarning
-        className={`${geistSans.variable} ${nunito.variable} h-full`}
+        className={`${geistSans.variable} ${nunito.variable} ${chatSans.variable} h-full`}
       >
         <body className="min-h-full antialiased">
           {/* Correct .dark class before hydration — no theme flash. */}
