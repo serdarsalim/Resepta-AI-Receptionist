@@ -609,7 +609,7 @@ rather than after what it does.
 
 - **The customer-facing tabs wear the SALON**: their name as the title, their
   logo as the favicon, via `generateMetadata` in each route's layout
-  (`booking.brand` for the slug, `manage` for the token). SERVER metadata, not
+  (`booking.brand` for the slug, `booking.manageBrand` for the token). SERVER metadata, not
   a `document.title` effect — React owns the `<title>` and icon links it
   renders from metadata, so a client write is reverted the next time the tree
   reconciles, which on these pages is every query update. It also means a
@@ -617,6 +617,25 @@ rather than after what it does.
   makes the OPPOSITE call and that split is the point: the owner is hunting
   Resepta among thirty tabs, so the tab strip keeps our mark, while the sidebar
   — already inside the app — wears the org's logo.
+
+- **A pasted link previews as the business, never as the customer** (P27,
+  Nudge fbeae989). `lib/linkPreview` builds the words in the page's language
+  (the org's) and `lib/linkPreviewServer` the Open Graph tags; both layouts
+  read them. The booking link's preview: "Book online with <business>", the
+  active services (three named, more counted), their length range and the
+  address, over a 1200x630 card from `/book/<slug>/og.png` (logo or
+  initials, name, those lines). A switched-off page keeps its title and
+  offers nothing (`brand.services` is null; the card route 404s). The manage
+  link's preview: "Your appointment at <business>" and a neutral line,
+  nothing about who, what or when, no `og:url` (it would be the token), and
+  its picture at `/book/<slug>/og.png?for=appt`, keyed by the public slug so
+  the token never rides an image address. `manageBrand` resolves the token
+  through `appointmentByToken` like every token read. The image address
+  carries a version stamp of what the card shows (`v`), so a rename or a new
+  logo is a new address and the long cache is safe. Absolute URLs come from
+  the request's own host: links are minted on whatever origin the app runs
+  at, and `metadataBase` names the marketing apex. robots.txt still keeps
+  crawlers off `/appt/`.
 
 - **Services and Products are SEPARATE CARDS in Business settings**, mirroring
   the booking page's split. A product books no time, holds no chair, and

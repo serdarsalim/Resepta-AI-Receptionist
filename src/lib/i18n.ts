@@ -1585,6 +1585,37 @@ const dictionary = {
     en: "What would you like?",
     de: "Was darf es sein?",
   },
+  // A pasted link's preview (P27, lib/linkPreview): what WhatsApp, Instagram
+  // or Slack shows under a booking link before anyone opens it, in the page's
+  // own language. The manage link's words name the business and nobody else:
+  // it gets forwarded, and a preview is read by whoever it lands with.
+  "linkPreview.bookTitle": {
+    tr: "{business} için online randevu",
+    en: "Book online with {business}",
+    de: "Online-Termin bei {business}",
+  },
+  "linkPreview.bookLine": { tr: "Online randevu", en: "Book online", de: "Online buchen" },
+  "linkPreview.apptTitle": {
+    tr: "{business} randevunuz",
+    en: "Your appointment at {business}",
+    de: "Ihr Termin bei {business}",
+  },
+  "linkPreview.apptLine": { tr: "Randevunuz", en: "Your appointment", de: "Ihr Termin" },
+  "linkPreview.apptDescription": {
+    tr: "Tarihini ve saatini görün, değiştirin ya da iptal edin.",
+    en: "See its date and time, move it or cancel it.",
+    de: "Datum und Uhrzeit ansehen, verschieben oder absagen.",
+  },
+  // More than three services: the count instead of a list nobody reads.
+  "linkPreview.services.one": { tr: "{n} hizmet", en: "{n} service", de: "{n} Leistung" },
+  "linkPreview.services.other": { tr: "{n} hizmet", en: "{n} services", de: "{n} Leistungen" },
+  "linkPreview.minutes.one": { tr: "{n} dakika", en: "{n} minute", de: "{n} Minute" },
+  "linkPreview.minutes.other": { tr: "{n} dakika", en: "{n} minutes", de: "{n} Minuten" },
+  "linkPreview.minutesRange": {
+    tr: "{min} ile {max} dakika",
+    en: "{min} to {max} minutes",
+    de: "{min} bis {max} Minuten",
+  },
   // The two kinds of thing a salon sells, as section headings on the booking
   // page. Only drawn when it sells both.
   "booking.services": { tr: "Hizmetler", en: "Services", de: "Leistungen" },

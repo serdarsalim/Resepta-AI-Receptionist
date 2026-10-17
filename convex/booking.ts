@@ -1039,21 +1039,39 @@ export const cancel = mutation({
   },
 });
 
-// Just the two facts a browser tab needs. Separate from `page` because it is
-// read by generateMetadata on the SERVER, once per page load, before anything
-// renders — dragging the service list, the prices and the opening hours
-// through that round trip to print a title would put the whole booking
-// payload on the critical path twice.
+// What a browser tab and a pasted link need, and nothing more. Separate from
+// `page` because it is read by generateMetadata on the SERVER, once per page
+// load, before anything renders: the prices and the opening hours have no
+// business on that critical path.
 //
 // Answers for an org whose booking page is switched OFF, unlike `page`. The
 // tab title is not a booking; refusing to name the salon on the page that
 // tells their customer to call instead is a worse answer than saying nothing.
+// What is OFFERED is another matter: `services` and `address` are null while
+// the page is off, so a link preview never advertises bookings the page
+// will not take (P27).
+//
+// The link preview (lib/linkPreview, Nudge fbeae989) prints the active
+// services' names and lengths, which `page` already publishes to anyone with
+// the slug, and the address the owner gave for customers to come to.
 export const brand = query({
   args: { slug: v.string() },
   returns: v.union(
     v.object({
       orgName: v.string(),
       logoUrl: v.union(v.string(), v.null()),
+      // The page's own language (the org's), so a preview speaks it.
+      language: v.string(),
+      services: v.union(
+        v.array(
+          v.object({
+            name: v.string(),
+            durationMinutes: v.optional(v.number()),
+          }),
+        ),
+        v.null(),
+      ),
+      address: v.union(v.string(), v.null()),
     }),
     v.null(),
   ),
@@ -1065,9 +1083,60 @@ export const brand = query({
       .withIndex("by_public_slug", (q) => q.eq("publicSlug", slug))
       .unique();
     if (!org) return null;
+    const open = org.bookingEnabled === true;
+    const services = open
+      ? (
+          await ctx.db
+            .query("services")
+            .withIndex("by_org", (q) => q.eq("orgId", org._id))
+            .collect()
+        )
+          .filter((service) => service.active)
+          .map((service) => ({
+            name: service.name,
+            ...(service.durationMinutes !== undefined
+              ? { durationMinutes: service.durationMinutes }
+              : {}),
+          }))
+      : null;
     return {
       orgName: org.name,
       logoUrl: org.logoStorageId ? await ctx.storage.getUrl(org.logoStorageId) : null,
+      language: org.language,
+      services,
+      address: open ? org.address?.trim() || null : null,
+    };
+  },
+});
+
+// What the manage page's TAB and LINK PREVIEW may say (P27): the business's
+// name, logo and language, plus the public slug its preview card is drawn
+// under. The card's address must never carry the manage token (the token is
+// the whole permission to move or cancel), so it is keyed by the slug, which
+// is already public, and names nobody. Through `appointmentByToken`, the one
+// door every token read takes, so a deleted customer's link previews as
+// nothing. Nothing about the appointment itself: a forwarded link must not
+// say who booked what, or when.
+export const manageBrand = query({
+  args: { token: v.string() },
+  returns: v.union(
+    v.object({
+      orgName: v.string(),
+      logoUrl: v.union(v.string(), v.null()),
+      language: v.string(),
+      slug: v.union(v.string(), v.null()),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const found = await appointmentByToken(ctx, args.token);
+    if (!found) return null;
+    const { org } = found;
+    return {
+      orgName: org.name,
+      logoUrl: org.logoStorageId ? await ctx.storage.getUrl(org.logoStorageId) : null,
+      language: org.language,
+      slug: org.publicSlug ?? null,
     };
   },
 });

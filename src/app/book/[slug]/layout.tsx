@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { ConvexHttpClient } from "convex/browser";
-import { api } from "../../../../convex/_generated/api";
+import { headers } from "next/headers";
 import { UNLISTED } from "@/lib/seo";
+import { bookMetadata, bookModel, loadBrand } from "@/lib/linkPreviewServer";
 
 // The tab wears the SALON, not us: their name as the title, their logo as the
 // favicon. A customer taps this link inside a WhatsApp reminder and is looking
@@ -16,8 +16,11 @@ import { UNLISTED } from "@/lib/seo";
 // exactly that.
 //
 // The round trip buys a second thing worth having: a booking link pasted into
-// WhatsApp or Instagram now unfurls as the salon, because the crawler reads
-// this instead of the client render it never runs.
+// WhatsApp or Instagram unfurls as the salon, because the crawler reads this
+// instead of the client render it never runs. Since P27 (Nudge fbeae989) that
+// preview says what can be booked, for how long and where, over a generated
+// card (lib/linkPreview, ./og.png). A switched-off page keeps its title and
+// offers nothing.
 //
 // UNLISTED still applies — same reasoning as before, a link an owner hands out
 // rather than a page anyone should find in a search.
@@ -27,21 +30,20 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const url = process.env.NEXT_PUBLIC_CONVEX_URL;
-  if (!url) return UNLISTED;
-  // Never throws the page away over a title. A Convex hiccup here would
-  // otherwise 500 a booking page that renders perfectly well without one.
-  const brand = await new ConvexHttpClient(url)
-    .query(api.booking.brand, { slug })
-    .catch(() => null);
+  // Never throws the page away over a title: loadBrand answers null on any
+  // Convex hiccup, and a booking page renders perfectly well without one.
+  const brand = await loadBrand(slug);
   if (!brand?.orgName) return UNLISTED;
+  const model = bookModel(brand);
   return {
     ...UNLISTED,
     // The name ALONE. A tab strip truncates from the right, so a " — Resepta"
     // suffix costs the customer the only half that identifies the page while
-    // buying us a credit nobody reads.
+    // buying us a credit nobody reads. The preview's own title says more.
     title: brand.orgName,
-    openGraph: { title: brand.orgName, images: brand.logoUrl ? [brand.logoUrl] : undefined },
+    ...(model
+      ? bookMetadata(await headers(), slug, model)
+      : { openGraph: { title: brand.orgName, images: brand.logoUrl ? [brand.logoUrl] : undefined } }),
     ...(brand.logoUrl ? { icons: { icon: brand.logoUrl } } : {}),
   };
 }
