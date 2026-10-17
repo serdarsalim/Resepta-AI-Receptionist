@@ -82,9 +82,9 @@ type Menu = {
 // but render transparent, so inside the tinted pill they read as its padding.
 //
 // NOTHING HERE MAY CHANGE A GLYPH'S ADVANCE WIDTH. The pill carried
-// `font-medium` until 2026-08-21: in the mono prompt that is free (Geist Mono
-// advances identically at 400 and 500), but the opening line is proportional
-// Geist, where it made every pill 2.41px wider in the mirror than the real
+// `font-medium` until 2026-08-21: in the then-mono prompt that was free (Geist
+// Mono advances identically at 400 and 500), but the opening line is
+// proportional Geist, where it made every pill 2.41px wider in the mirror than the real
 // text underneath — so the caret drifted a pill's worth further left with
 // each token and typing landed beside where the cursor stood. Colour and
 // background are the emphasis; weight, size, letter-spacing and family are
@@ -308,11 +308,16 @@ export function PromptEditor({
   // Neither on the single line: the opening line is field-sized to its content
   // and never scrolls, so a reserved gutter there is just a gap on the right.
   //
+  // The prompt is prose in the app's own face, not monospace (Nudge, P7 of
+  // the port): it is read and written as sentences, and the mono face made a
+  // paragraph look like configuration. Both layers take it from this one
+  // string, so the mirror and the textarea still measure alike.
+  //
   // whitespace and overflow-wrap sit here rather than on the mirror alone for
   // the same reason — a textarea's defaults are close enough to be invisible
   // until a long unbroken word disagrees.
   const fieldClass = `w-full rounded-lg border text-xs leading-relaxed whitespace-pre-wrap break-words ${
-    singleLine ? "px-2 py-1.5" : "px-3.5 py-3 font-mono thin-scroll stable-gutter"
+    singleLine ? "px-2 py-1.5" : "px-3.5 py-3 thin-scroll stable-gutter"
   }`;
 
   return (

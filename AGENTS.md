@@ -826,6 +826,16 @@ name only the five calendar tools every version has carried since v1, never
 tool at all (Nudge ba2d956a). A time a tool takes is the business's wall time,
 `YYYY-MM-DDTHH:MM`, never UTC.
 
+**An agent edit lands on its draft and goes live as one named version**
+(2026-10-17, P7 of the Nudge port). Everything the agent page publishes goes
+through `retellAgent.applyAgentEdits` (`docs/subsystems.md` → "Publishing an
+agent"): one draft, one publish titled with what changed, mirrors written
+after the provider accepts it. A new agent-page edit joins that edit set
+rather than publishing on its own. Read an LLM at the version its agent doc
+names (`lib/retellDraft.llmPath`), never bare: after a discard the bare read is
+the orphan. A new outbound dial path passes `override_agent_version` for the
+published version, as `testCall` and `placeCall` do.
+
 **Recogniser hints are derived, and only ours are replaced** (2026-10-13). An
 agent's `boosted_keywords` are this org's name, active team and active
 services (`lib/boostedKeywords`), read by org after the agent is proven to be

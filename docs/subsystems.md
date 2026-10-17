@@ -1316,6 +1316,35 @@ the same registry from their first publish. Customer destinations still pass
 through `contactFields.source === "voice"`; phone, consent and other reserved
 columns never become writable through variable configuration.
 
+### Publishing an agent: one draft, one named version (P7, 2026-10-17)
+
+Every edit the agent page makes goes through `retellAgent.applyAgentEdits`:
+the prompt, the opening line, the voice, the variables and the voicemail
+answer land together on the agent's draft (`lib/retellDraft.draftVersionFor`:
+the latest version when it is unpublished, else a clone of it) and go live as
+ONE version whose `version_title` names what changed (`lib/versionNote`).
+Resepta's mirrors (the chat lane's prompt copy, `voiceAgentVariables`, the
+boosted keywords, `retellAgents.voicemail`) move only after the provider
+accepted that publish. `publishPrompt`, `publishVariables` and the office
+MCP's `publishPromptForOrg` / `publishVariablesForOrg` are wrappers over the
+same core; `publishAgent` with `stage: true` writes the draft and stops.
+
+- The page's version number opens `listVersions` (this agent only, never an
+  account list); Restore reads a version (`readVersion`) into the editor as
+  unsaved edits and never publishes.
+- A draft found at the provider shows as "Unpublished draft"; `publishDraft`
+  puts it live, `discardDraft` deletes it and refuses on a never-published
+  agent.
+- LLM reads carry the version their agent doc points at (`llmPath`): a bare
+  read answers the latest LLM version, the orphan of a discarded draft.
+- `testCall` and `bulkRuns`' `placeCall` dial with `override_agent_version`
+  set to the published version. Inbound is not pinned yet (see the P7
+  journal entry).
+- Voicemail: `retellAgents.voicemail` (off / hangup / static_text / prompt
+  with its text) is the business's choice; unset is the template's hang-up,
+  and `syncTemplate` applies the stored choice, keeping any
+  `detection_prompt` the live agent carries.
+
 ## The calendar and booking sheet after 2026-08-19 (the Google pass — read this before the 2026-07-29 entry in `journal/2026-07.md`)
 
 Serdar's brief: make the calendar and its popup read like Google Calendar,

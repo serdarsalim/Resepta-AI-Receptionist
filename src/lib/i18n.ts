@@ -3525,15 +3525,137 @@ const dictionary = {
     en: "Undo publish",
     de: "Veröffentlichung rückgängig",
   },
-  "voiceDetail.reverting": {
-    tr: "Geri alınıyor…",
-    en: "Reverting…",
-    de: "Wird zurückgesetzt…",
+  // The version history (P7): the agent's own changelog, read from the phone
+  // provider. A version is restored INTO the editor, never straight to live.
+  "voiceDetail.versionHistory": {
+    tr: "Sürüm geçmişi",
+    en: "Version history",
+    de: "Versionsverlauf",
   },
-  "voiceDetail.reverted": {
-    tr: "Önceki talimata geri dönüldü.",
-    en: "Reverted to the previous prompt.",
-    de: "Auf die vorherige Anweisung zurückgesetzt.",
+  "voiceDetail.versionLive": {
+    tr: "yayında",
+    en: "live",
+    de: "live",
+  },
+  "voiceDetail.versionDraft": {
+    tr: "taslak",
+    en: "draft",
+    de: "Entwurf",
+  },
+  "voiceDetail.versionUntitled": {
+    tr: "Not yok",
+    en: "No note",
+    de: "Ohne Notiz",
+  },
+  "voiceDetail.versionsEmpty": {
+    tr: "Henüz sürüm yok.",
+    en: "No versions yet.",
+    de: "Noch keine Versionen.",
+  },
+  "voiceDetail.versionsFailed": {
+    tr: "Sürümler okunamadı.",
+    en: "Could not read the versions.",
+    de: "Die Versionen konnten nicht gelesen werden.",
+  },
+  "voiceDetail.versionRestore": {
+    tr: "Düzenleyiciye al",
+    en: "Restore",
+    de: "Wiederherstellen",
+  },
+  "voiceDetail.restored": {
+    tr: "v{n} düzenleyicide. Yayına almak için Yayınla'ya basın.",
+    en: "v{n} is in the editor. Publish to put it live.",
+    de: "v{n} steht im Editor. Mit Veröffentlichen geht sie live.",
+  },
+  // A draft at the provider that callers do not hear yet: a publish that
+  // stopped half way, a staged test, an edit made in the provider's console.
+  "voiceDetail.draftPending": {
+    tr: "Yayınlanmamış taslak",
+    en: "Unpublished draft",
+    de: "Unveröffentlichter Entwurf",
+  },
+  "voiceDetail.draftPendingHint": {
+    tr: "Bu asistanda arayanların henüz duymadığı değişiklikler var. Yayınla onları yayına alır, Vazgeç siler.",
+    en: "This agent has changes callers do not hear yet. Publish puts them live; Discard throws them away.",
+    de: "Dieser Agent hat Änderungen, die Anrufer noch nicht hören. Veröffentlichen schaltet sie live, Verwerfen löscht sie.",
+  },
+  "voiceDetail.neverPublished": {
+    tr: "Bu asistan hiç yayınlanmadı, dönülecek bir sürüm yok. Önce yayınlayın.",
+    en: "This agent has never been published, so there is no version to go back to. Publish it first.",
+    de: "Dieser Agent wurde nie veröffentlicht, es gibt keine Version zum Zurückgehen. Zuerst veröffentlichen.",
+  },
+  // What the version note says changed. Joined with ", " into one title.
+  "voiceDetail.noteInstructions": {
+    tr: "Talimat",
+    en: "Instructions",
+    de: "Anweisungen",
+  },
+  "voiceDetail.noteOpening": {
+    tr: "Açılış cümlesi",
+    en: "Opening line",
+    de: "Begrüßung",
+  },
+  "voiceDetail.noteVoice": {
+    tr: "Ses",
+    en: "Voice",
+    de: "Stimme",
+  },
+  "voiceDetail.noteVariables": {
+    tr: "Değişkenler",
+    en: "Variables",
+    de: "Variablen",
+  },
+  "voiceDetail.noteVoicemail": {
+    tr: "Sesli mesaj",
+    en: "Voicemail",
+    de: "Mailbox",
+  },
+  // Voicemail (Nudge 8782af94): one dropdown naming every answer, because a
+  // switch beside a second choice was four answers drawn as two controls.
+  "voiceDetail.voicemail": {
+    tr: "Telesekreter",
+    en: "Voicemail",
+    de: "Mailbox",
+  },
+  "voiceDetail.voicemailHint": {
+    tr: "Asistanın aradığı kişi yerine telesekreter açılırsa ne olacağı. Tam metin her seferinde aynı cümleyi bırakır. Talimat ise asistanın mesajı sizin tarifinize göre kendisinin söylemesidir.",
+    en: "What happens when a call the agent places reaches an answering machine. Exact words leaves the same sentence every time. Instructions lets the agent say the message itself, following what you describe.",
+    de: "Was passiert, wenn ein Anruf des Agenten auf einer Mailbox landet. Genauer Wortlaut hinterlässt jedes Mal denselben Satz. Bei Anweisungen spricht der Agent die Nachricht selbst, nach Ihrer Beschreibung.",
+  },
+  "voiceDetail.voicemailOff": {
+    tr: "Algılama kapalı",
+    en: "Don't detect it",
+    de: "Nicht erkennen",
+  },
+  "voiceDetail.voicemailHangup": {
+    tr: "Kapat",
+    en: "Hang up",
+    de: "Auflegen",
+  },
+  "voiceDetail.voicemailStatic": {
+    tr: "Mesaj bırak: tam metin",
+    en: "Leave a message: exact words",
+    de: "Nachricht hinterlassen: genauer Wortlaut",
+  },
+  "voiceDetail.voicemailPrompt": {
+    tr: "Mesaj bırak: talimatla",
+    en: "Leave a message: from instructions",
+    de: "Nachricht hinterlassen: nach Anweisung",
+  },
+  "voiceDetail.voicemailStaticPlaceholder": {
+    tr: "Merhaba, randevunuz için aradık. Uygun olduğunuzda bizi geri arayabilirsiniz.",
+    en: "Hello, this is the team calling about your appointment. Please call us back when it suits you.",
+    de: "Hallo, wir rufen wegen Ihres Termins an. Rufen Sie uns gern zurück, wenn es Ihnen passt.",
+  },
+  "voiceDetail.voicemailPromptPlaceholder": {
+    tr: "Kim olduğunu ve neden aradığını söyle, geri aramalarını rica et. Kısa tut.",
+    en: "Say who is calling and why, and ask them to call back. Keep it short.",
+    de: "Sag, wer anruft und warum, und bitte um Rückruf. Kurz halten.",
+  },
+  "voiceDetail.voicemailTextMissing": {
+    tr: "Bırakılacak mesajı yazın ya da Kapat'ı seçin.",
+    en: "Write the message to leave, or choose Hang up.",
+    de: "Schreiben Sie die Nachricht oder wählen Sie Auflegen.",
   },
   // The two agent shapes this sheet cannot edit, said in the owner's terms.
   // Derived from engineType client-side so the copy translates; the backend

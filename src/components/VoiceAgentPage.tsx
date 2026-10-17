@@ -3,6 +3,7 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import { VoicePicker } from "./VoicePicker";
@@ -10,6 +11,7 @@ import { InfoTip } from "./InfoTip";
 import { useConfirm } from "./ConfirmDialog";
 import { buttonClass, fieldClass } from "./Control";
 import { EditorSaveBar } from "./EditorSaveBar";
+import { AgentVersionHistory } from "./AgentVersionHistory";
 import { PromptEditor } from "./PromptEditor";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
@@ -43,10 +45,14 @@ import {
 // dead space and hid the variables behind a pill nobody clicked — a page that
 // looks empty reads as a page that isn't finished.
 //
-// One Save covers everything. Variables publish first: publishVariables guards
-// on the agent's Retell version, so publishing the prompt first would bump the
-// version out from under it and the variables save would fail with a stale-
-// version error the person did nothing to cause.
+// One Publish covers everything, and it is ONE provider version (P7 of the
+// Nudge port, 2026-10-17): the prompt, the opening line, the voice, the
+// variables and the voicemail answer go to publishAgent together, land on the
+// agent's draft and go live with a note naming what changed. It used to be two
+// publishes, variables then prompt, which doubled the history and briefly let
+// a caller hear one half without the other. The version number beside the
+// prompt's heading opens the history, and Restore loads an older version's
+// words back here as unsaved edits.
 //
 // Unsaved work SURVIVES leaving. There was a leave-guard dialog here that
 // threw the draft away on confirm, which is the wrong trade: a half-written
@@ -58,6 +64,11 @@ type Detail = {
   agentId: string;
   name: string;
   version: number | null;
+  // The latest version is an unpublished draft at the provider.
+  isDraft: boolean;
+  // What callers hear; equals `version` unless a draft sits above it.
+  liveVersion: number | null;
+  voicemail: Voicemail;
   voiceId: string | null;
   voices: {
     id: string;
@@ -93,6 +104,24 @@ type Detail = {
 
 const E164_RE = /^\+[1-9]\d{6,14}$/;
 
+type Voicemail = {
+  action: "off" | "hangup" | "static_text" | "prompt";
+  text?: string;
+};
+
+const VOICEMAIL_OPTIONS: { value: Voicemail["action"]; key: TranslationKey }[] = [
+  { value: "hangup", key: "voiceDetail.voicemailHangup" },
+  { value: "static_text", key: "voiceDetail.voicemailStatic" },
+  { value: "prompt", key: "voiceDetail.voicemailPrompt" },
+  { value: "off", key: "voiceDetail.voicemailOff" },
+];
+
+const leavesMessage = (vm: Voicemail) =>
+  vm.action === "static_text" || vm.action === "prompt";
+
+const sameVoicemail = (a: Voicemail, b: Voicemail) =>
+  a.action === b.action && (!leavesMessage(a) || (a.text ?? "") === (b.text ?? ""));
+
 // The unsaved draft, per agent, on this browser. Deliberately NOT on the
 // server: an unpublished prompt is one person's thinking-in-progress, and
 // syncing it would mean a colleague opening the agent and finding text nobody
@@ -102,6 +131,7 @@ type StoredDraft = {
   begin?: string;
   voice?: string;
   persona?: string;
+  voicemail?: Voicemail;
   rows?: VoiceVariable[];
 };
 
@@ -168,7 +198,11 @@ export function VoiceAgentPage({
 }) {
   const { t } = useLanguage();
   const read = useAction(api.retellAgent.read);
-  const publishPrompt = useAction(api.retellAgent.publishPrompt);
+  const publishAgent = useAction(api.retellAgent.publishAgent);
+  const publishDraft = useAction(api.retellAgent.publishDraft);
+  const discardDraft = useAction(api.retellAgent.discardDraft);
+  const listVersions = useAction(api.retellAgent.listVersions);
+  const readVersion = useAction(api.retellAgent.readVersion);
   const wireWebhook = useAction(api.retellAgent.wireWebhook);
   const syncTemplate = useAction(api.retellAgent.syncTemplate);
   const setAgentPersona = useMutation(api.retell.setAgentPersona);
@@ -195,15 +229,16 @@ export function VoiceAgentPage({
   const [begin, setBegin] = useState("");
   const [persona, setPersona] = useState("");
   const [voice, setVoice] = useState("");
+  const [voicemail, setVoicemail] = useState<Voicemail>({ action: "hangup" });
   // Only one preview plays at a time — clicking down the list otherwise leaves
   // four voices talking over each other.
   const previewRef = useRef<HTMLAudioElement | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  // A note that belongs beside unsaved edits (a restored version, a message
+  // that still needs its words). `status` hides while the page is dirty,
+  // because "Published v5" beside Unsaved would be stale.
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // Kept so an accidental publish is one click to reverse, in the session that
-  // made it. Not persisted: an undo offered after a reload would be a promise
-  // about state nobody checked.
-  const [previous, setPrevious] = useState<string | null>(null);
   const [testOpen, setTestOpen] = useState(false);
   const [testTo, setTestTo] = useState("");
   const [testError, setTestError] = useState<string | null>(null);
@@ -230,6 +265,7 @@ export function VoiceAgentPage({
         setDraft(detail.prompt?.general ?? "");
         setBegin(detail.prompt?.beginMessage ?? "");
         setVoice(detail.voiceId ?? "");
+        setVoicemail(detail.voicemail);
         setPersona(detail.personaName ?? "");
         // A draft left behind on this browser wins over what the server says,
         // because it is the newer intent. The amber Unsaved mark keeps it honest
@@ -240,6 +276,7 @@ export function VoiceAgentPage({
           if (stored.begin !== undefined) setBegin(stored.begin);
           if (stored.voice !== undefined) setVoice(stored.voice);
           if (stored.persona !== undefined) setPersona(stored.persona);
+          if (stored.voicemail !== undefined) setVoicemail(stored.voicemail);
           setSeed(stored.rows ?? null);
         }
         setRestored(true);
@@ -264,13 +301,15 @@ export function VoiceAgentPage({
 
   const voiceDirty = !!detail && voice !== (detail.voiceId ?? "");
   const personaDirty = !!detail && persona.trim() !== (detail.personaName ?? "");
+  const voicemailDirty = !!detail && !sameVoicemail(voicemail, detail.voicemail);
+  const instructionsDirty = !!detail?.prompt && draft !== detail.prompt.general;
+  const openingDirty = !!detail?.prompt && begin !== detail.prompt.beginMessage;
   const promptDirty =
-    (detail?.prompt
-      ? draft !== detail.prompt.general || begin !== detail.prompt.beginMessage
-      : false) ||
-    voiceDirty ||
-    personaDirty;
+    instructionsDirty || openingDirty || voiceDirty || personaDirty || voicemailDirty;
   const dirty = promptDirty || !!varsState?.dirty;
+  // A draft at the provider the page did not make in this session: a publish
+  // that stopped half way, or an edit from the provider's console.
+  const providerDraft = !!detail?.isDraft;
   const saving = busy || !!varsState?.busy;
 
   // The draft follows the edits. Leaving the page, closing the tab or coming
@@ -280,11 +319,18 @@ export function VoiceAgentPage({
   useEffect(() => {
     if (!restored) return;
     if (dirty) {
-      writeDraft(agentId, { prompt: draft, begin, voice, persona, rows: varsState?.rows });
+      writeDraft(agentId, {
+        prompt: draft,
+        begin,
+        voice,
+        persona,
+        voicemail,
+        rows: varsState?.rows,
+      });
     } else {
       clearDraft(agentId);
     }
-  }, [restored, dirty, agentId, draft, begin, voice, persona, varsState?.rows]);
+  }, [restored, dirty, agentId, draft, begin, voice, persona, voicemail, varsState?.rows]);
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(true);
@@ -299,38 +345,85 @@ export function VoiceAgentPage({
     setBusy(false);
   };
 
-  const savePrompt = () =>
-    run(t("voiceDetail.publishing"), async () => {
-      const res = (await publishPrompt({
+  // Everything the provider holds, as ONE version. The note names what
+  // changed, in the business's language, so the history reads as a changelog.
+  const savePrompt = () => {
+    if (voicemailDirty && leavesMessage(voicemail) && !voicemail.text?.trim()) {
+      setNotice(t("voiceDetail.voicemailTextMissing"));
+      return;
+    }
+    setNotice(null);
+    const varsDirty = !!varsState?.dirty;
+    const changed = [
+      instructionsDirty && t("voiceDetail.noteInstructions"),
+      openingDirty && t("voiceDetail.noteOpening"),
+      voiceDirty && t("voiceDetail.noteVoice"),
+      varsDirty && t("voiceDetail.noteVariables"),
+      voicemailDirty && t("voiceDetail.noteVoicemail"),
+    ].filter((part): part is string => typeof part === "string");
+    if (changed.length === 0) return;
+    void run(t("voiceDetail.publishing"), async () => {
+      const res = await publishAgent({
         agentId,
-        generalPrompt: draft,
-        beginMessage: begin,
-        // Only when it changed: an unchanged voice sent every time is a field
-        // the undo path would drag back with an old prompt.
+        ...(detail?.version !== null && detail?.version !== undefined
+          ? { baseVersion: detail.version }
+          : {}),
+        ...(instructionsDirty ? { generalPrompt: draft } : {}),
+        ...(openingDirty ? { beginMessage: begin } : {}),
+        // Only when it changed: an unchanged voice sent every time would ride
+        // a restore back over a voice somebody picked since.
         ...(voiceDirty ? { voiceId: voice } : {}),
-      })) as { previousPrompt: string; version: number | null };
-      setPrevious(res.previousPrompt);
-      setStatus(t("voiceDetail.published", { n: res.version ?? "?" }));
+        ...(voicemailDirty ? { voicemail } : {}),
+        ...(varsDirty && varsState
+          ? {
+              variables: varsState.rows.map((row) => ({
+                ...row,
+                beforeFieldId: row.beforeFieldId as Id<"contactFields"> | undefined,
+                contactFieldId: row.contactFieldId as Id<"contactFields"> | undefined,
+              })),
+            }
+          : {}),
+        versionNote: { title: changed.join(", ") },
+      });
+      setSeed(null);
+      clearDraft(agentId);
+      setStatus(t("voiceDetail.published", { n: res.version }));
       load();
     });
+  };
 
-  // Variables first, then the prompt — see the version note at the top.
+  const providerChanges =
+    instructionsDirty || openingDirty || voiceDirty || voicemailDirty || !!varsState?.dirty;
+
   const saveAll = () => {
-    setSeed(null);
-    if (varsState?.dirty) varsState.save();
-    // Separate from savePrompt on purpose: the name never goes to the
-    // provider, so it must not ride a provider publish that could fail, and
-    // it must still save when the prompt itself is untouched.
+    // Separate from the provider publish on purpose: the name never goes to
+    // the provider, so it must not ride a publish that could fail, and it
+    // must still save when nothing else changed.
     if (personaDirty) {
       void setAgentPersona({ retellAgentId: agentId, personaName: persona.trim() })
         .then(load)
         .catch(() => setError(t("forms.failed")));
     }
-    if (promptDirty) void savePrompt();
-    clearDraft(agentId);
+    if (providerChanges) {
+      savePrompt();
+      return;
+    }
+    if (personaDirty) {
+      clearDraft(agentId);
+      return;
+    }
+    // Nothing of ours to send, but a draft is waiting at the provider.
+    if (providerDraft) {
+      void run(t("voiceDetail.publishing"), async () => {
+        const res = await publishDraft({ agentId });
+        setStatus(t("voiceDetail.published", { n: res.version }));
+        load();
+      });
+    }
   };
 
-  // The only way work is thrown away, and it takes a deliberate click.
+  // The only way work is thrown away, and it takes a deliberate click. A
+  // draft at the provider goes too, so the page and what callers hear agree.
   const discardAll = () => {
     setSeed(null);
     varsState?.discard();
@@ -338,9 +431,37 @@ export function VoiceAgentPage({
     setBegin(detail?.prompt?.beginMessage ?? "");
     setVoice(detail?.voiceId ?? "");
     setPersona(detail?.personaName ?? "");
+    if (detail) setVoicemail(detail.voicemail);
     clearDraft(agentId);
     setStatus(null);
+    setNotice(null);
+    if (providerDraft) {
+      setBusy(true);
+      void discardDraft({ agentId })
+        .then(() => load())
+        .catch((err: unknown) => {
+          setStatus(
+            err instanceof Error && err.message.includes("never-published")
+              ? t("voiceDetail.neverPublished")
+              : t("settings.voiceActionFailed"),
+          );
+        })
+        .finally(() => setBusy(false));
+    }
   };
+
+  // An older version's words, back in the editor as unsaved edits. Publish
+  // is still the only way they reach a caller.
+  const restoreVersion = (version: number) =>
+    void run(t("common.loading"), async () => {
+      const words = await readVersion({ agentId, version });
+      if (words.generalPrompt !== null) setDraft(words.generalPrompt);
+      if (words.beginMessage !== null) setBegin(words.beginMessage);
+      if (words.voiceId) setVoice(words.voiceId);
+      setNotice(t("voiceDetail.restored", { n: version }));
+    });
+
+  const loadVersions = useCallback(() => listVersions({ agentId }), [listVersions, agentId]);
 
   // Binding a line is immediate and unrelated to the draft: it changes which
   // phone rings this agent, not what the agent says. Riding Save would mean an
@@ -494,10 +615,12 @@ export function VoiceAgentPage({
               implied by an enabled button: an edited prompt looks live, and
               the agent is still answering the phone with the version Retell
               has. */}
-          {dirty && (
+          {(dirty || providerDraft) && (
             <EditorSaveBar
-              status={t("voiceDetail.unsaved")}
-              statusTitle={t("voiceDetail.unsavedHint")}
+              status={dirty ? t("voiceDetail.unsaved") : t("voiceDetail.draftPending")}
+              statusTitle={
+                dirty ? t("voiceDetail.unsavedHint") : t("voiceDetail.draftPendingHint")
+              }
               onDiscard={discardAll}
               discardLabel={t("voiceDetail.discard")}
               onSave={saveAll}
@@ -505,7 +628,10 @@ export function VoiceAgentPage({
               busy={saving}
             />
           )}
-          {status && !dirty && (
+          {notice && (
+            <span className="shrink-0 text-xs text-amber-700 dark:text-amber-400">{notice}</span>
+          )}
+          {status && !dirty && !providerDraft && (
             <span className="shrink-0 text-xs text-[var(--muted)]">{status}</span>
           )}
           {lineError && (
@@ -661,7 +787,14 @@ export function VoiceAgentPage({
                   <h4 className="text-xs font-medium">{t("voiceDetail.prompt")}</h4>
                   <InfoTip text={t("voiceDetail.promptHint")} />
                   {detail.version !== null && (
-                    <span className="text-xs text-[var(--muted)]">v{detail.version}</span>
+                    <AgentVersionHistory
+                      version={detail.version}
+                      liveVersion={detail.liveVersion}
+                      draft={detail.isDraft}
+                      load={loadVersions}
+                      onRestore={restoreVersion}
+                      disabled={saving}
+                    />
                   )}
                 </div>
                 <PromptEditor value={draft} onChange={setDraft} variables={promptVariables} />
@@ -734,6 +867,52 @@ export function VoiceAgentPage({
                     />
                   </div>
 
+                  {/* One dropdown naming every answer (Nudge 8782af94). Rides
+                      Publish like the voice: it is part of how the agent
+                      behaves on a call, and the version note says so. */}
+                  <label
+                    htmlFor="agent-voicemail"
+                    className="flex items-center gap-1.5 self-start pt-1.5 text-xs font-medium"
+                  >
+                    {t("voiceDetail.voicemail")}
+                    <InfoTip text={t("voiceDetail.voicemailHint")} />
+                  </label>
+                  <div className="min-w-0 space-y-2">
+                    <select
+                      id="agent-voicemail"
+                      value={voicemail.action}
+                      onChange={(event) =>
+                        setVoicemail({
+                          action: event.target.value as Voicemail["action"],
+                          text: voicemail.text,
+                        })
+                      }
+                      className={`${fieldClass("sm")} w-full`}
+                    >
+                      {VOICEMAIL_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {t(option.key)}
+                        </option>
+                      ))}
+                    </select>
+                    {leavesMessage(voicemail) && (
+                      <textarea
+                        value={voicemail.text ?? ""}
+                        onChange={(event) =>
+                          setVoicemail({ action: voicemail.action, text: event.target.value })
+                        }
+                        rows={3}
+                        maxLength={600}
+                        placeholder={
+                          voicemail.action === "static_text"
+                            ? t("voiceDetail.voicemailStaticPlaceholder")
+                            : t("voiceDetail.voicemailPromptPlaceholder")
+                        }
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-xs"
+                      />
+                    )}
+                  </div>
+
                   <span className="flex items-center gap-1.5 text-xs font-medium">
                     {t("voiceDetail.canEndCall")}
                     <InfoTip text={t("voiceDetail.canEndCallHint")} />
@@ -753,23 +932,6 @@ export function VoiceAgentPage({
                   </span>
                 </div>
 
-                {previous !== null && !promptDirty && (
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() =>
-                      void run(t("voiceDetail.reverting"), async () => {
-                        await publishPrompt({ agentId, generalPrompt: previous });
-                        setPrevious(null);
-                        setStatus(t("voiceDetail.reverted"));
-                        load();
-                      })
-                    }
-                    className="mt-3 rounded-lg px-2 py-1.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
-                  >
-                    {t("voiceDetail.undo")}
-                  </button>
-                )}
               </div>
             )}
 
@@ -825,13 +987,21 @@ export function VoiceAgentPage({
                   it. */}
               <div className="ml-auto">
                 <EditorSaveBar
-                  status={dirty ? t("voiceDetail.unsaved") : null}
-                  statusTitle={t("voiceDetail.unsavedHint")}
-                  onDiscard={dirty ? discardAll : undefined}
+                  status={
+                    dirty
+                      ? t("voiceDetail.unsaved")
+                      : providerDraft
+                        ? t("voiceDetail.draftPending")
+                        : null
+                  }
+                  statusTitle={
+                    dirty ? t("voiceDetail.unsavedHint") : t("voiceDetail.draftPendingHint")
+                  }
+                  onDiscard={dirty || providerDraft ? discardAll : undefined}
                   discardLabel={t("voiceDetail.discard")}
                   onSave={saveAll}
                   saveLabel={saving ? t("voiceDetail.publishing") : t("voiceDetail.publish")}
-                  saveDisabled={!dirty}
+                  saveDisabled={!dirty && !providerDraft}
                   busy={saving}
                 />
               </div>
