@@ -33,6 +33,7 @@ import { v, type Infer } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { isDeleting } from "./customerDeletion";
+import { htmlToText } from "./emailInbound";
 
 export const channel = v.union(
   v.literal("whatsapp"),
@@ -150,6 +151,20 @@ function compact<T extends Record<string, unknown>>(obj: T): T {
   return out as T;
 }
 
+// What a row previews as. An email that arrived as HTML alone (many senders
+// send no plain part) used to preview as nothing, or as its markup when the
+// markup landed in `body`; the Inbox row now reads its text (P13, Nudge's
+// HTML-only preview fix). Never stored as the message's body: this is the
+// summary's one-line preview only.
+function previewText(m: Doc<"messages">): string | undefined {
+  const body = m.body?.trim();
+  if (body && !/<[a-z][\s\S]*>/i.test(body)) return m.body;
+  const html = body || m.emailHtml?.trim();
+  if (!html) return m.body;
+  const text = htmlToText(html).replace(/\s+/g, " ").trim();
+  return text || undefined;
+}
+
 export function entryOfMessage(m: Doc<"messages">): ThreadEntry | null {
   if (neverLeftSilently(m)) return null;
   return {
@@ -157,7 +172,7 @@ export function entryOfMessage(m: Doc<"messages">): ThreadEntry | null {
     channel: channelOfMessage(m.kind),
     at: m.occurredAt ?? m._creationTime,
     direction: m.direction,
-    body: m.body,
+    body: previewText(m),
     mediaContentType: m.mediaContentType,
     mediaFileName: m.mediaFileName,
     failed: m.status === "failed",
