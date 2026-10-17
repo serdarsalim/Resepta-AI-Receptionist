@@ -1890,6 +1890,26 @@ const dictionary = {
   },
   "message.quoteYou": { tr: "Siz", en: "You", de: "Sie" },
   "message.reply": { tr: "Yanıtla", en: "Reply", de: "Antworten" },
+  // The WhatsApp bubble's menu (P23): right-click a message or its corner
+  // chevron.
+  "message.menu": { tr: "Mesaj menüsü", en: "Message menu", de: "Nachrichtenmenü" },
+  "message.copy": { tr: "Kopyala", en: "Copy", de: "Kopieren" },
+  "message.addToNote": { tr: "Nota ekle", en: "Add to note", de: "Als Notiz speichern" },
+  "message.addedToNote": {
+    tr: "Notlara eklendi",
+    en: "Added to notes",
+    de: "Zu den Notizen hinzugefügt",
+  },
+  "message.addToNoteFailed": {
+    tr: "Not eklenemedi.",
+    en: "The note could not be added.",
+    de: "Die Notiz konnte nicht gespeichert werden.",
+  },
+  "message.moreReactions": {
+    tr: "Diğer tepkiler",
+    en: "More reactions",
+    de: "Weitere Reaktionen",
+  },
   "message.quoteMedia": { tr: "Medya", en: "Media", de: "Medien" },
   "message.template": {
     tr: "Şablon mesajı",

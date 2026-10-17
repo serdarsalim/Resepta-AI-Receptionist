@@ -126,6 +126,17 @@ wins. Moved out of AGENTS.md on 2026-09-03, text as it stood then.
     reaction is exactly the signal nobody goes back to verify.
   - The Evolution lane refuses (`EVOLUTION_NO_REACTION`): reacting over Baileys
     needs the full message key, which that lane never stored.
+  - The feed says where a reaction can land (`canReact`: inbound, a wamid,
+    not the Evolution lane), so the bubble's React button and its menu offer
+    it only there (P23, 2026-10-17). The server's refusals stay as the guard.
+- **The bubble menu (P23, 2026-10-17).** Right-click a WhatsApp bubble or its
+  hover chevron (on a phone, the tapped bubble's): Reply (`canQuote`), Copy
+  (the raw body, so WhatsApp's *bold* survives a paste back into WhatsApp),
+  React (quick reactions 👍 ❤️ 😂 😮 🙏 above the items, "+" and React open the
+  full picker; no thumbs-down, angry or crying face) and Add to note (the
+  Notes tab's `notes.add`, any member). One menu per thread on
+  `ContextMenu`'s `header` and `replacement` slots. A template send with no
+  stored body offers Reply only.
 - **Template approval (2026-08-26, `convex/waTemplates.ts` +
   `convex/lib/metaTemplate.ts`).** A `waTemplates` row IS the submission:
   `submit` converts the authored named-token body to Meta's positional

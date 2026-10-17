@@ -1261,6 +1261,12 @@ every read path goes through. A new read path or unread count must honour it;
 a deleted stamp cannot make an old conversation unread, because the floor
 already calls it read. The Inbox's chips are All / Unread / Pinned, always
 all three, exactly one lit, and a lit chip never toggles off.
+A WhatsApp MESSAGE has one too (P23, Nudge daddc71e): right-click a bubble
+or its corner chevron for Reply, Copy, React (the quick reactions sit above
+the items, the full panel swaps in on "+") and Add to note. Both menus share
+`components/ContextMenu.tsx`; a new context menu uses it. Each item follows
+its bubble's own gate, and React shows only where the server's `canReact`
+says a reaction can reach the customer.
 
 **A pin lasts until it is unpinned** (2026-10-17, P13; Nudge 0e23423f). It
 used to be SPENT by the next outbound, and every outbound counts, reminders

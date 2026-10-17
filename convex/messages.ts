@@ -609,6 +609,11 @@ const feedItem = v.object({
   // A boolean, not the wamid itself: the id is a provider handle the client
   // has no business holding.
   canQuote: v.optional(v.boolean()),
+  // Whether a reaction to this row can reach the customer: their own message,
+  // with a provider id, on the Cloud lane (the shop phone keeps no message key
+  // to react with, wa.reactToMessage). The bubble's React and its menu offer
+  // it only then, rather than offering it and answering with a refusal.
+  canReact: v.optional(v.boolean()),
   // Set while a send is waiting for its moment. The bubble counts down to it
   // and can be cancelled until the cron picks it up.
   scheduledFor: v.optional(v.number()),
@@ -757,6 +762,10 @@ export const feedForCustomer = query({
         replyToBody: m.replyToBody,
         replyToDirection: m.replyToDirection,
         canQuote: m.wamid !== undefined ? true : undefined,
+        canReact:
+          m.direction === "in" && m.wamid !== undefined && m.lane !== "evolution"
+            ? true
+            : undefined,
         scheduledFor: m.scheduledFor,
         // The stamp when the row carries one; the derivation only for rows
         // that predate it. templateName is the proof a Cloud template

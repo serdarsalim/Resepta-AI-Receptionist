@@ -30,7 +30,15 @@ import { waFailureKind, type WaFailureKind } from "../../convex/lib/waFailure";
 import { waFormat } from "@/lib/waFormat";
 import { isFileDrag, MEDIA_ACCEPT, pastedFiles } from "@/lib/mediaFiles";
 import { useLibraryUpload, type LibraryAsset } from "@/lib/useLibraryUpload";
-import { EmojiPicker } from "./EmojiPicker";
+import { EMOJI_PANEL_H, EMOJI_PANEL_W, EmojiPanel, EmojiPicker } from "./EmojiPicker";
+import {
+  ContextMenu,
+  MenuIcon,
+  QuickReactions,
+  useContextMenu,
+  type ContextMenuItem,
+  type MenuEdge,
+} from "./ContextMenu";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 
 // The header row above the feed has to sit in the same column as the feed, or
@@ -63,6 +71,14 @@ import { splitQuotedHtml, splitQuotedText } from "../../convex/lib/emailQuote";
 import { HoverTip } from "./HoverTip";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
+
+// One row of a customer's feed, as the panel receives it.
+type FeedRow = FunctionReturnType<typeof api.messages.feedForCustomer>[number];
+
+// The bubble menu's footprint while it carries the quick-reaction row (five
+// 36px glyphs and a "+", P23) above its four items.
+const BUBBLE_MENU_REACT_W = 240;
+const BUBBLE_MENU_REACT_H = 4 * 36 + 8 + 8 + 44;
 
 // 95 seconds reads as 1:35, not "95s". Shared by the call list and the call
 // detail so the same call never wears two different lengths.
@@ -337,6 +353,21 @@ export function ConversationPanel({
   const [confirmCall, confirmCallDialog] = useConfirm();
   const toast = useToast();
   const threadRef = useRef<HTMLDivElement>(null);
+  // The WhatsApp bubble's menu (P23, Nudge daddc71e): right-click a message
+  // (opens at the cursor) or its corner chevron (opens under it). ONE menu
+  // for the thread, aimed at whichever bubble asked, on the Inbox row menu's
+  // primitive. With reactions it carries the quick-reaction row above its
+  // items, and React (or that row's "+") swaps the full emoji panel in.
+  const [bubblePicker, setBubblePicker] = useState(false);
+  const [bubbleReacts, setBubbleReacts] = useState(false);
+  const bubbleMenu = useContextMenu<string>(4, {
+    width: bubblePicker ? EMOJI_PANEL_W : bubbleReacts ? BUBBLE_MENU_REACT_W : undefined,
+    height: bubblePicker
+      ? EMOJI_PANEL_H
+      : bubbleReacts
+        ? BUBBLE_MENU_REACT_H
+        : undefined,
+  });
 
   const visible = (feed ?? []).filter(
     (item) =>
@@ -371,6 +402,7 @@ export function ConversationPanel({
 
   const inScope = visible;
   const thread = chatOrder ? [...inScope].reverse() : inScope;
+
 
   // ---- Reading a thread you are already in --------------------------------
   //
@@ -559,6 +591,34 @@ export function ConversationPanel({
   // type back into. The notes tab has its own, at the top.
   const canCompose = filter === "all" || filter === "whatsapp";
 
+  // What a bubble's menu may offer, on the same gates as the bubble's own
+  // actions: Reply where the row can be quoted, React where a reaction can
+  // reach the customer (the server's canReact: their message, on the Cloud
+  // lane), Copy and Add to note where there are words. Both sending actions
+  // need this pane's composer.
+  const bubbleGates = (item: FeedRow) => {
+    const whatsapp = item.channel === "whatsapp";
+    const text = whatsapp && "body" in item && item.body?.trim() ? item.body : "";
+    const canReply = canCompose && whatsapp && "canQuote" in item && !!item.canQuote;
+    const canReact = canCompose && whatsapp && "canReact" in item && !!item.canReact;
+    return { text, canReply, canReact, any: canReply || canReact || text !== "" };
+  };
+  const openBubbleMenuAt = (item: FeedRow, x: number, y: number) => {
+    setBubblePicker(false);
+    setBubbleReacts(bubbleGates(item).canReact);
+    bubbleMenu.openAt(item.id, x, y);
+  };
+  const openBubbleMenuUnder = (item: FeedRow, el: HTMLElement, edge: MenuEdge) => {
+    setBubblePicker(false);
+    setBubbleReacts(bubbleGates(item).canReact);
+    bubbleMenu.openUnder(item.id, el, edge);
+  };
+  // The menu acts on the row as it is NOW: a reaction may have landed since
+  // it opened.
+  const menuRow = bubbleMenu.target
+    ? (thread.find((row) => row.id === bubbleMenu.target) ?? null)
+    : null;
+
   // Paste or drop a file and it is uploaded into the library and attached to
   // this message, without opening the library first (P14, Nudge's composers).
   // The + tile in the library takes the same path.
@@ -598,6 +658,36 @@ export function ConversationPanel({
       setNoteOpen(false);
     } finally {
       setNoteSaving(false);
+    }
+  };
+
+  // Reacting, shared by the bubble's own React button and its menu. Picking
+  // the emoji already on the message takes it back, the same gesture
+  // WhatsApp uses and the same request (an empty emoji IS the unreact).
+  const reactTo = async (messageId: string, current: string | undefined, emoji: string) => {
+    // The job is done; the summoned icons leave with it.
+    setActionsFor(null);
+    setSendError(null);
+    try {
+      const result = await react({
+        messageId: messageId as Id<"messages">,
+        emoji: current === emoji ? "" : emoji,
+      });
+      if (!result.ok) setSendError(result.reason ?? "reaction-failed");
+    } catch {
+      setSendError("reaction-failed");
+    }
+  };
+
+  // The bubble menu's "Add to note": the Notes tab's own write, with the
+  // message's words as the body. Said in a toast, since the notes tab is not
+  // on screen while you are in the thread.
+  const addMessageToNote = async (text: string) => {
+    try {
+      await addNote({ customerId, body: plainToHtml(text.trim()) });
+      toast(t("message.addedToNote"));
+    } catch {
+      toast(t("message.addToNoteFailed"));
     }
   };
 
@@ -1257,6 +1347,8 @@ export function ConversationPanel({
             !previous ||
             previous.channel === "note" ||
             previous.direction !== item.direction;
+          const gates = bubbleGates(item);
+          const menuOpenHere = bubbleMenu.target === item.id;
           return (
             <Fragment key={item.id}>
             {daySeparator}
@@ -1307,10 +1399,19 @@ export function ConversationPanel({
               onClick={() =>
                 setActionsFor((current) => (current === item.id ? null : item.id))
               }
+              // WhatsApp Web's right-click: the message menu at the cursor.
+              onContextMenu={
+                gates.any
+                  ? (e) => {
+                      e.preventDefault();
+                      openBubbleMenuAt(item, e.clientX, e.clientY);
+                    }
+                  : undefined
+              }
               // The tail is WhatsApp's: on the first bubble of a run, at its TOP
               // corner, with that corner squared off (P10; the squared bottom
               // corner it replaced was this app's own paraphrase).
-              className={`relative w-fit max-w-full rounded-lg text-sm text-[var(--chat-ink)] shadow-[var(--bubble-shadow)] ${
+              className={`group/bubble relative w-fit max-w-full rounded-lg text-sm text-[var(--chat-ink)] shadow-[var(--bubble-shadow)] ${
                 outbound
                   ? `self-end ${runStart ? "rounded-tr-none " : ""}bg-[var(--chat-out)]`
                   : `${runStart ? "rounded-tl-none " : ""}bg-[var(--chat-in)]`
@@ -1355,6 +1456,38 @@ export function ConversationPanel({
                     }
                   />
                 </svg>
+              )}
+              {/* WhatsApp Web's chevron, in the bubble's top-right corner on
+                  hover (on a phone, with the tapped bubble's other controls).
+                  Over the content rather than beside it, so the bubble never
+                  changes size. */}
+              {gates.any && (
+                <HoverTip text={t("message.menu")} className="contents" disabled={menuOpenHere}>
+                  <button
+                    type="button"
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpenHere}
+                    aria-label={t("message.menu")}
+                    onClick={(e) => {
+                      // Not the bubble's tap, which toggles the phone controls.
+                      e.stopPropagation();
+                      if (menuOpenHere) {
+                        bubbleMenu.close();
+                        return;
+                      }
+                      openBubbleMenuUnder(item, e.currentTarget, outbound ? "end" : "start");
+                    }}
+                    className={`absolute right-1 top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full text-[var(--chat-stamp)] shadow-[var(--bubble-shadow)] transition-opacity hover:text-[var(--chat-ink)] focus-visible:opacity-100 ${
+                      outbound ? "bg-[var(--chat-out)]" : "bg-[var(--chat-in)]"
+                    } ${
+                      menuOpenHere || actionsFor === item.id
+                        ? "opacity-100"
+                        : "pointer-events-none opacity-0 sm:pointer-events-auto sm:group-hover/bubble:opacity-100"
+                    }`}
+                  >
+                    <MenuIcon name="chevron" />
+                  </button>
+                </HoverTip>
               )}
               {/* The text row is its own flex box rather than the bubble
                   itself being one, because a template send's quick-reply rows
@@ -1545,7 +1678,9 @@ export function ConversationPanel({
             </div>
             {/* Reacting is the cheapest honest answer a busy salon has, and it
                 is only offered on the customer's own lines: one emoji field per
-                message, and reacting to ourselves would overwrite theirs.
+                message, and reacting to ourselves would overwrite theirs. And
+                only where it can reach them (canReact): the shop phone keeps
+                no message key to react with.
                 Hover-revealed on a pointer; on a phone, revealed by tapping
                 the bubble (actionsFor) — the always-visible fallback put two
                 grey icons on every line of the thread, which read as noise,
@@ -1553,7 +1688,7 @@ export function ConversationPanel({
                 invisible button can't eat the tap meant for the bubble. */}
             {canCompose &&
               item.channel === "whatsapp" &&
-              item.direction === "in" && (
+              item.canReact && (
                 <EmojiPicker
                   title={t("message.react")}
                   className={`mb-1 shrink-0 rounded-full p-1 text-[var(--muted)] transition hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] ${
@@ -1561,19 +1696,7 @@ export function ConversationPanel({
                       ? "opacity-60"
                       : "pointer-events-none opacity-0"
                   } sm:pointer-events-auto sm:opacity-0 sm:group-hover:opacity-100`}
-                  onPick={async (emoji) => {
-                    // The job is done; the summoned icons leave with it.
-                    setActionsFor(null);
-                    setSendError(null);
-                    const result = await react({
-                      messageId: item.id as Id<"messages">,
-                      // Clicking the emoji already on the message takes it
-                      // back, which is the same gesture WhatsApp uses and the
-                      // only way to remove one without a second control.
-                      emoji: item.reactionEmoji === emoji ? "" : emoji,
-                    });
-                    if (!result.ok) setSendError(result.reason ?? "reaction-failed");
-                  }}
+                  onPick={(emoji) => void reactTo(item.id, item.reactionEmoji, emoji)}
                 >
                   <svg
                     viewBox="0 0 24 24"
@@ -1627,6 +1750,38 @@ export function ConversationPanel({
           );
         })}
       </div>
+
+      {menuRow && menuRow.channel === "whatsapp" && (
+        <BubbleMenu
+          row={menuRow}
+          menu={bubbleMenu}
+          gates={bubbleGates(menuRow)}
+          picker={bubblePicker}
+          onPicker={() => setBubblePicker(true)}
+          onReply={() => {
+            setReplyTo({
+              id: menuRow.id,
+              body: ("body" in menuRow && menuRow.body) || "",
+              direction: menuRow.direction === "out" ? "out" : "in",
+            });
+            composerRef.current?.focus();
+          }}
+          onReact={(emoji) =>
+            void reactTo(
+              menuRow.id,
+              "reactionEmoji" in menuRow ? menuRow.reactionEmoji : undefined,
+              emoji,
+            )
+          }
+          onCopy={(text) =>
+            void navigator.clipboard
+              .writeText(text)
+              .then(() => toast(t("common.copied")))
+              .catch(() => {})
+          }
+          onAddToNote={(text) => void addMessageToNote(text)}
+        />
+      )}
 
       {/* The staged file, where the thread was (Serdar, 2026-08-27: a
           proper surface for sending files, WhatsApp Web's own pattern
@@ -1968,6 +2123,76 @@ export function ConversationPanel({
       )}
       {confirmCallDialog}
     </div>
+  );
+}
+
+// The WhatsApp bubble's menu (P23, Nudge daddc71e, e02706eb): Reply, Copy,
+// React, Add to note, with the quick reactions above them where a reaction
+// can reach the customer. Serdar's four in Nudge: Forward belongs to bulk
+// sends, Pin and Star add nothing, and Delete would make the history lie,
+// since unsending is not reliable.
+function BubbleMenu({
+  row,
+  menu,
+  gates,
+  picker,
+  onPicker,
+  onReply,
+  onReact,
+  onCopy,
+  onAddToNote,
+}: {
+  row: FeedRow;
+  menu: ReturnType<typeof useContextMenu<string>>;
+  gates: { text: string; canReply: boolean; canReact: boolean };
+  picker: boolean;
+  onPicker: () => void;
+  onReply: () => void;
+  onReact: (emoji: string) => void;
+  onCopy: (text: string) => void;
+  onAddToNote: (text: string) => void;
+}) {
+  const { t } = useLanguage();
+  const { panelRef, pos, close, edge } = menu;
+  const current = "reactionEmoji" in row ? row.reactionEmoji : undefined;
+  const items: ContextMenuItem[] = [];
+  if (gates.canReply) {
+    items.push({ key: "reply", icon: <MenuIcon name="reply" />, label: t("message.reply"), onSelect: onReply });
+  }
+  if (gates.text) {
+    items.push({ key: "copy", icon: <MenuIcon name="copy" />, label: t("message.copy"), onSelect: () => onCopy(gates.text) });
+  }
+  if (gates.canReact) {
+    items.push({ key: "react", icon: <MenuIcon name="react" />, label: t("message.react"), keepOpen: true, onSelect: onPicker });
+  }
+  if (gates.text) {
+    items.push({ key: "note", icon: <MenuIcon name="note" />, label: t("message.addToNote"), onSelect: () => onAddToNote(gates.text) });
+  }
+  const pick = (emoji: string) => {
+    close();
+    onReact(emoji);
+  };
+  return (
+    <ContextMenu
+      panelRef={panelRef}
+      pos={pos}
+      open
+      onClose={close}
+      label={t("message.menu")}
+      items={items}
+      edge={edge}
+      header={
+        gates.canReact ? (
+          <QuickReactions
+            current={current}
+            onPick={pick}
+            onMore={onPicker}
+            moreLabel={t("message.moreReactions")}
+          />
+        ) : undefined
+      }
+      replacement={picker ? <EmojiPanel onPick={pick} /> : undefined}
+    />
   );
 }
 

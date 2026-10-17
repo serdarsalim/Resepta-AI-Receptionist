@@ -44,9 +44,6 @@ export function EmojiPicker({
     PANEL_H,
   );
 
-  const dark =
-    typeof document !== "undefined" && document.documentElement.classList.contains("dark");
-
   return (
     <>
       <HoverTip text={title} disabled={disabled || Boolean(pos)}>
@@ -74,21 +71,38 @@ export function EmojiPicker({
               zIndex: 60,
             }}
           >
-            <Picker
-              onEmojiClick={(d: EmojiClickData) => {
-                onPick(d.emoji);
+            <EmojiPanel
+              onPick={(emoji) => {
+                onPick(emoji);
                 close();
               }}
-              theme={dark ? Theme.DARK : Theme.LIGHT}
-              emojiStyle={EmojiStyle.NATIVE}
-              lazyLoadEmojis
-              width={PANEL_W}
-              height={PANEL_H}
-              previewConfig={{ showPreview: false }}
             />
           </div>,
           document.body,
         )}
     </>
+  );
+}
+
+// The panel itself, inline (no button, no portal), for a caller that already
+// owns a floating container: the WhatsApp bubble menu, which swaps it in for
+// its items once React or the quick reactions' "+" is picked (P23, Nudge
+// daddc71e). Its footprint is EMOJI_PANEL_W by EMOJI_PANEL_H.
+export const EMOJI_PANEL_W = PANEL_W;
+export const EMOJI_PANEL_H = PANEL_H;
+
+export function EmojiPanel({ onPick }: { onPick: (emoji: string) => void }) {
+  const dark =
+    typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+  return (
+    <Picker
+      onEmojiClick={(d: EmojiClickData) => onPick(d.emoji)}
+      theme={dark ? Theme.DARK : Theme.LIGHT}
+      emojiStyle={EmojiStyle.NATIVE}
+      lazyLoadEmojis
+      width={PANEL_W}
+      height={PANEL_H}
+      previewConfig={{ showPreview: false }}
+    />
   );
 }

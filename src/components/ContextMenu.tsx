@@ -29,24 +29,38 @@ export type ContextMenuItem = {
   // Red, for the verb that destroys something.
   danger?: boolean;
   disabled?: boolean;
+  // Leaves the menu open after onSelect, for an item that changes what the
+  // menu shows rather than acting.
+  keepOpen?: boolean;
 };
 
-type Anchor = { el: HTMLElement } | { x: number; y: number };
+// Which edge of the chevron the menu lines up on: "end" opens leftward from
+// a chevron at a row's right end (the Inbox row), "start" rightward from one
+// on a left-hand bubble (a customer's WhatsApp message).
+export type MenuEdge = "start" | "end";
+
+type Anchor = { el: HTMLElement; edge: MenuEdge } | { x: number; y: number };
 
 const MENU_WIDTH = 224;
 const ITEM_HEIGHT = 36;
 
 // The state of one list's menu: what it is about (`target`, the caller's own
 // key) and where it hangs. `itemCount` sizes the panel for the flip decision.
-export function useContextMenu<T>(itemCount: number) {
+// `width` and `height` override the footprint for a menu that carries more
+// than items: the WhatsApp bubble menu's quick reactions above its items, and
+// the full emoji panel that replaces them. A change while open re-places it.
+export function useContextMenu<T>(
+  itemCount: number,
+  { width = MENU_WIDTH, height }: { width?: number; height?: number } = {},
+) {
   const anchorRef = useRef<Anchor | null>(null);
   // The chevron that opened the menu counts as "inside" for the outside-click
   // test, so clicking it again closes the menu instead of closing and then
   // reopening it.
   const triggerRef = useRef<HTMLElement | null>(null);
   const panel = useAnchoredPanel<HTMLElement>(
-    MENU_WIDTH,
-    itemCount * ITEM_HEIGHT + 8,
+    width,
+    height ?? itemCount * ITEM_HEIGHT + 8,
     "left",
     {
       triggerRef,
@@ -55,15 +69,18 @@ export function useContextMenu<T>(itemCount: number) {
         if (!anchor) return null;
         if ("el" in anchor) {
           const r = anchor.el.getBoundingClientRect();
-          // Right-aligned under the chevron: the menu opens from the edge the
-          // chevron sits on, so it never covers the row's name.
-          return new DOMRect(r.right - MENU_WIDTH, r.top, MENU_WIDTH, r.height);
+          // Aligned on the chevron's own edge: the menu opens from the side
+          // the chevron sits on, so it never covers the row's name or the
+          // message it is about.
+          const left = anchor.edge === "end" ? r.right - width : r.left;
+          return new DOMRect(left, r.top, width, r.height);
         }
         return new DOMRect(anchor.x, anchor.y, 0, 0);
       },
     },
   );
   const [target, setTarget] = useState<T | null>(null);
+  const [edge, setEdge] = useState<MenuEdge>("start");
   const { show, close: closePanel, open } = panel;
 
   const openAt = useCallback(
@@ -71,15 +88,17 @@ export function useContextMenu<T>(itemCount: number) {
       anchorRef.current = { x, y };
       triggerRef.current = null;
       setTarget(next);
+      setEdge("start");
       show();
     },
     [show],
   );
   const openUnder = useCallback(
-    (next: T, el: HTMLElement) => {
-      anchorRef.current = { el };
+    (next: T, el: HTMLElement, at: MenuEdge = "end") => {
+      anchorRef.current = { el, edge: at };
       triggerRef.current = el;
       setTarget(next);
+      setEdge(at);
       show();
     },
     [show],
@@ -92,6 +111,9 @@ export function useContextMenu<T>(itemCount: number) {
     // What the menu is about while it is open, null otherwise. A closed menu
     // keeps nothing, so a row can ask "is the menu open on me" with one test.
     target: open ? target : null,
+    // The edge the open menu lines up on, for a menu narrower than its
+    // footprint (the bubble menu's items under its wider reactions).
+    edge,
     openAt,
     openUnder,
     close,
@@ -113,6 +135,9 @@ export function ContextMenu({
   label,
   items,
   className = "",
+  header,
+  replacement,
+  edge = "start",
 }: {
   panelRef: ContextMenuState<unknown>["panelRef"];
   pos: ContextMenuState<unknown>["pos"];
@@ -122,13 +147,22 @@ export function ContextMenu({
   label: string;
   items: ContextMenuItem[];
   className?: string;
+  // Drawn above the items as its own surface: the bubble menu's quick
+  // reactions, stacked the way WhatsApp Web stacks them.
+  header?: ReactNode;
+  // Drawn INSTEAD of header and items: the full emoji panel once React is
+  // picked. Its footprint is the caller's `height`/`width` on the hook.
+  replacement?: ReactNode;
+  // Which side the items line up on when the footprint is wider than they are.
+  edge?: MenuEdge;
 }) {
   if (!pos || !open) return null;
+  // The footprint is a click-through frame: only what it holds takes the
+  // pointer, so a click in the gap beside a narrow item list lands on the
+  // page and closes the menu like any other outside click.
   return createPortal(
     <div
       ref={panelRef}
-      role="menu"
-      aria-label={label}
       style={{
         position: "fixed",
         left: pos.left,
@@ -138,32 +172,55 @@ export function ContextMenu({
       }}
       // The right-click must not reach the page under the menu either.
       onContextMenu={(e) => e.preventDefault()}
-      className={`menu-surface z-[100] overflow-hidden rounded-lg py-1 ${className}`}
+      className={`pointer-events-none z-[100] flex flex-col gap-2 ${
+        edge === "end" ? "items-end" : "items-start"
+      }`}
     >
-      {items.map((item) => (
-        <button
-          key={item.key}
-          type="button"
-          role="menuitem"
-          disabled={item.disabled}
-          onClick={() => {
-            onClose();
-            item.onSelect();
-          }}
-          // --row-hover-bg, not --muted-bg: on a --card panel in dark the two
-          // are one colour and the hover showed nothing (RowMenu's reason).
-          className={`flex h-9 w-full items-center gap-3 px-3 text-left text-sm outline-none transition-colors hover:bg-[var(--row-hover-bg)] focus-visible:bg-[var(--row-hover-bg)] disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent ${
-            item.danger ? "text-red-600 dark:text-red-400" : ""
-          }`}
-        >
-          {item.icon && (
-            <span className="flex shrink-0 text-[var(--muted-strong)]">{item.icon}</span>
-          )}
-          <span className="truncate">{item.label}</span>
-        </button>
-      ))}
+      {replacement ? (
+        <div className="pointer-events-auto">{replacement}</div>
+      ) : (
+        <>
+          {header && <div className="pointer-events-auto">{header}</div>}
+          <div
+            role="menu"
+            aria-label={label}
+            style={{ width: Math.min(pos.width, MENU_WIDTH) }}
+            className={`menu-surface pointer-events-auto overflow-hidden rounded-lg py-1 ${className}`}
+          >
+            {items.map((item) => (
+              <ContextMenuButton key={item.key} item={item} onClose={onClose} />
+            ))}
+          </div>
+        </>
+      )}
     </div>,
     document.body,
+  );
+}
+
+function ContextMenuButton({ item, onClose }: { item: ContextMenuItem; onClose: () => void }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      disabled={item.disabled}
+      onClick={() => {
+        // An item that opens something inside the menu (React swapping in
+        // the emoji panel) keeps it open.
+        if (!item.keepOpen) onClose();
+        item.onSelect();
+      }}
+      // --row-hover-bg, not --muted-bg: on a --card panel in dark the two
+      // are one colour and the hover showed nothing (RowMenu's reason).
+      className={`flex h-9 w-full items-center gap-3 px-3 text-left text-sm outline-none transition-colors hover:bg-[var(--row-hover-bg)] focus-visible:bg-[var(--row-hover-bg)] disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent ${
+        item.danger ? "text-red-600 dark:text-red-400" : ""
+      }`}
+    >
+      {item.icon && (
+        <span className="flex shrink-0 text-[var(--muted-strong)]">{item.icon}</span>
+      )}
+      <span className="truncate">{item.label}</span>
+    </button>
   );
 }
 
@@ -265,5 +322,54 @@ export function MenuIcon({ name }: { name: MenuIconName }) {
     >
       {paths[name]}
     </svg>
+  );
+}
+
+// The quick-reaction row above the WhatsApp bubble menu (P23, Nudge e02706eb):
+// WhatsApp Web's set without the thumbs-down, the angry and the crying face,
+// in its order, at its ~20px size, and a "+" for the full picker. A business
+// answering its customers does not send those three; Serdar dropped them in
+// Nudge for the same reason.
+export const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "🙏"] as const;
+
+export function QuickReactions({
+  onPick,
+  onMore,
+  moreLabel,
+  current,
+}: {
+  onPick: (emoji: string) => void;
+  onMore: () => void;
+  moreLabel: string;
+  // The reaction already on the message wears a wash, because picking it
+  // again takes it back (WhatsApp's own gesture).
+  current?: string;
+}) {
+  return (
+    <div className="menu-surface flex items-center gap-0.5 rounded-full px-1.5 py-1">
+      {QUICK_REACTIONS.map((e) => (
+        <button
+          key={e}
+          type="button"
+          aria-pressed={current === e}
+          onClick={() => onPick(e)}
+          className={`flex h-9 w-9 items-center justify-center rounded-full text-[20px] leading-none transition-transform hover:scale-110 hover:bg-[var(--row-hover-bg)] ${
+            current === e ? "bg-[var(--row-hover-bg)]" : ""
+          }`}
+        >
+          {e}
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={onMore}
+        aria-label={moreLabel}
+        className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--muted-strong)] hover:bg-[var(--row-hover-bg)] hover:text-[var(--foreground)]"
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden>
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </button>
+    </div>
   );
 }
