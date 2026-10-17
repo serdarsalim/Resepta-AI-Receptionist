@@ -30,7 +30,8 @@ import { Card } from "./Card";
 import { EmojiPicker } from "./EmojiPicker";
 import { RowLabel } from "./RowLabel";
 import { Sheet } from "./Sheet";
-import { VariableInsertDropdown } from "./VariableInsertDropdown";
+import { useMessageVariables, VariableInsertDropdown } from "./VariableInsertDropdown";
+import { TokenTextField, type TokenTextFieldHandle } from "./TokenTextField";
 
 type Segment = {
   notSeenForDays?: number;
@@ -166,20 +167,11 @@ function ComposeSheet({ onClose }: { onClose: () => void }) {
 
   const [name, setName] = useState("");
   const [body, setBody] = useState("");
-  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
+  const bodyRef = useRef<TokenTextFieldHandle | null>(null);
+  const variables = useMessageVariables();
   // Inserts land at the cursor, not the end — same pattern as the rule editor.
   const insertAtCursor = (token: string) => {
-    const el = bodyRef.current;
-    const start = el?.selectionStart ?? body.length;
-    const end = el?.selectionEnd ?? body.length;
-    const next = body.slice(0, start) + token + body.slice(end);
-    setBody(next);
-    requestAnimationFrame(() => {
-      if (!el) return;
-      el.focus();
-      const cursor = start + token.length;
-      el.setSelectionRange(cursor, cursor);
-    });
+    bodyRef.current?.insert(token);
   };
   // null = untouched, render the stored value. The subject is a property of
   // "campaign mail from this salon" rather than of one campaign — it lives on
@@ -258,12 +250,12 @@ function ComposeSheet({ onClose }: { onClose: () => void }) {
 
         <div>
           <RowLabel label={t("campaign.body")} hint={t("campaign.bodyHint")} />
-          <textarea
-            ref={bodyRef}
+          <TokenTextField
+            handleRef={bodyRef}
             value={body}
-            onChange={(event) => setBody(event.target.value)}
+            variables={variables}
+            onChange={setBody}
             rows={3}
-            className="w-full resize-none"
           />
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             <VariableInsertDropdown onInsert={insertAtCursor} />

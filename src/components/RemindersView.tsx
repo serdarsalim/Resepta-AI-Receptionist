@@ -50,7 +50,8 @@ import {
 } from "../../convex/lib/templateTexts";
 import { EmailBodyEditor } from "./EmailBodyEditor";
 import { EmojiPicker } from "./EmojiPicker";
-import { VariableInsertDropdown } from "./VariableInsertDropdown";
+import { useMessageVariables, VariableInsertDropdown } from "./VariableInsertDropdown";
+import { TokenTextField, type TokenTextFieldHandle } from "./TokenTextField";
 import {
   minutesToTimeValue,
   timeValueToMinutes,
@@ -540,7 +541,8 @@ function RuleEditor({
   const [defaults, setDefaults] = useState<VariableDefault[]>(
     () => editorSeed(template).defaults,
   );
-  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
+  const bodyRef = useRef<TokenTextFieldHandle | null>(null);
+  const variables = useMessageVariables();
   // The row is created by ensureTemplate when the panel opens; until the
   // query catches up there is nothing to bind to.
   const templateId = template?._id;
@@ -724,18 +726,8 @@ function RuleEditor({
   // Plain-textarea mode only; the WYSIWYG editor's own toolbar handles both
   // inserts against the tiptap caret.
   const insertAtCursor = (token: string) => {
-    const el = bodyRef.current;
-    const start = el?.selectionStart ?? body.length;
-    const end = el?.selectionEnd ?? body.length;
-    const next = body.slice(0, start) + token + body.slice(end);
-    setBody(next);
-    onSaveTemplate(template._id, { body: next });
-    requestAnimationFrame(() => {
-      if (!el) return;
-      el.focus();
-      const cursor = start + token.length;
-      el.setSelectionRange(cursor, cursor);
-    });
+    const next = bodyRef.current?.insert(token);
+    if (next !== undefined) onSaveTemplate(template._id, { body: next });
   };
 
   // The lanes this rule could ACTUALLY travel — the rule's own channel
@@ -941,15 +933,17 @@ function RuleEditor({
         />
       ) : (
         <>
-          <textarea
-            ref={bodyRef}
+          {/* Variables read as chips with their label, and "@" inserts one
+              (P15); the stored body keeps the [key]. */}
+          <TokenTextField
+            handleRef={bodyRef}
             rows={5}
-            className="w-full"
             value={body}
+            variables={variables}
             placeholder={t("settings.templateBodyPlaceholder")}
-            aria-label={t("settings.templateBody")}
-            onChange={(e) => setBody(e.target.value)}
-            onBlur={() => onSaveTemplate(template._id, { body })}
+            ariaLabel={t("settings.templateBody")}
+            onChange={setBody}
+            onBlur={(stored) => onSaveTemplate(template._id, { body: stored })}
           />
           <div className="flex flex-wrap items-center gap-1.5">
             <VariableInsertDropdown onInsert={insertAtCursor} />

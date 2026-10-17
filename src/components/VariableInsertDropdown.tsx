@@ -8,7 +8,8 @@
 // offers is a token renderTokens resolves, because both sides read the same
 // registry.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { TokenVariable } from "@/lib/tokenLabels";
 import { createPortal } from "react-dom";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -17,13 +18,23 @@ import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { foldSearch } from "@/lib/useTableState";
 import { buttonClass } from "./Control";
 
-export function VariableInsertDropdown({
-  onInsert,
-}: {
-  onInsert: (token: string) => void;
-}) {
+// The vocabulary itself, for the editors that insert by typing "@" (P15,
+// TokenTextField and the email editor's chips): the same two groups the
+// dropdown shows, in its order, with the group's title on each entry.
+export function useMessageVariables(): TokenVariable[] {
+  const groups = useVariableGroups();
+  return useMemo(
+    () =>
+      groups.flatMap((group) =>
+        group.items.map((item) => ({ ...item, group: group.title })),
+      ),
+    [groups],
+  );
+}
+
+function useVariableGroups() {
   const { t } = useLanguage();
-  const fields = useQuery(api.contactFields.list, {}) ?? [];
+  const fields = useQuery(api.contactFields.list, {});
   // Appointment facts, by their canonical token names (lib/renderTokens).
   // Token NAMES are English, always, in all three interfaces. The label
   // beside each one is what translates. A token is a piece of stored text
@@ -33,6 +44,9 @@ export function VariableInsertDropdown({
   // languages at once. (The Turkish and German aliases in lib/renderTokens
   // stay valid forever — bodies already written with them keep working.)
   const builtIns = [
+    // The customer's own first name. The label existed and the entry did not,
+    // so the one token nearly every message opens with could only be typed.
+    { key: "firstname", label: t("vars.firstName") },
     { key: "business", label: t("vars.business") },
     { key: "date", label: t("vars.date") },
     { key: "service", label: t("vars.service") },
@@ -54,13 +68,26 @@ export function VariableInsertDropdown({
   // and is empty for anyone who never answered it. One flat list put "Your
   // favorite color" above "Appointment date" and read as one undifferentiated
   // vocabulary, which is how a template ends up quietly missing a line.
-  const custom = fields.map((field) => ({ key: field.key, label: field.label }));
-  const groups = [
-    { title: t("editor.varsBuiltIn"), items: builtIns },
-    ...(custom.length > 0
-      ? [{ title: t("editor.varsCustom"), items: custom }]
-      : []),
-  ];
+  return useMemo(() => {
+    const custom = (fields ?? []).map((field) => ({ key: field.key, label: field.label }));
+    return [
+      { title: t("editor.varsBuiltIn"), items: builtIns },
+      ...(custom.length > 0
+        ? [{ title: t("editor.varsCustom"), items: custom }]
+        : []),
+    ];
+    // builtIns is rebuilt from `t` on every render; `t` is its only input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fields, t]);
+}
+
+export function VariableInsertDropdown({
+  onInsert,
+}: {
+  onInsert: (token: string) => void;
+}) {
+  const { t } = useLanguage();
+  const groups = useVariableGroups();
 
   // Portaled and fixed, through the shared hook. This panel was an `absolute`
   // child of its own trigger, and it is rendered inside a card in all three of

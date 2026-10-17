@@ -948,7 +948,10 @@ thead {
 @media (max-width: 39.99rem) {
   input:not([type="checkbox"]):not([type="radio"]),
   textarea,
-  select {
+  select,
+  /* The chip mirror behind a TokenTextField: it has to wrap exactly as the
+     textarea over it does, so it takes the same size (P15). */
+  .token-mirror {
     font-size: 16px;
   }
 

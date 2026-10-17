@@ -30,7 +30,8 @@ import { useConfirm } from "./ConfirmDialog";
 import { EmojiPicker } from "./EmojiPicker";
 import { RowLabel } from "./RowLabel";
 import { Sheet } from "./Sheet";
-import { VariableInsertDropdown } from "./VariableInsertDropdown";
+import { useMessageVariables, VariableInsertDropdown } from "./VariableInsertDropdown";
+import { TokenTextField, type TokenTextFieldHandle } from "./TokenTextField";
 
 export type BulkChannel = "email" | "whatsapp" | "call";
 
@@ -110,22 +111,13 @@ export function BulkComposer({
   const [agentId, setAgentId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
+  const bodyRef = useRef<TokenTextFieldHandle | null>(null);
+  const variables = useMessageVariables();
 
   // Inserts land at the cursor, not the end — the rule editor's pattern, and
   // the campaign composer's.
   const insertAtCursor = (token: string) => {
-    const el = bodyRef.current;
-    const start = el?.selectionStart ?? body.length;
-    const end = el?.selectionEnd ?? body.length;
-    const next = body.slice(0, start) + token + body.slice(end);
-    setBody(next);
-    requestAnimationFrame(() => {
-      if (!el) return;
-      el.focus();
-      const cursor = start + token.length;
-      el.setSelectionRange(cursor, cursor);
-    });
+    bodyRef.current?.insert(token);
   };
 
   const reachable = useMemo(
@@ -264,10 +256,11 @@ export function BulkComposer({
                   : t("bulk.bodyHintEmail")
               }
             />
-            <textarea
-              ref={bodyRef}
+            <TokenTextField
+              handleRef={bodyRef}
               value={body}
-              onChange={(event) => setBody(event.target.value)}
+              variables={variables}
+              onChange={setBody}
               // One row for WhatsApp, and the hint says why: Meta refuses a
               // template body parameter containing a newline (error 132000),
               // and it refuses it PER RECIPIENT — so a message written with
@@ -276,7 +269,6 @@ export function BulkComposer({
               // that invites four paragraphs and then silently reflows them
               // is worse than one that never offered the room.
               rows={channel === "whatsapp" ? 2 : 5}
-              className="w-full resize-none"
             />
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <VariableInsertDropdown onInsert={insertAtCursor} />

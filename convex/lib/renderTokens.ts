@@ -73,7 +73,7 @@ export type TokenValues = {
 
 // Canonical token → the value it resolves to. Aliases map onto the same key,
 // so [ad] and [firstname] are the same token and always will be.
-const ALIASES: Record<string, Exclude<keyof TokenValues, "custom">> = {
+export const TOKEN_ALIASES: Record<string, Exclude<keyof TokenValues, "custom">> = {
   // Customer
   firstname: "firstName",
   name: "firstName",
@@ -130,7 +130,7 @@ const ALIASES: Record<string, Exclude<keyof TokenValues, "custom">> = {
 // typo and exactly wrong for wording that goes to every customer of every
 // business.
 export function isKnownToken(name: string): boolean {
-  return Object.prototype.hasOwnProperty.call(ALIASES, name.trim().toLowerCase());
+  return Object.prototype.hasOwnProperty.call(TOKEN_ALIASES, name.trim().toLowerCase());
 }
 
 // Storage form (an array, so the editor can keep row order) → lookup form.
@@ -169,7 +169,7 @@ export function renderTokens(
   const fallback = (raw: string) => defaults?.[raw]?.trim() ?? "";
   const filled = body.replace(/\[([^\]\n]{1,32})\]/g, (whole, rawName: string) => {
     const raw = rawName.trim().toLowerCase();
-    const key = ALIASES[raw];
+    const key = TOKEN_ALIASES[raw];
     if (key) return values[key]?.trim() || fallback(raw);
     // The org's own fields, by exact key. hasOwnProperty rather than a truthy
     // read: an empty value is a field that resolves to nothing, which is a
