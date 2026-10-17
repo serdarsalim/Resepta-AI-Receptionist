@@ -116,6 +116,34 @@ const dictionary = {
     de: "Diesen Namen sieht Ihr Team in der Mitgliederliste und bei allem, was Sie versenden.",
   },
   "account.email": { tr: "E-posta", en: "Email", de: "E-Mail" },
+  // Your own photo in this business (P33). Click, drop or paste; Remove goes
+  // back to the Google picture, then initials.
+  "account.photo": { tr: "Fotoğraf", en: "Photo", de: "Foto" },
+  "account.photoHint": {
+    tr: "Bu işletmede adınızın yanında görünür. Tıklayın, sürükleyip bırakın ya da yapıştırın. Yoksa Google fotoğrafınız kullanılır.",
+    en: "Shown beside your name in this business. Click, drop or paste a photo. Without one, your Google picture is used.",
+    de: "Erscheint in diesem Unternehmen neben Ihrem Namen. Klicken, ablegen oder einfügen. Ohne eigenes Foto wird Ihr Google-Bild verwendet.",
+  },
+  "account.photoAdd": { tr: "Fotoğraf ekle", en: "Add photo", de: "Foto hinzufügen" },
+  "account.photoChange": { tr: "Değiştir", en: "Change", de: "Ändern" },
+  "account.photoRemove": { tr: "Kaldır", en: "Remove", de: "Entfernen" },
+  "account.photoSaved": { tr: "Fotoğraf kaydedildi", en: "Photo saved", de: "Foto gespeichert" },
+  "account.photoRemoved": { tr: "Fotoğraf kaldırıldı", en: "Photo removed", de: "Foto entfernt" },
+  "account.photoNotImage": {
+    tr: "Bu dosya fotoğraf olarak okunamadı.",
+    en: "That file could not be read as a photo.",
+    de: "Diese Datei ließ sich nicht als Foto lesen.",
+  },
+  "account.photoTooLarge": {
+    tr: "Fotoğraf çok büyük.",
+    en: "That photo is too large.",
+    de: "Das Foto ist zu groß.",
+  },
+  "account.photoFailed": {
+    tr: "Fotoğraf kaydedilemedi. Tekrar deneyin.",
+    en: "The photo could not be saved. Try again.",
+    de: "Das Foto konnte nicht gespeichert werden. Bitte erneut versuchen.",
+  },
   "account.emailHint": {
     tr: "Google hesabınızdan gelir ve burada değiştirilemez.",
     en: "Comes from your Google account and cannot be changed here.",

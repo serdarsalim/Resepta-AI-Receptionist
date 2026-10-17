@@ -23,12 +23,14 @@ function initialsFrom(name?: string | null, email?: string | null): string {
   return (email ?? "?").trim().charAt(0).toUpperCase() || "?";
 }
 
-// The account menu's two: the sidebar row's circle and the collapsed rail's.
-export type AvatarSize = "sm" | "md";
+// The account menu's two (the sidebar row's circle and the collapsed rail's),
+// and the Account page's Photo row, where the circle is the control.
+export type AvatarSize = "sm" | "md" | "lg";
 
 const BOX: Record<AvatarSize, string> = {
   sm: "h-7 w-7 text-[11px]",
   md: "h-8 w-8 text-xs",
+  lg: "h-12 w-12 text-base",
 };
 
 export function Avatar({
@@ -40,8 +42,9 @@ export function Avatar({
 }: {
   name?: string | null;
   email?: string | null;
-  // The person's photo, the Google profile picture stored at sign-in (Nudge
-  // d43bac8d). The initials stay underneath as the fallback: a URL that 404s
+  // The person's picture as the server resolved it (convex/lib/memberPhoto,
+  // P33: their upload in this business, else the Google picture stored at
+  // sign-in). The initials stay underneath as the fallback: a URL that 404s
   // or is blocked drops back to them instead of leaving a broken-image box.
   image?: string | null;
   size?: AvatarSize;

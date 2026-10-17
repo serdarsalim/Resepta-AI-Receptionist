@@ -2849,6 +2849,7 @@ function NoteEntry({
     at: number;
     body?: string;
     authorName?: string;
+    authorPhoto?: string;
     editedAt?: number;
   };
 }) {
@@ -2891,7 +2892,11 @@ function NoteEntry({
     // toolbar's tooltip group is: this row wraps a rich editor while editing.
     <li className="group/note flex list-none gap-2.5 py-3 first:pt-0">
       {confirmDialog}
-      <Avatar name={item.authorName ?? t("notes.systemAuthor")} size="sm" />
+      <Avatar
+        name={item.authorName ?? t("notes.systemAuthor")}
+        image={item.authorPhoto}
+        size="sm"
+      />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2 text-xs">
           <span className="min-w-0 truncate font-medium text-[var(--foreground)]">

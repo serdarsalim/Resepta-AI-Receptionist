@@ -197,3 +197,48 @@ export async function prepareForLibrary(file: File): Promise<{ file: File; kind:
   if (file.size > cap) throw new Error("too-large");
   return { file, kind };
 }
+
+// A person's photo (P33, Nudge's PersonPhotoField): centre-cropped to a
+// square and shrunk to at most PHOTO_SIDE, as a JPEG. Big enough for the
+// largest circle the app draws at 2x, small enough to load in a list of note
+// authors; a 12 MB phone photo arrives as tens of KB, well inside the
+// server's 1 MB ceiling (convex/lib/memberPhoto). Null when the browser
+// cannot read the file as a picture.
+const PHOTO_SIDE = 512;
+
+export async function squarePhoto(file: File): Promise<Blob | null> {
+  if (kindOfFile(file) !== "image") return null;
+  let img: Awaited<ReturnType<typeof decode>>;
+  try {
+    img = await decode(file);
+  } catch {
+    return null;
+  }
+  try {
+    const side = Math.min(img.width, img.height);
+    const out = Math.min(PHOTO_SIDE, side);
+    if (!out) return null;
+    const canvas = document.createElement("canvas");
+    canvas.width = out;
+    canvas.height = out;
+    const g = canvas.getContext("2d");
+    if (!g) return null;
+    // A transparent PNG would go black as a JPEG: give it white.
+    g.fillStyle = "#ffffff";
+    g.fillRect(0, 0, out, out);
+    g.drawImage(
+      img.source,
+      (img.width - side) / 2,
+      (img.height - side) / 2,
+      side,
+      side,
+      0,
+      0,
+      out,
+      out,
+    );
+    return await encode(canvas, "image/jpeg", 0.88);
+  } finally {
+    img.close();
+  }
+}

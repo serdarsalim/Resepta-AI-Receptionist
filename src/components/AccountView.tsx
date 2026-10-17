@@ -10,6 +10,7 @@ import { resolveSiteUrl } from "@/lib/siteUrl";
 import { useToast } from "@/lib/ToastProvider";
 import { Card } from "./Card";
 import { McpCard } from "./McpCard";
+import { MemberPhotoField } from "./MemberPhotoField";
 import { InlineEditValue } from "./RecordField";
 import { ROW_GRID, RowLabel } from "./RowLabel";
 import { Toggle } from "./Toggle";
@@ -35,6 +36,7 @@ function StaticValue({ children }: { children: React.ReactNode }) {
 // register to enumerate, so add a line when you add a row. Forgetting costs one
 // unfindable name and nothing else. Never index a key that is not in i18n.ts.
 const SEARCH_INDEX: { card: AccountCard; key: TranslationKey }[] = [
+  { card: "profile", key: "account.photo" },
   { card: "profile", key: "account.name" },
   { card: "profile", key: "account.email" },
   { card: "profile", key: "account.role" },
@@ -155,6 +157,17 @@ export function AccountView() {
               text, click to edit, commit on blur or Enter. A row of permanently
               open input boxes reads as work waiting to be done, and this page
               is mostly things you look at once. */}
+          {/* Your face in THIS business (P33), a label-left row like the
+              fields under it (Nudge 63cac371). */}
+          <RowLabel label={t("account.photo")} hint={t("account.photoHint")} />
+          <MemberPhotoField
+            name={profile.name}
+            email={profile.email}
+            photo={profile.photo}
+            uploaded={profile.photoUploaded}
+            canEdit={profile.canSetPhoto}
+          />
+
           <RowLabel label={t("account.name")} hint={t("account.nameHint")} />
           <InlineEditValue
             value={storedName}
