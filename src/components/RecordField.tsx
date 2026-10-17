@@ -1,12 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { InfoTip } from "./InfoTip";
 
 // Record fields, ported from Nudge's ContactView (StackedField +
 // InlineEditValue). A record page shows VALUES, not a form: the value reads as
 // plain text, hover reveals the affordance, click swaps in the real control
 // already focused. Enter commits, Escape reverts, blur saves.
+//
+// Since P12 (Nudge's usePropertyEditor and SearchableSelect, 2026-10-17): Tab
+// saves and opens the NEXT field on the page (Shift-Tab the previous), so a
+// record can be filled in one pass at the keyboard; and a picklist opens as a
+// list you can type into, floating over the page, so the row never changes
+// height the way a native select's box did.
 //
 // Ported with one correction: Nudge's group heading is uppercase, which is out
 // of the design language. Sentence case here.
@@ -65,6 +73,18 @@ function ChevronIcon() {
   );
 }
 
+// The editable values on the page, in document order, for Tab to walk.
+const SLOT = "data-inline-edit-slot";
+
+function openNeighbour(from: HTMLElement | null, step: 1 | -1) {
+  if (!from) return;
+  const slots = Array.from(document.querySelectorAll<HTMLElement>(`[${SLOT}]`));
+  const at = slots.indexOf(from);
+  const next = at >= 0 ? slots[at + step] : undefined;
+  // After the commit re-renders the current slot back to its value.
+  if (next) requestAnimationFrame(() => next.querySelector<HTMLButtonElement>("button")?.click());
+}
+
 export function InlineEditValue({
   value,
   options,
@@ -102,13 +122,12 @@ export function InlineEditValue({
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const selectRef = useRef<HTMLSelectElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const slotRef = useRef<HTMLSpanElement>(null);
   const size = dense ? "text-xs" : "text-sm";
 
   useEffect(() => {
     if (!editing) return;
-    selectRef.current?.focus();
     inputRef.current?.focus();
   }, [editing]);
 
@@ -123,17 +142,25 @@ export function InlineEditValue({
     }
   };
 
+  const slot = (child: React.ReactNode) => (
+    // display: contents, so the slot exists for Tab to find and takes no
+    // part in layout: twenty-odd call sites lay this value out themselves.
+    <span ref={slotRef} {...{ [SLOT]: "" }} className="contents">
+      {child}
+    </span>
+  );
+
   if (saving) {
     // Same box as the value it replaces, so the row never resizes mid-save.
-    return (
+    return slot(
       <span className={`block animate-pulse px-2 py-1 ${size} text-[var(--muted)]`}>
         {value}
-      </span>
+      </span>,
     );
   }
 
   if (!editing) {
-    return (
+    return slot(
       <button
         type="button"
         onClick={() => setEditing(true)}
@@ -151,34 +178,30 @@ export function InlineEditValue({
         <span className="shrink-0 text-[var(--muted)] opacity-0 transition-opacity group-hover/iv:opacity-100 group-focus-visible/iv:opacity-100">
           {options ? <ChevronIcon /> : <PencilIcon />}
         </span>
-      </button>
+      </button>,
     );
   }
 
   if (options) {
     const merged = value && !options.includes(value) ? [value, ...options] : options;
-    return (
-      <select
-        ref={selectRef}
-        defaultValue={value}
-        onChange={(e) => void commit(e.target.value)}
-        onBlur={() => setEditing(false)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") setEditing(false);
+    return slot(
+      <PicklistEditor
+        value={value}
+        options={clearable ? ["", ...merged] : merged}
+        labelFor={labelFor}
+        placeholder={placeholder}
+        size={size}
+        onPick={(next) => void commit(next)}
+        onClose={() => setEditing(false)}
+        onTab={(step) => {
+          setEditing(false);
+          openNeighbour(slotRef.current, step);
         }}
-        className={`px-2 py-1 ${size}`}
-      >
-        {clearable && <option value="" />}
-        {merged.map((option) => (
-          <option key={option} value={option}>
-            {labelFor ? labelFor(option) : option}
-          </option>
-        ))}
-      </select>
+      />,
     );
   }
 
-  return (
+  return slot(
     <input
       ref={inputRef}
       type={type}
@@ -187,6 +210,13 @@ export function InlineEditValue({
       onKeyDown={(e) => {
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         if (e.key === "Escape") setEditing(false);
+        // Save and go on to the next value, the way a spreadsheet does.
+        if (e.key === "Tab") {
+          e.preventDefault();
+          const next = (e.target as HTMLInputElement).value;
+          void commit(next);
+          openNeighbour(slotRef.current, e.shiftKey ? -1 : 1);
+        }
       }}
       // compact takes its container below sm — a focused field renders at 16px
       // there (globals.css, the iOS zoom rule), and in the service row the
@@ -195,6 +225,122 @@ export function InlineEditValue({
       // duration and then clipped "5600.00" the moment a price ran to five
       // figures, because a number input also spends ~16px on its spinner.
       className={`px-2 py-1 ${size} ${compact ? "max-sm:w-full sm:w-24" : ""}`}
-    />
+    />,
+  );
+}
+
+// The picklist's editing state: the value's own line becomes a field you can
+// type into, and the choices float under it through a portal (AGENTS.md: a
+// popover never positions absolute inside a card). Arrows move, Enter picks,
+// Escape leaves it as it was, Tab moves on without changing it.
+function PicklistEditor({
+  value,
+  options,
+  labelFor,
+  placeholder,
+  size,
+  onPick,
+  onClose,
+  onTab,
+}: {
+  value: string;
+  options: string[];
+  labelFor?: (value: string) => string;
+  placeholder?: string;
+  size: string;
+  onPick: (value: string) => void;
+  onClose: () => void;
+  onTab: (step: 1 | -1) => void;
+}) {
+  const label = (option: string) => (option ? (labelFor ? labelFor(option) : option) : "");
+  const listId = useId();
+  const [query, setQuery] = useState("");
+  const { triggerRef, panelRef, pos, show } = useAnchoredPanel<HTMLInputElement>("trigger", 240);
+  const needle = query.trim().toLocaleLowerCase();
+  const shown = needle
+    ? options.filter((option) => option && label(option).toLocaleLowerCase().includes(needle))
+    : options;
+  const [active, setActive] = useState(() => Math.max(0, shown.indexOf(value)));
+  const activeIndex = Math.min(active, Math.max(0, shown.length - 1));
+
+  useEffect(() => {
+    triggerRef.current?.focus();
+    show();
+  }, [triggerRef, show]);
+
+  return (
+    <>
+      <input
+        ref={triggerRef}
+        value={query}
+        placeholder={label(value) || placeholder || ""}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setActive(0);
+        }}
+        onBlur={(event) => {
+          // A click in the list lands there first; it closes us itself.
+          if (panelRef.current?.contains(event.relatedTarget as Node | null)) return;
+          onClose();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setActive(Math.min(shown.length - 1, activeIndex + 1));
+          } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setActive(Math.max(0, activeIndex - 1));
+          } else if (event.key === "Enter") {
+            event.preventDefault();
+            if (shown[activeIndex] !== undefined) onPick(shown[activeIndex]);
+          } else if (event.key === "Escape") {
+            onClose();
+          } else if (event.key === "Tab") {
+            event.preventDefault();
+            onTab(event.shiftKey ? -1 : 1);
+          }
+        }}
+        role="combobox"
+        aria-expanded={pos !== null}
+        aria-controls={listId}
+        className={`w-full px-2 py-1 ${size}`}
+      />
+      {pos &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={panelRef}
+            id={listId}
+            role="listbox"
+            style={{
+              position: "fixed",
+              top: pos.top,
+              bottom: pos.bottom,
+              left: pos.left,
+              width: pos.width,
+            }}
+            className="thin-scroll z-[100] max-h-60 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg"
+          >
+            {shown.map((option, index) => (
+              <button
+                key={option || "__blank"}
+                type="button"
+                role="option"
+                aria-selected={option === value}
+                tabIndex={-1}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => onPick(option)}
+                onMouseEnter={() => setActive(index)}
+                className={`flex min-h-7 w-full items-center px-3 py-1 text-left ${size} ${
+                  index === activeIndex ? "bg-[var(--control-hover)]" : ""
+                } ${option === value ? "font-medium" : ""}`}
+              >
+                {label(option) || <span className="text-[var(--muted)]">—</span>}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
