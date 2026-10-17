@@ -9,6 +9,7 @@ import type { Doc, Id } from "../../convex/_generated/dataModel";
 import type { Rect } from "@/lib/anchoredSheet";
 import type { ModalDraft } from "./AppointmentModal";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { LANGUAGES } from "@/lib/i18n";
 import { formatAge, formatDateTime, formatDay } from "@/lib/datetime";
 import { CheckSwitch } from "./CheckSwitch";
 import { useConfirm } from "./ConfirmDialog";
@@ -40,9 +41,18 @@ const FIELD_INPUT: Record<Doc<"contactFields">["type"], "text" | "number" | "dat
   date: "date",
 };
 
+// The Language row's stand-in for "unset": the business's language. Not a
+// language code, so it can never collide with one.
+const LANGUAGE_DEFAULT = "default";
+
+function languageLabel(code: string): string {
+  return LANGUAGES.find((l) => l.code === code)?.label ?? code;
+}
+
 // One org-defined field, whichever group it sits in. Voice-collected rows are
 // this same editable row on purpose: an agent mishearing a plate number is
 // exactly the moment someone needs to correct it by hand.
+
 function CustomFieldRow({
   field,
   value,
@@ -402,6 +412,34 @@ export function ContactView({
                   value={customer.email ?? ""}
                   type="email"
                   onSave={(next) => updateCustomer({ customerId, email: next })}
+                />
+              </FieldRow>
+              {/* The language messages go out in (P30). Unset is the business's,
+                  shown as such; a reply or an answered call may fill it, and
+                  the (i) says so once it has. Picking here makes it the
+                  person's choice, which nothing learned replaces. */}
+              <FieldRow
+                label={t("customers.language")}
+                hint={t(customer.languageLearnedAt ? "customers.languageLearnedHint" : "customers.languageHint")}
+              >
+                <InlineEditValue
+                  dense
+                  value={customer.language || LANGUAGE_DEFAULT}
+                  options={[LANGUAGE_DEFAULT, ...LANGUAGES.map((l) => l.code)]}
+                  clearable={false}
+                  labelFor={(code) =>
+                    code === LANGUAGE_DEFAULT
+                      ? t("customers.languageDefault", {
+                          language: languageLabel(settings?.org.language ?? ""),
+                        })
+                      : languageLabel(code)
+                  }
+                  onSave={(next) =>
+                    updateCustomer({
+                      customerId,
+                      language: next === LANGUAGE_DEFAULT ? "" : next,
+                    })
+                  }
                 />
               </FieldRow>
               {/* NO HEADINGS. The record is one continuous list of fields, in

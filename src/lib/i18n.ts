@@ -1114,6 +1114,24 @@ const dictionary = {
   "customers.lastName": { tr: "Soyad", en: "Last name", de: "Nachname" },
   "customers.phone": { tr: "Telefon", en: "Phone", de: "Telefon" },
   "customers.email": { tr: "E-posta", en: "Email", de: "E-Mail" },
+  // The language messages to this customer go out in (P30). Unset reads as
+  // the business's, named so the reader knows which one that is.
+  "customers.language": { tr: "Dil", en: "Language", de: "Sprache" },
+  "customers.languageDefault": {
+    tr: "İşletmenin dili ({language})",
+    en: "Business language ({language})",
+    de: "Sprache des Betriebs ({language})",
+  },
+  "customers.languageHint": {
+    tr: "Bu müşteriye giden mesajların dili. Kimse seçmediyse müşterinin yazdığı ya da telefonda konuştuğu dilden öğrenilir.",
+    en: "The language messages to this customer go out in. While nobody has picked one, it is learned from the language they write or speak in.",
+    de: "Die Sprache der Nachrichten an diesen Kunden. Solange niemand eine wählt, wird sie aus der Sprache gelernt, in der der Kunde schreibt oder spricht.",
+  },
+  "customers.languageLearnedHint": {
+    tr: "Müşterinin kendi WhatsApp yanıtından ya da yanıtladığı bir aramadan öğrenildi. Buradan değiştirirseniz sizin seçiminiz kalır.",
+    en: "Learned from their own WhatsApp reply or an answered call. Change it here and your choice stays.",
+    de: "Aus der eigenen WhatsApp-Antwort oder einem angenommenen Anruf gelernt. Ändern Sie sie hier, bleibt Ihre Wahl bestehen.",
+  },
   // Short enough to sit on one line in a record label column; the KVKK detail
   // lives in the hint next to it.
   "customers.consent": {
