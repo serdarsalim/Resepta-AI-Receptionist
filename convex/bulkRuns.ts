@@ -1365,7 +1365,9 @@ export const finishByCallId = internalMutation({
       status: reached ? "done" : "failed",
       durationSec: call?.durationSec,
       disconnectionReason: call?.disconnectionReason,
-      ...(reached ? {} : { reason: call?.disconnectionReason ?? "call-failed" }),
+      // A refusal an earlier try left on the item is history once a call
+      // gets through.
+      reason: reached ? undefined : (call?.disconnectionReason ?? "call-failed"),
     });
     const run = await ctx.db.get(item.runId);
     if (!run) return null;
