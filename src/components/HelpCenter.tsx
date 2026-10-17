@@ -211,6 +211,10 @@ const CATEGORIES: Category[] = [
           "Anything you sell without booking time for it, such as a shampoo or a gift box, appears under Products, with a quantity picker instead of a duration.",
           "Set your opening hours first. Without them the page tells customers to call you instead of showing times it cannot honestly offer.",
           "Customers can leave a note when they book. It lands on their customer record, so you read it in the same place as everything else about them.",
+          "Customers pick a day from a month where every day with a free time is filled in, then a time from that day's list. Someone abroad can switch the time zone to read the times on their own clock; the appointment is the same either way.",
+          "Your address from Business shows beside the time, on the confirmation and on the customer's appointment page.",
+          "To link your own terms and privacy pages, fill in Terms and privacy under the booking switch. The page then says, above the Book button, that booking agrees to them.",
+          "To show the page on your own website, select the code button beside Copy and paste what it copies into your website where the calendar should go. It opens in your website's language when that is Turkish, English or German.",
         ],
         note: "The page shows the times that are genuinely free, using your opening hours and how many people are on the roster. Bookings need at least your minimum notice, set under Business: an hour unless you change it.",
         keywords: [
@@ -221,6 +225,11 @@ const CATEGORIES: Category[] = [
           "self service",
           "products",
           "note",
+          "embed",
+          "website",
+          "time zone",
+          "terms",
+          "privacy",
         ],
       },
       {

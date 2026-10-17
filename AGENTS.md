@@ -381,6 +381,18 @@ new marketing kind goes into that set.
   request made in person. Turning the switch OFF puts someone back on marketing
   mail, so it asks first; both directions write an activity row.
 
+## Only the embedded booking page may be framed (2026-10-17)
+
+`next.config.ts` sends `frame-ancestors 'none'` and `X-Frame-Options: DENY`
+on every path, and lifts both for exactly one: `/book/<slug>/embed`, which
+`public/embed.js` puts inside a business's own website (P29, `lib/embed.ts`).
+The app, the plain booking page and the manage page stay unframeable, since a
+page layered under an invisible overlay is a page whose buttons a stranger
+can get clicked. The embed is safe to frame because it holds no session and
+shows only what the business publishes, and it tells the website what was
+booked, never who. A new embeddable surface gets its own route and its own
+line there, never a wider pattern, and posts nothing personal to its parent.
+
 ## Two kinds of template, never conflate them
 
 - **Meta template messages** are business-initiated, registered with Meta and

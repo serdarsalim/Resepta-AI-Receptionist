@@ -742,10 +742,54 @@ rather than after what it does.
     `formatMoney(service.price)`, and a service with no price shows duration
     alone rather than a made-up zero. Hiding price only moved the question to
     the phone.
-  - Times shelve into morning/afternoon/evening at 12:00 and 17:00 (labels
-    group, hours define); the day strip is 14 civil days from the lead-time
-    floor, stepped in 24h and deduped so a DST fall-back cannot mint the same
-    date twice.
+  - **The time step is cal.com's layout** (P29, Nudge a1ff675d..84cc50fb;
+    it replaced the 14-day strip and the morning/afternoon/evening shelves).
+    From md the card widens (`Shell`'s `wide`, the time and details steps
+    only; the service list stays a phone-width column) into three columns:
+    what is booked, its length, the business's address and the time zone |
+    a month grid with every day that has a free time filled | that day's
+    times as a list that scrolls in its own column. Stacked on a phone in
+    that order. The details step is two columns from md: the same facts
+    with the picked time | the form. The month reads `booking.monthSlots`
+    (slug, `from`, `days` ≤ 33, the selection): the month plus a day either
+    side, through `freeStartsRange`, which runs the same day rule as
+    `freeStarts` over one read of the span's bookings, so a day marked open
+    is a day the list fills and the write accepts. The manage page's
+    Reschedule uses the same month and list through
+    `booking.monthSlotsForToken`. The pieces live in
+    `components/booking/MonthTimes.tsx`.
+  - **Times read on the business's clock unless the visitor picks theirs**
+    (the time zone row, a searchable list of every IANA zone with its GMT
+    offset, the business's on top). Only the drawing changes: what is booked
+    is the instant, and a time drawn on another clock names its city in the
+    basket bar and on the confirmation. Not remembered: a reload is the
+    business's clock again.
+  - **Offered starts sit a service's length apart when it is under half an
+    hour**, else on the half hour (`booking.slotStepMinutes`, P29, adapted
+    from Nudge 77165aaa). Nudge steps every length; a 90-minute colour
+    stepped by its length would hide the 09:30 a two-chair salon can take.
+    The write never checks the grid. The assistants' nearest free times
+    follow the same rule, since they read `freeStarts`.
+  - **The business's own terms line** sits above Book when the business set
+    `orgs.termsUrl` and/or `orgs.privacyUrl` (Business → General → Terms and
+    privacy, shown while the page is on; http(s) only, refused as
+    `invalid-url`). Their pages, linked; nothing of ours. Unset, no line.
+  - **`orgs.address`** shows beside the time on the booking page, on its
+    confirmation and on the manage page, except for a delivery, which goes
+    to the customer's address.
+  - **Embedding** (P29, Nudge c7459ed2): `/book/<slug>/embed` renders the
+    same `BookingFlow` and is the ONE route `next.config.ts` lets another
+    site frame (`frame-ancestors *`, X-Frame-Options cleared); the plain page,
+    the manage page and the app stay `DENY`. `public/embed.js`, excused from
+    the proxy's auth matcher, turns `<div data-resepta-booking="…/book/x">`
+    into that frame (720px unless `data-height`), in the website's language
+    when it is tr/en/de (`?lang=`, honoured on the plain page too). The page
+    posts `resepta:ready` and `resepta:booked` (start, end, length, order;
+    never who, since any site can frame it) to the parent, which the loader
+    re-dispatches as DOM events on the div; `lib/embed.ts` holds the
+    contract. Framed, the manage link opens in a new tab, since that page
+    refuses to be framed. Business → General's booking row copies the
+    snippet (the second glyph beside Copy).
   - The sticky bottom bar carries the running BASKET across steps: the lines
     joined (not counted — "2 services" makes the customer open the step back up
     to remember which two), the running duration until a time is picked and the
@@ -2214,7 +2258,8 @@ decides the document and nothing else — see docs/phone-agent.md.
 The booking page's wizard forks on a goods-only basket. Nothing in the basket
 books a chair, so instead of marching a towel through the calendar the page
 asks how the order reaches its customer — Gel al / Teslimat — and then when:
-"En kısa sürede" above the day strip, or a slot on the same grid as before.
+"En kısa sürede" above the month (the day strip until P29), or a slot from
+the same list as before.
 Mixed baskets keep the old flow untouched; the good rides along to the visit,
 which is correct. The fork's storage is `appointments.fulfillment`
 (`{kind: pickup|delivery, asap?, address?}`), only ever written on a basket
