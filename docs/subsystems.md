@@ -1437,10 +1437,72 @@ Meetings tab, measured it against Google side by side, and P5 of the port
   (seven toggles on one line), and Time (two `TimeSelect`s, All day beside
   them). Every repeat keeps one row, so the sheet's height never changes
   inside it.
+- **Every create and move is judged, for every business** (P6 of the Nudge
+  port, 2026-10-13). Until then nothing checked this calendar unless cal.com
+  was connected, which no business is. `schedule.judgeSlot` returns one
+  verdict (`lib/slotVerdict`), most fundamental first, so the sheet names
+  the thing a person can act on: `outside-hours` (the visit does not fit
+  that day's opening hours), `closed` (it runs into blocked time, with the
+  closure's reason as `closedReason`), `customer-busy` (the customer already
+  has an open booking overlapping it), `staff-busy` (the team member picked
+  already has one) and `full` (as many bookings overlap it as there are
+  active team members). The helpers are the booking page's and the
+  assistants' moves' own (`fitsOpenHours`, `closureBlocks`,
+  `customerConflict`, `overlapCount` against `orgCapacity`, plus
+  `staffConflict` in `lib/overlap`), so the three lanes agree about what is
+  taken. Three differences, on purpose: a business that never set opening
+  hours is bound only by its closures; the team member's clash is judged
+  because only this calendar names a person; and the clock is not read, so
+  the query stays cacheable. A good (no duration) holds no chair and no
+  person, so only hours and closures can refuse it.
+- **The server refuses, not the sheet.** `prepareCreate` judges before a new
+  customer is written, so a refused booking leaves nothing behind;
+  `finishCreate` and `finishMove` judge again in the transaction that writes
+  (skipped once cal.com has agreed, `providerConfirmed`); `schedule.move`
+  judges before cal.com hears anything and carries a new team member with
+  the new time; `appointments.updateDetails` judges a change of person alone
+  (`staffOnly`: only that person's clash, since the time is not moving),
+  through `internal.schedule.judge`. A refusal comes back
+  `{ ok: false, canForce: true, verdict }`. Not judged: the office MCP's
+  `create_appointments` (an import of a book that already exists) and
+  reopening a cancelled booking from the list.
+- **Only a signed-in person can book anyway.** `force` exists only on those
+  staff writes (`loadWriteContext`'s `requireOrg`); the booking page, its
+  manage page and both assistants have none, and their own guards refuse a
+  taken time with no way past. cal.com's own overrulable refusals (busy, out
+  of its bounds) ride the same `canForce`. On the sheet, a line under Team member answers the slot live
+  (`schedule.slotVerdict`): Free in emerald, a conflict in amber naming who
+  or why ("Ayşe already has an appointment then", "Blocked time: Lunch"),
+  and in grey two facts that never need a confirm, worked out on the sheet's
+  own clock: a start already passed (no confirmation goes out) and a time
+  inside the minimum notice. A new booking always has the line; an existing
+  one gains it when its time or person changes, the saves the server judges.
+  The last answer stays up while the next loads. Save on a conflict swaps
+  the foot for the question, with the reason and Back: "Book it anyway?" for
+  a new booking, "Move it anyway?" for a new time, "Save it anyway?" for a
+  new person. A conflict only the server saw (a booking landed in between)
+  comes back and asks the same way, and changing the time, the customer or
+  the person withdraws the question. An edit moves first and saves the
+  details after, so a refused move saves nothing. A drag the calendar
+  refuses snaps back and asks "Move it anyway?" in the app's dialog
+  (`useConfirm`), then moves with `force`.
+- **Past bookings are quiet** (Nudge c8e1e523). An appointment whose start
+  has passed is a record being kept: `scheduleLifecycleMessages` schedules
+  nothing for the customer on the booking trigger (yesterday's walk-in, a
+  move into the past, which would re-send the confirmation) or on a cancel
+  the business makes in the app (`byBusiness`, passed by `setStatus`, and by
+  `markCancelled` when a person in the business started the cancel on the
+  cal.com lane). The owner's own invite mail is
+  unchanged, a customer's own late cancel still gets its answer, and an ASAP
+  order is never past (its start is when it was placed). The bin asks the
+  same question on a started booking but says the customer will not be told.
+  Only staff can put a booking in the past: every customer-facing door
+  refuses one.
 - The sheet-height dependency rule below still applies, as AnchoredSheet's
-  `measureKey`: `timeEditing`, `picked`, the line count, the error and the
-  cancel question are in the booking sheet's key. Add anything new that
-  changes height.
+  `measureKey`: `timeEditing`, `picked`, the line count, the error, the
+  cancel question, the book-anyway question and whether the verdict line is
+  shown are in the booking sheet's key. Add anything new that changes
+  height.
 
 ## One person, several businesses (2026-08-24)
 
