@@ -44,6 +44,7 @@ import { requireOrg } from "./orgAuth";
 import { emailLaneConfigured, productSender, sendEmail } from "./email";
 import { appointmentIcs } from "./ics";
 import { emailConfig } from "./platformConfig";
+import { WA_FAILURE_SENTENCES, waFailureKind } from "./waFailure";
 import { MAX_ATTEMPTS } from "./sendFailure";
 
 export type AlertKind =
@@ -611,6 +612,9 @@ export const deliverOrgAlert = internalAction({
     template: alertTemplateValidator,
     who: v.string(),
     detail: v.optional(v.string()),
+    // The detail in each reader's language, when the call site has one (a
+    // failed send whose cause lib/waFailure knows). Wins over `detail`.
+    detailByLanguage: v.optional(v.object({ tr: v.string(), en: v.string(), de: v.string() })),
     // Set by the new-booking templates only: the mail then carries the
     // appointment as a calendar invite (REQUEST) or its retraction (CANCEL).
     appointmentId: v.optional(v.id("appointments")),
@@ -657,8 +661,9 @@ export const deliverOrgAlert = internalAction({
         return null;
       }
       const language = resolveAlertLanguage(recipients.language);
-      const subject = fill(copy.subject[language], args.who, args.detail ?? "");
-      const body = fill(copy.body[language], args.who, args.detail ?? "");
+      const detail = args.detailByLanguage?.[language] ?? args.detail ?? "";
+      const subject = fill(copy.subject[language], args.who, detail);
+      const body = fill(copy.body[language], args.who, detail);
       const html = `<p>${escapeHtml(body).replace(/\n/g, "<br/>")}</p>`;
       // The booking alerts carry the appointment as a calendar invite. Read
       // fresh here, not snapshotted at queue time — see icsContext. A missing
@@ -720,6 +725,7 @@ export async function queueOrgAlert(
     template: AlertTemplate;
     who: string;
     detail?: string;
+    detailByLanguage?: { tr: string; en: string; de: string };
     // newBooking / bookingCancelled only: makes the mail carry the
     // appointment as a calendar invite. See deliverOrgAlert.
     appointmentId?: Id<"appointments">;
@@ -800,6 +806,9 @@ export async function alertFailedSend(
   if (STEADY_STATE_FAILURES.has(args.reason)) return;
   const missingTemplate = args.reason.startsWith("no-approved-template");
   const missingText = args.reason.startsWith("no-template-text");
+  // A Meta refusal we can name reads as a sentence, never as
+  // "wa-cloud-http-400-131026" (lib/waFailure).
+  const known = waFailureKind(args.reason);
   await queueOrgAlert(ctx, {
     orgId: args.orgId,
     template: missingTemplate
@@ -818,5 +827,8 @@ export async function alertFailedSend(
         : args.deadLettered
           ? `${args.reason} (${MAX_ATTEMPTS} attempts)`
           : args.reason,
+    ...(known && !missingTemplate && !missingText
+      ? { detailByLanguage: WA_FAILURE_SENTENCES[known] }
+      : {}),
   });
 }

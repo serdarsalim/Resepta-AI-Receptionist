@@ -24,6 +24,7 @@ import {
 import { CallTranscript, CollectedList, humanizeCallEnd } from "./CallDetail";
 import { MessageMedia } from "./MessageMedia";
 import { mediaTypeLabel } from "../../convex/lib/mediaKind";
+import { waFailureKind, type WaFailureKind } from "../../convex/lib/waFailure";
 import { EmojiPicker } from "./EmojiPicker";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 
@@ -107,6 +108,31 @@ const ERROR_KEY: Record<string, TranslationKey> = {
   "no-wamid": "error.no-wamid",
   "reaction-failed": "message.reactionFailed",
 };
+
+// A Meta refusal or a failed delivery names its cause through its code
+// (lib/waFailure), so "not on WhatsApp" reads as that rather than as a bare
+// "not sent". Unknown codes still fall back to "not sent".
+const WA_FAIL_KEY: Record<WaFailureKind, TranslationKey> = {
+  "not-on-whatsapp": "waFail.not-on-whatsapp",
+  "window-closed": "waFail.window-closed",
+  "spam-rate-limit": "waFail.spam-rate-limit",
+  "rate-limit": "waFail.rate-limit",
+  "service-down": "waFail.service-down",
+  "missing-parameter": "waFail.missing-parameter",
+  "bad-value": "waFail.bad-value",
+  "template-params": "waFail.template-params",
+  "template-missing": "waFail.template-missing",
+  "template-too-long": "waFail.template-too-long",
+  "template-rejected": "waFail.template-rejected",
+  "marketing-cap": "waFail.marketing-cap",
+  "marketing-stopped": "waFail.marketing-stopped",
+};
+
+function errorKeyFor(error: string | undefined): TranslationKey | undefined {
+  if (!error) return undefined;
+  const kind = waFailureKind(error);
+  return ERROR_KEY[error] ?? (kind ? WA_FAIL_KEY[kind] : undefined);
+}
 
 // WhatsApp's own delivery language, because it is the one the salon already
 // reads on their phone: one tick left us, two ticks reached the handset, two
@@ -1117,7 +1143,7 @@ export function ConversationPanel({
           const outbound = item.direction === "out";
           const failed = outbound && item.status === "failed";
           const statusKey = outbound && item.status ? STATUS_KEY[item.status] : undefined;
-          const errorKey = item.error ? ERROR_KEY[item.error] : undefined;
+          const errorKey = errorKeyFor(item.error);
           // A date band whenever the day changes. The bubbles then carry only
           // a time, which is what makes a long history scannable: the date is
           // said once per day instead of once per message.
@@ -2166,7 +2192,7 @@ function EmailCards({
             </div>
           ) : null;
         const failed = m.status === "failed";
-        const errorKey = m.error ? ERROR_KEY[m.error] : undefined;
+        const errorKey = errorKeyFor(m.error);
         // Reply only on mail that actually moved — answering a queued,
         // parked or failed send of your own is not a thing.
         const canReply =

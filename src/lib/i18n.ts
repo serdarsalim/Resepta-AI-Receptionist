@@ -4471,6 +4471,73 @@ const dictionary = {
     en: "The assistant could not answer just now.",
     de: "Der Assistent konnte gerade nicht antworten.",
   },
+  // Why a WhatsApp send failed (P10, lib/waFailure): the same sentences the
+  // alert mail uses.
+  "waFail.not-on-whatsapp": {
+    tr: "Bu numara WhatsApp kullanmıyor.",
+    en: "This number is not on WhatsApp.",
+    de: "Diese Nummer nutzt kein WhatsApp.",
+  },
+  "waFail.window-closed": {
+    tr: "Müşterinin son mesajından bu yana 24 saat geçti; artık yalnızca onaylı şablon gönderilebilir.",
+    en: "More than 24 hours since the customer last wrote; only an approved template can go now.",
+    de: "Seit der letzten Nachricht des Kunden sind über 24 Stunden vergangen; jetzt geht nur eine freigegebene Vorlage.",
+  },
+  "waFail.spam-rate-limit": {
+    tr: "WhatsApp, kısa sürede çok mesaj gittiği için bunu durdurdu. Biraz sonra yeniden deneyin.",
+    en: "WhatsApp held this back because too many messages went in a short time. Try again later.",
+    de: "WhatsApp hat dies zurückgehalten, weil in kurzer Zeit zu viele Nachrichten gingen. Später erneut versuchen.",
+  },
+  "waFail.rate-limit": {
+    tr: "Gönderim sınırına ulaşıldı. Biraz sonra yeniden deneyin.",
+    en: "The sending limit was reached. Try again later.",
+    de: "Das Sendelimit wurde erreicht. Später erneut versuchen.",
+  },
+  "waFail.service-down": {
+    tr: "WhatsApp şu an hizmet vermiyor. Biraz sonra yeniden deneyin.",
+    en: "WhatsApp is not available right now. Try again later.",
+    de: "WhatsApp ist gerade nicht erreichbar. Später erneut versuchen.",
+  },
+  "waFail.missing-parameter": {
+    tr: "Mesajda doldurulması gereken bir alan boş kaldı.",
+    en: "A field the message needs was empty.",
+    de: "Ein Feld, das die Nachricht braucht, war leer.",
+  },
+  "waFail.bad-value": {
+    tr: "Mesajdaki bir değer WhatsApp'ın kabul etmediği biçimdeydi.",
+    en: "A value in the message was in a form WhatsApp does not accept.",
+    de: "Ein Wert in der Nachricht hatte eine Form, die WhatsApp nicht annimmt.",
+  },
+  "waFail.template-params": {
+    tr: "Şablonun alanları onaylanan şablonla uyuşmadı.",
+    en: "The template's fields did not match the approved template.",
+    de: "Die Felder passten nicht zur freigegebenen Vorlage.",
+  },
+  "waFail.template-missing": {
+    tr: "Bu dilde onaylı bir şablon yok.",
+    en: "There is no approved template in this language.",
+    de: "In dieser Sprache gibt es keine freigegebene Vorlage.",
+  },
+  "waFail.template-too-long": {
+    tr: "Mesaj, şablonun izin verdiğinden uzun.",
+    en: "The message is longer than the template allows.",
+    de: "Die Nachricht ist länger, als die Vorlage erlaubt.",
+  },
+  "waFail.template-rejected": {
+    tr: "Şablon Meta tarafından onaylanmadı ya da durduruldu.",
+    en: "Meta did not approve the template, or paused it.",
+    de: "Meta hat die Vorlage nicht freigegeben oder pausiert.",
+  },
+  "waFail.marketing-cap": {
+    tr: "WhatsApp, bu müşteriye yakın zamanda çok sayıda tanıtım mesajı gittiği için bunu tutmadı.",
+    en: "WhatsApp held this back because the customer has had many promotional messages lately.",
+    de: "WhatsApp hat dies zurückgehalten, weil der Kunde zuletzt viele Werbenachrichten bekam.",
+  },
+  "waFail.marketing-stopped": {
+    tr: "Müşteri WhatsApp'ta bu işletmeden tanıtım mesajlarını kapattı.",
+    en: "The customer turned off promotional messages from this business on WhatsApp.",
+    de: "Der Kunde hat Werbenachrichten dieses Geschäfts auf WhatsApp abgeschaltet.",
+  },
   "voiceDetail.callMe": {
     tr: "Beni ara",
     en: "Call me",

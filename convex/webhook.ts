@@ -267,8 +267,16 @@ export const handleWhatsappEvent = internalMutation({
           const id = status.id as string | undefined;
           const state = status.status as string | undefined;
           if (!id || !state) continue;
-          const errors = status.errors as { title?: string }[] | undefined;
-          await applyWamidStatus(ctx, orgId, id, state, errors?.[0]?.title);
+          const errors = status.errors as { title?: string; code?: number | string }[] | undefined;
+          // Meta's code rides with its title (lib/waFailure reads it), so a
+          // number that turned out not to be on WhatsApp says so instead of
+          // a bare "Message undeliverable". It used to be dropped here.
+          const first = errors?.[0];
+          const detail =
+            first?.code != null
+              ? `wa-cloud-${first.code}${first.title ? `: ${first.title}` : ""}`
+              : first?.title;
+          await applyWamidStatus(ctx, orgId, id, state, detail);
         }
 
         for (const message of (value.messages ?? []) as Record<string, unknown>[]) {
