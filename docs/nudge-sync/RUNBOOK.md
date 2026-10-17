@@ -1,6 +1,6 @@
 # Nudge → Resepta sync: the cloud runbook
 
-A cloud routine runs this file every 4 hours. It keeps Resepta up to date with
+A cloud routine starts this file every hour; the lock lets only one run work at a time, so back-to-back runs work through the backlog without a gap. It keeps Resepta up to date with
 everything Nudge builds that a salon app needs, without anyone sweeping
 hundreds of commits by hand. Set up 2026-10-17 at Serdar's request ("update
 fully from cloud ... it should pretty much update with all features
