@@ -19,10 +19,11 @@
 - Variables in message and email boxes read as chips in your language ("İşletme adı" instead of [business]); typing @ offers the list; first name is in the list now.
 - You stay signed in when the browser restarts.
 - Dropdown lists stand off the card in dark mode; the country code picker is typed into its own box and shows five rows.
+- Icon buttons name themselves at once in one dark label instead of the browser's slow tooltip; the folded sidebar shows each row's name beside its icon.
 - Business has an Address row: it shows as the location on calendar invites, and [address] puts it in a message.
 
-**Ready to look at:** Voice agent page: edit, Publish, open the version number, Restore, the voicemail row, Test in the browser. Agents table: Try the WhatsApp assistant. A customer's WhatsApp thread, calls tab and notes tab. Admin templates table's category column. The Inbox: scroll far, Unread and Pinned counts, search. The booking sheet's customer picker. A past bulk run's page. Pasting and dropping a file into a WhatsApp conversation. A message rule's text and email body, a campaign, a bulk message: type @. Business → Address, then a confirmation email's invite. Dark mode: any dropdown. A phone field's country code: type +90.
+**Ready to look at:** Voice agent page: edit, Publish, open the version number, Restore, the voicemail row, Test in the browser. Agents table: Try the WhatsApp assistant. A customer's WhatsApp thread, calls tab and notes tab. Admin templates table's category column. The Inbox: scroll far, Unread and Pinned counts, search. The booking sheet's customer picker. A past bulk run's page. Pasting and dropping a file into a WhatsApp conversation. A message rule's text and email body, a campaign, a bulk message: type @. Business → Address, then a confirmation email's invite. Dark mode: any dropdown. A phone field's country code: type +90. Fold the sidebar and hover its icons; hover the email toolbar and a team member's colour.
 
 **Before shipping:** Deploy Convex first (new tables agentTests; new optional fields on retellAgents, calls, waTemplates, usageMonthly). Subscribe the Meta app to template_category_update. Check on one real call that inbound answers with the published version. After the deploy run `customers:backfillSearch` and `threads:backfill`, or search finds nobody.
 
-**Up next:** P20 hover labels, then P21 onward.
+**Up next:** P21 the Inbox's filters, dots and row menu, then P22 the Inbox and customer record as one card.
