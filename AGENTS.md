@@ -40,8 +40,8 @@ loaded into every session, so it stays short. Everything else moved out:
 
 - **[`docs/subsystems.md`](docs/subsystems.md)** — how each part works AS
   BUILT: the message model, onboarding, the current IA, the contact record,
-  the chat agent, the calendar, multi-business, members, the fleet table, the
-  Meta-number and prod-seeds-dev runbooks. Read the section for the area you
+  the chat agent, the calendar, multi-business, members, bulk call runs, the
+  fleet table, the Meta-number and prod-seeds-dev runbooks. Read the section for the area you
   are about to touch.
 - **[`docs/journal/`](docs/journal/README.md)** — dated session write-ups, one
   file per month, oldest first: what changed, what was tried, what was
@@ -304,6 +304,34 @@ calls still wants their reminders, and consent switches every channel off.
   as a yes, through `retell.markNoAiCallsFromCall`. Only a person clears it, on
   the record's switch (`customers.setNoAiCalls`, any member).
 - It changes nothing in the demo org, which never dials.
+
+## A bulk call rings only when it should (2026-10-17)
+
+`bulkRuns.claimNextCall` is the one place a call run decides to dial, and
+every guard lives in it, in the transaction that claims: the reaper restarts
+every running run every five minutes and a resume dials at once, so a guard
+kept anywhere else is dialled straight through. How it runs is in
+`docs/subsystems.md` → "Bulk call runs".
+
+- **Only while the business is open**, in its own timezone: its opening
+  hours with closures cut out, or its send window when it set no hours.
+  Closed, the run is HELD on its own row (`heldUntil` / `heldReason`) with
+  one wake-up for the minute it opens (`lib/businessHours.nextOpenAt`).
+- **Who is rung is judged at their turn**, not at fan-out: consent and No AI
+  calls, then `turnSkipReason` (an open booking ahead, or a call with them
+  already today). Every skip is a reason the run detail prints.
+- **A refused dial is not a call.** No free line (429, 5xx, a full pool, the
+  provider ending it for want of lines) puts the customer back in line
+  through the same hold (`requeueRefusedCall`) instead of failing them, for
+  up to six tries; a thrown fetch is never re-dialled, since that call may be
+  ringing.
+- **What a call came to is read from the disconnect code** (`lib/callOutcome`),
+  never from a transcript, and only a call that reached the phone counts as
+  done.
+- **One call per run**, plus the operator's optional platform-wide limit
+  (`platformConfig` `bulkCallConcurrency`): one provider account carries every
+  business's calls and every inbound call. A new automated dial-out path
+  takes the same guards before it reaches the provider.
 
 ## Marketing email carries an unsubscribe, and the opt-out stops only that (2026-10-13)
 

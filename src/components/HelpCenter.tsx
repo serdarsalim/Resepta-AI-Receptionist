@@ -260,6 +260,19 @@ const CATEGORIES: Category[] = [
         keywords: ["do not call", "no ai calls", "call anyway", "robot", "opt out", "bulk call"],
       },
       {
+        id: "bulk-calls",
+        title: "Call a list of customers",
+        summary: "Let the phone agent call the customers you tick, one at a time, while you are open.",
+        steps: [
+          "In Customers, tick the people to call, choose Call, pick the agent and confirm. Only customers who gave consent and did not ask for No AI calls are included.",
+          "Calls ring one at a time and only during your opening hours, with your blocked time left out. A list started after closing waits and begins when you open. Without opening hours, calls ring during your message sending hours, 09:00 to 21:00 unless they were changed.",
+          "When a customer's turn comes, they are skipped if they already have an appointment coming up or have already had a call with you that day.",
+          "If no phone line is free at that moment, the customer goes back in line and is tried again a few minutes later. They are not counted as called.",
+          "Open the Bulk tab in Customers to follow a list. Each person shows what happened: how long you talked, voicemail, busy, declined, no answer, refused by the network, or why they were skipped. Pause or stop the list there.",
+        ],
+        keywords: ["bulk call", "call list", "call customers", "outbound", "opening hours", "voicemail", "skipped", "busy"],
+      },
+      {
         id: "unsubscribe",
         title: "Marketing email and unsubscribing",
         summary: "Customers can stop your campaign, bulk and win-back emails with one link.",
