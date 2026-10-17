@@ -1219,6 +1219,21 @@ a list you choose from; the right pane says so until you do.
   layout is one column anyway. The moment arrival became the empty state, that
   rule put the empty pane underneath the list instead of beside it.
 
+### The Inbox and the record are one card each (2026-10-17, P22)
+
+Both two-pane screens put ONE card on their grid (`JOINED_PANES`, exported
+from ContactView with `TWO_PANE_COLUMNS`): the list or the record on the
+left, the conversation on the right, no gutter, rounded only outside, and a
+`PANE_DIVIDER` line between them from lg (the Inbox's empty pane carries it
+too). The panes themselves have no card. In dark every conversation tab sits
+on the chat's near-black paper: WhatsApp, email and calls already did, and
+All, notes and forms now read `--conversation-paper` (the card's white in
+light, `--chat-paper` in dark). Against the near-black pane around it that
+paper needs an edge, so dark alone gives the joined card a 1px outline at
+half `--border`, and the divider goes to half with it. Nudge's later
+"Properties" title removal has nothing to remove here (Resepta's record never
+had the title), and its Files-tab action slot has no Resepta tab to serve.
+
 ### A shared component must never rely on a BARE Tailwind `group`
 
 `group-hover:` matches ANY ancestor carrying the class, not the nearest one. The

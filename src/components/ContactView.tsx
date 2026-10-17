@@ -80,6 +80,21 @@ function CustomFieldRow({
 export const TWO_PANE_COLUMNS =
   "lg:grid-cols-[clamp(18rem,40%,32rem)_minmax(0,1fr)]";
 
+// Both screens are ONE card holding both panes (P22, Nudge 2e5b63e7): no
+// gutter between them and no rounded corners along their shared edge, only on
+// the outside. It was two cards 8px apart; the list (or the record) and the
+// conversation are one working surface, and the gap read them as two
+// unrelated panels. Dark gives the joined card one subtle outline at half
+// --border, because the conversation's near-black paper otherwise runs into
+// the near-black pane around it (Nudge 5b81beea, aea8bafd). Light needs none.
+export const JOINED_PANES =
+  "card-raised overflow-hidden dark:border dark:border-[color-mix(in_srgb,var(--border)_50%,transparent)]";
+// The one line between the two panes, from lg where they sit side by side.
+// Half strength in dark to match the outline (Nudge bb817de5). Below lg the
+// panes swap and there is nothing to divide.
+export const PANE_DIVIDER =
+  "lg:border-l lg:border-[var(--border)] lg:dark:border-[color-mix(in_srgb,var(--border)_50%,transparent)]";
+
 function MetaLabel({ label, hint }: { label: string; hint?: string }) {
   return (
     <span className="flex items-center gap-1.5 whitespace-nowrap">
@@ -295,9 +310,9 @@ export function ContactView({
           column its own scroll region (WhatsApp Web / HubSpot dual-scroll):
           the record scrolls left, the conversation scrolls right, the page
           itself never does. */}
-      {/* gap-2, matching the inbox (Serdar, 2026-08-28): record and
-          conversation are one working surface. */}
-      <div className={`grid min-h-0 min-w-0 flex-1 gap-2 ${TWO_PANE_COLUMNS}`}>
+      {/* One card around both, a divider between them (JOINED_PANES): record
+          and conversation are one working surface, the Inbox's shape too. */}
+      <div className={`grid min-h-0 min-w-0 flex-1 ${JOINED_PANES} ${TWO_PANE_COLUMNS}`}>
         {/* Left: the record, everything ABOUT the customer. */}
         <div
           className={`${mobilePane === "record" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col lg:flex`}
@@ -306,10 +321,10 @@ export function ContactView({
               fields read the same way and sit in the same card. Adding a field
               in Workspace setup adds a row here, no code.
 
-              The card fills the column and the field list scrolls INSIDE it, so
-              the scrollbar hugs the card border the way the conversation card's
-              does, instead of a short card floating in an empty column. */}
-          <section className="flex min-h-0 flex-1 flex-col overflow-hidden card-raised">
+              The pane fills the column and the field list scrolls INSIDE it,
+              so the scrollbar hugs the card's edge the way the conversation's
+              does. The card itself is the grid's (JOINED_PANES). */}
+          <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <div className="thin-scroll stable-gutter min-h-0 flex-1 space-y-1.5 overflow-y-auto p-4">
               {/* What they bought leads the card; who they are follows. See the
                   component. Booking from the record, with this customer already
@@ -598,10 +613,10 @@ export function ContactView({
         </div>
 
         {/* Right: conversation, the shared component, never a page variant.
-            The card leads the column with nothing above it, so its top edge
-            lines up with the record card's. */}
+            It leads the column with nothing above it, and only the divider
+            separates it from the record. */}
         <section
-          className={`${mobilePane === "conversation" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col overflow-hidden card-raised lg:flex`}
+          className={`${mobilePane === "conversation" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col overflow-hidden lg:flex ${PANE_DIVIDER}`}
         >
           <ConversationPanel
             customerId={customerId}

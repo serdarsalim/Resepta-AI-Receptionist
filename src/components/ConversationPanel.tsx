@@ -711,13 +711,15 @@ export function ConversationPanel({
   // is cards, and a card separates from the paper by fill exactly the way a
   // bubble does — the ground is what makes the cards read as cards. The
   // doodles stay chat-only; they are set dressing for a conversation, and
-  // mail is not one.
+  // mail is not one. The other tabs take --conversation-paper: the card's
+  // white in light, the chat's near-black in dark, so in dark every tab of the
+  // conversation is one ground set into the joined card (P22).
   const surface =
     filter === "whatsapp"
       ? "chat-wallpaper"
       : filter === "email" || filter === "call"
         ? "chat-wallpaper chat-plain"
-        : "";
+        : "bg-[var(--conversation-paper)]";
 
   // The action the open tab offers while nothing is expanded. Every tab's
   // resting state is a single right-aligned button, which is what makes one
@@ -799,10 +801,12 @@ export function ConversationPanel({
         </div>
       )}
       {header && (
-        // h-11 px-3 matches the list card's header across the gap. It sits on
-        // the card's white rather than the thread's tinted plane: this row is
-        // about the CONTACT, not about the tab under it, and it stays put while
-        // the tab below it changes.
+        // h-11 px-3 matches the list's header across the divider of the
+        // joined card. This row is about the CONTACT, not about the tab under
+        // it, and it stays put while the tab below it changes. The open tab's
+        // action rides its right end, so Compose, Place call and Add note end
+        // where the channel pills' row ends (px-3), never at the feed
+        // column's wider inset (Nudge 18dfc375 made the same move).
         <div className="flex h-11 shrink-0 items-center gap-2 px-3">
           {header}
           {tabAction && <div className="ml-auto flex shrink-0">{tabAction}</div>}

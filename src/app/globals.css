@@ -501,8 +501,9 @@ thead {
 /* From lg up the conversation pane runs NEARLY to the window's right edge,
    the way WhatsApp Web's does (Serdar, 2026-08-31). A view opts in with
    data-bleeds-right on its root; main then trades its 1rem right padding
-   for 0.5rem — the same 8px the gap between the two cards spends, so the
-   card floats with one breath on both sides and its right corners stay
+   for 0.5rem — 8px, the gutter the two panes kept between them until they
+   joined into one card (P22) — so the card floats with one breath on both
+   sides and its right corners stay
    round (fully flush squared them off, and Serdar wanted them back) — and
    gives up the reserved scrollbar track, safe because a pane-filling view
    never scrolls main, so the track was dead width there. Un-layered
@@ -512,8 +513,8 @@ thead {
    inset back, or they would sit closer to the edge than everything else. */
 @media (min-width: 64rem) {
   main:has([data-bleeds-right]) {
-    /* The LEFT edge takes the same 0.5rem (Serdar, 2026-08-31): list, gap
-       and thread float with one even breath, instead of a wide left margin
+    /* The LEFT edge takes the same 0.5rem (Serdar, 2026-08-31): the joined
+       card floats with one even breath, instead of a wide left margin
        against a tight right one. */
     padding-left: 0.5rem;
     padding-right: 0.5rem;
@@ -758,6 +759,12 @@ thead {
      2026-08-31, on #e5ddd5) is gone: WhatsApp Web itself draws none now, and
      the pattern was the busiest thing on the most-read screen. */
   --chat-paper: #f5f2ec;
+  /* The ground of the conversation's other tabs (All, notes, forms). Light
+     keeps them on the card's white; dark moves them onto the chat's own
+     near-black paper (below), so every tab of the conversation reads as one
+     surface set into the joined card rather than the list's grey (P22,
+     Nudge 46293b4d, 5b81beea). */
+  --conversation-paper: var(--card);
   /* The composer's field, which has to sit ON the paper and read as a field in
      both themes. It cannot be --card (that IS the dark paper) and it cannot be
      --muted-bg (identical to --card in dark). */
@@ -824,6 +831,7 @@ thead {
      wallpaper, dark mode there resolved the :root WHITE and painted light
      paper under light text. */
   --chat-paper: #0f0f0f;
+  --conversation-paper: var(--chat-paper);
   --chat-field: #242424;
   /* Dark keeps the app's neutral greys for the inbound side (WhatsApp's own
      #202c33 has a blue cast that clashes with this app's neutral dark) and

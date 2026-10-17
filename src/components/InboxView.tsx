@@ -21,7 +21,7 @@ import { mediaKindKey } from "@/lib/mediaLabel";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { resetUnreadVisit, useUnreadVisit } from "@/lib/useUnreadVisit";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
-import { TWO_PANE_COLUMNS } from "./ContactView";
+import { JOINED_PANES, PANE_DIVIDER, TWO_PANE_COLUMNS } from "./ContactView";
 import { FeedFilterPills } from "./FeedFilterPills";
 import { FeedIcon, type FeedIconType } from "./FeedIcon";
 import { RowMenu } from "./RowMenu";
@@ -407,23 +407,23 @@ export function InboxView({
           with nothing selected, that rule put the empty state underneath the
           list instead of beside it. Below lg it is still one column and the two
           panes swap. */}
-      {/* gap-2, down from gap-4 (Serdar, 2026-08-28): list and thread are
-          one working surface, and a wide gutter read them as two unrelated
-          panels. */}
-      <div className={`grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-2 ${TWO_PANE_COLUMNS}`}>
+      {/* One card around list and thread, a divider between them
+          (JOINED_PANES, P22): they are one working surface. The gutter went
+          from gap-4 to gap-2 on 2026-08-28 for that reason and is gone now. */}
+      <div className={`grid min-h-0 min-w-0 flex-1 grid-cols-1 ${JOINED_PANES} ${TWO_PANE_COLUMNS}`}>
         {/* Conversation list. On small screens it swaps with the open
             conversation instead of sharing the row. */}
         <section
           className={`${selected ? "hidden lg:flex" : "flex"} min-h-0 min-w-0 flex-col`}
         >
-          <div className="card-raised flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* The list's header, inside the card it filters.
 
               It used to be a bare track ABOVE the card, and its stated job was
               to mirror the right column's name row so both card tops landed on
-              the same line. Both header rows moved inside their own cards, so
-              the two cards now start at the same y with nothing scaffolding
-              them, and the alignment that track existed to buy is free.
+              the same line. Both header rows moved inside their own panes, and
+              since P22 both panes are one card, so they start at the same y
+              with nothing scaffolding them.
 
               ONE LINE ONLY — a second row of chips spills rather than pushing
               the list down. */}
@@ -837,8 +837,8 @@ export function InboxView({
         {/* Nothing chosen yet. Below lg the list owns the screen and this never
             shows — there is no second column there to be empty. */}
         {!active && (
-          <section className="hidden min-h-0 min-w-0 flex-col lg:flex">
-            <div className="card-raised flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-[var(--muted)]">
+          <section className={`hidden min-h-0 min-w-0 flex-col lg:flex ${PANE_DIVIDER}`}>
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 text-[var(--muted)]">
               <svg
                 width="28"
                 height="28"
@@ -861,9 +861,9 @@ export function InboxView({
             customer so composer drafts never leak across contacts. */}
         {active && (
           <section
-            className={`${selected ? "flex" : "hidden lg:flex"} min-h-0 min-w-0 flex-col`}
+            className={`${selected ? "flex" : "hidden lg:flex"} min-h-0 min-w-0 flex-col ${PANE_DIVIDER}`}
           >
-            <div className="card-raised flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <ConversationPanel
               key={active.customerId}
               customerId={active.customerId}

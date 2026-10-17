@@ -779,7 +779,16 @@ when you switched tabs.
 that `stable-gutter` reserves for `.thin-scroll`'s track. That gutter sits
 OUTSIDE the padding, so matching `px-4` alone still lands 9px short — which is
 exactly how this looked "nearly right" for months. One `FEED_COL_PAD` constant
-covers all three now; keep it in step with the `threadRef` div.
+covers the bands that open below the header (the email and note composers, an
+open thread's back-and-subject); keep it in step with the `threadRef` div.
+
+**The resting action is not in that column** (P22, 2026-10-17; Nudge
+18dfc375). Compose, Place call and Add note ride the right end of the header
+row itself (`px-3`), so they end where the channel pills' row ends. Nudge's
+pane had them on the feed column's inset, about 50px in under nothing, and
+moved them out; Resepta already had them on the header row and keeps them
+there. A new tab's resting button goes on that row, never into a band of its
+own at `FEED_COL_PAD`.
 
 Keep it as `calc(1rem + 9px)`, never a resolved pixel value. Nothing sets a root
 font-size, so `rem` tracks the browser's font preference and Serdar's Chrome runs
@@ -865,6 +874,17 @@ ContactView (Nudge 1a6c46ce): 40/60 from lg, the left column capped at 32rem,
 the conversation taking the rest inside its own 56rem measure. A row in the
 Inbox opens the record, so the two right-hand panes are one pane a click
 apart; change the split there, never in one view.
+
+**Each of the two is ONE card holding both panes** (P22, 2026-10-17; Nudge
+2e5b63e7). `JOINED_PANES` (next to `TWO_PANE_COLUMNS`) puts the card on the
+grid: no gutter, rounded corners only on the outside, and from lg one
+`PANE_DIVIDER` line between the panes. Neither pane is a card of its own; do
+not put `card-raised` back on one. In dark the conversation's tabs all sit on
+the chat's near-black paper (`--conversation-paper`; light keeps the card's
+white for All and notes, the beige paper for WhatsApp, email and calls), so
+the joined card wears one outline at half `--border` and the divider goes to
+half strength with it. Light has neither extra. Below lg the panes still swap
+inside the same card, and the phone still runs edge to edge.
 
 **The rail's two menu controls look alike**: the business switcher at the top
 and the account row at the foot wear `--pane-field` at rest with the up/down
