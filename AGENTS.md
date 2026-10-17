@@ -188,6 +188,12 @@ function is the only way to guarantee they do. Never alert from a call site.
   ambiguous outcome must not be re-sent. The retry queue takes the opposite
   view deliberately — losing a reminder is worse than a duplicate, but a
   claimed row may already have been delivered.
+- **A composed email is parked before it goes** (2026-10-17, P28). The
+  compose window's Send holds it ten seconds for Undo and Schedule send holds
+  it until its time: `email.sendToCustomer` writes the row queued with
+  `scheduledFor`, and `email.claimParked` re-checks every refusal at the
+  moment it goes. WhatsApp's parked sweep must leave `email_reply` rows
+  alone, and a new parked kind needs its own claim on the same pattern.
 
 ## Cron cost must track work, not org count
 
@@ -580,6 +586,10 @@ thing, the sheet asks which — do not stack both forms and hope. A sheet that
 holds typed words passes `dirty` (the bulk and campaign composers do): Escape
 and a backdrop click then leave it open and only Cancel closes it, because
 Escape is also how the variable and emoji menus inside it close (2026-10-13).
+Writing to ONE customer is not a sheet at all: the email compose window
+(`ComposeDock`, P28) docks bottom-right over a usable page, never closes on an
+outside click or Escape, and keeps its draft in the browser. A new composer
+for one person takes the dock, not a sheet.
 
 **3. Vertical space is the scarce resource.** A row carrying a name and an
 email is ONE line, not three: identity reads across, controls sit in columns

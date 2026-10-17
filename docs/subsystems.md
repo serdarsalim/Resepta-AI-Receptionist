@@ -1081,6 +1081,9 @@ deals; we sell services, and an appointment is the thing a customer bought.
     somebody typing an arrow.
   - The index snippet uses `quoteFreeSnippet`: a row reading "On Mon 17 Aug,
     Barber wrote:" is describing the mail BEFORE this one.
+- **Since P28 (2026-10-17) the email composer is a docked window**, not a box
+  in the tab: see "The email compose window" at the end of this file. The
+  notes below about the editor still hold.
 - **The email composer is the rich editor**, `EmailBodyEditor` in `compact`
   mode: no frame of its own (the composer is already a box), no Visual/HTML
   switch (nobody hand-writes HTML in a reply — that earns its place in the
@@ -2689,3 +2692,51 @@ refresh-token inactivity window. Without it they were session cookies and a
 browser restart signed the owner out although the session was still valid.
 Sign-out and a revoked session still end access at once. The demo
 subdomain's walk-in session gets the same lifetime on its own host.
+
+## The email compose window (2026-10-17, P28)
+
+Compose and an email card's Reply open `EmailComposeWindow` in a
+`ComposeDock`: Gmail's window, docked bottom-right in one tray
+(`#compose-dock-tray`, z-40, under the sheets and dialogs), folding to a tab,
+expanding to a centred sheet, the whole screen below sm. It never closes on an
+outside click or Escape; only its × or the bin close it. `ConversationPanel`
+holds `composing` and the subject it opens with; Reply re-keys the window to
+that reply.
+
+- **Envelope.** From is the business's one sender (`email.composeSender`),
+  To is the customer's name and address, Subject a flat line. Once you focus
+  the subject or the text, To folds away; clicking From brings it back.
+- **Send is never instant.** The window calls `email.sendToCustomer` with
+  `hold: true` (ten seconds) or `scheduledFor` (Schedule send: tomorrow 8:00,
+  tomorrow 13:00, Monday 8:00, or a picked time, in the sender's clock). The
+  action runs every refusal it always ran, then parks the row queued with
+  `scheduledFor`, so it shows in the thread as Scheduled with its time and a
+  Cancel, and schedules `email.sendParked` at that moment. `claimParked`
+  clears `scheduledFor` and stamps `sendingAt` in the transaction that
+  re-checks a deleting customer (the row goes with them), suspension, the
+  demo org (before any credential), the address and the sender;
+  `applySendResult` decides the outcome as for every send. The every-minute
+  `email.sendDueParked` is the backstop for a lost run, and
+  `wa.dueScheduled` filters parked email out of WhatsApp's sweep.
+- **Undo.** Send hides the window (still mounted) and raises the bottom-left
+  notice "Sending… Undo" (`lib/notices`, a module store drawn by `NoticeHost`
+  in `ToastProvider`, so it outlives the window). Undo calls
+  `wa.cancelScheduled`, which now answers whether it cancelled: true brings
+  the window back as it was, false means the hold had run out and it says
+  "Email sent.". If the page closed the window during the hold, Undo still
+  cancels and says "Email cancelled.".
+- **Drafts** are in this browser's storage, keyed by the signed-in email, the
+  business and the customer (a reply by its subject too). Restored when the
+  window opens, cleared once the hold lapses (Undo keeps it), discarded by the
+  bin. Serdar's choice in Nudge: browser, not account. Nothing about a draft
+  reaches the server, so a customer's deletion has nothing to sweep there.
+- **Signatures** (`convex/emailSignatures.ts`): a member's named signatures,
+  each private or shared with the business, `emailSignatures` (orgId, userId)
+  plus `memberships.emailSignatureId` for the one their window opens with.
+  Only the writer edits or deletes one; making it private or deleting it
+  clears colleagues' defaults; leaving the business deletes the person's
+  signatures (`lib/members.revokeMembership`). The menu on the window's bar
+  applies one in place of whichever known signature ends the body
+  (`lib/signature.swapSignature`, matched by text). Bulk email keeps its own
+  composer: it is marketing mail to many customers on another path.
+
