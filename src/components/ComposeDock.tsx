@@ -123,7 +123,8 @@ export function ComposeDock({
         role="dialog"
         aria-label={title}
         style={hidden ? { display: "none" } : undefined}
-        className={`pointer-events-auto flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--card)] shadow-2xl ${frame} ${
+        // .chat-font (P31): a message is written in the face it is read in.
+        className={`chat-font pointer-events-auto flex flex-col overflow-hidden border border-[var(--border)] bg-[var(--card)] shadow-2xl ${frame} ${
           folded
             ? ""
             : "max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:h-auto max-sm:max-h-none max-sm:w-auto max-sm:min-w-0 max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:border-0"

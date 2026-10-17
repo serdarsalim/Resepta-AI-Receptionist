@@ -844,7 +844,9 @@ export function ConversationPanel({
 
   return (
     <div
-      className={`pane-measure relative flex min-h-0 flex-col ${surface} ${className ?? ""}`}
+      // .chat-font on the root (P31): every channel tab reads in the comms
+      // face, Roboto, not only the WhatsApp thread.
+      className={`pane-measure chat-font relative flex min-h-0 flex-col ${surface} ${className ?? ""}`}
       // A file dragged from the desktop onto the conversation attaches to the
       // next message. The depth counter is because dragenter and dragleave
       // fire for every child the pointer crosses.
@@ -1031,11 +1033,11 @@ export function ConversationPanel({
           // WhatsApp gets the WALLPAPER and an open email thread gets the flat
           // tint. Mail is not a chat: no client wallpapers it, and giving it
           // one would say the two channels are the same thing.
-          // The WhatsApp thread also takes WhatsApp Web's own face
-          // (.chat-font, P10); nothing else in the app does.
+          // The face comes from the panel root's .chat-font (P31), which
+          // covers every tab, not only this thread.
           // Notes are signed rows with a hairline between them (P12).
           chatOrder
-            ? "chat-font space-y-2"
+            ? "space-y-2"
             : filter === "note"
               ? "divide-y divide-[var(--border)]"
               : ""

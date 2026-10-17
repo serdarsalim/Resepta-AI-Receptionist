@@ -518,7 +518,7 @@ export function ContactView({
                 space this grid has is the
                 same mistake that made the values wrap in the first place.
                 20rem is measured, not guessed. Re-measured 2026-10-13 with all
-                six pairs, in the container's content box, Geist at text-xs,
+                six pairs, in the container's content box, Geist at text-xs (the app is Inter since P31: re-measure),
                 the (i) included: German is the widest and needs 19.45rem,
                 English 19.1rem, Turkish 18.4rem (German alone was 19.0rem
                 before the last two pairs). Below 20rem it stacks rather than

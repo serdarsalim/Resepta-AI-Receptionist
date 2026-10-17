@@ -838,8 +838,9 @@ font-size, so `rem` tracks the browser's font preference and Serdar's Chrome run
 ## The WhatsApp thread copies WhatsApp, measured (2026-10-17, P10)
 
 Nudge's thread, measured off WhatsApp Web, brought back: plain `#f5f2ec`
-paper with no doodles, Roboto inside the thread only (`.chat-font`,
-`--font-chat` from `app/layout.tsx`), WhatsApp's own tail SVG on the first
+paper with no doodles, Roboto (`.chat-font`, `--font-chat` from
+`app/layout.tsx`; since P31 the whole conversation pane wears it, see "Two
+faces" below), WhatsApp's own tail SVG on the first
 bubble of a run with that top corner squared, 2px between bubbles of a run
 and 12px between runs (margins collapsing with the list's `space-y-2`), and a
 65% cap. Bodies render WhatsApp's `*bold*`, `_italic_`, `~strike~` and
@@ -848,6 +849,19 @@ shows a WhatsApp body the way the customer sees it uses (bubbles, quotes,
 the message preview). A failed send's cause comes from `lib/waFailure` (Meta
 codes we are sure of, never a guess), in the bubble and in the alert mail.
 Measure against WhatsApp Web before changing any of it.
+
+## Two faces, each with a job (2026-10-17, P31)
+
+**Inter** (`--font-app-sans`, latin + latin-ext) is the app's face: every
+page, the sidebar and header, and the public booking, manage, help and legal
+pages. **Roboto** (`.chat-font`, `--font-chat`) is the COMMS face and only
+that: the Inbox list and its pills, the conversation pane on every channel
+tab, and the docked email window, so a person reads and writes every message
+in one face (Nudge d55ab896, where Serdar settled it). Nunito stays on the
+six letters of the wordmark. Never add a fourth. Geist went with this
+change: it loaded the latin subset only, so ş, ğ, ı and İ dropped to a
+fallback mid-word. Any new face must carry latin-ext. A width measured in
+Geist (a column sized to its labels) wants re-measuring before it is trusted.
 
 ## Borders only when absolutely necessary (Serdar's design language)
 

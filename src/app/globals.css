@@ -272,13 +272,13 @@
   --color-muted-strong: var(--muted-strong);
   --color-muted: var(--muted);
   --color-muted-bg: var(--muted-bg);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-app-sans);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-app-sans), system-ui, sans-serif;
 }
 
 /* One header treatment for every data table. A rule and the weight of the
@@ -722,11 +722,11 @@ thead {
      the sidebar and on the sign-in page, and those are the two places a brand
      drifts apart when each is styled by hand.
 
-     Geist is named as the fallback rather than left to system-ui, because the
+     Inter is named as the fallback rather than left to system-ui, because the
      wordmark is six letters that must not reflow into a different face while
      one font file loads. */
   .wordmark {
-    font-family: var(--font-nunito), var(--font-geist-sans), system-ui,
+    font-family: var(--font-nunito), var(--font-app-sans), system-ui,
       sans-serif;
     font-weight: 800;
     letter-spacing: -0.025em;
@@ -786,10 +786,12 @@ thead {
   /* Plain since P10 (see --chat-paper). The tile and its veil lived here; the
      images stay in public/ in case the pattern is ever wanted back. */
 }
-/* The chat's own face: Roboto, as WhatsApp Web ships it ("Roboto Variable",
+/* The COMMS face: Roboto, as WhatsApp Web ships it ("Roboto Variable",
    then Roboto, Helvetica Neue, Helvetica; Nudge measured it 2026-10-18).
-   ONLY inside the conversation's WhatsApp thread; the rest of the app keeps
-   its face. Loaded by app/layout.tsx as --font-chat. */
+   Everything else is Inter (P31). Worn by the Inbox list and its pills, the
+   whole conversation pane (WhatsApp, email, calls, notes, forms) and the
+   docked email window, so a person reads and writes every message in one
+   face. Loaded by app/layout.tsx as --font-chat. */
 .chat-font {
   font-family: var(--font-chat), Roboto, "Helvetica Neue", Helvetica, sans-serif;
 }

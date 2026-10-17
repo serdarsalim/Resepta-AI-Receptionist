@@ -412,9 +412,10 @@ export function InboxView({
           from gap-4 to gap-2 on 2026-08-28 for that reason and is gone now. */}
       <div className={`grid min-h-0 min-w-0 flex-1 grid-cols-1 ${JOINED_PANES} ${TWO_PANE_COLUMNS}`}>
         {/* Conversation list. On small screens it swaps with the open
-            conversation instead of sharing the row. */}
+            conversation instead of sharing the row. It reads in the comms
+            face (.chat-font, P31), like the conversation beside it. */}
         <section
-          className={`${selected ? "hidden lg:flex" : "flex"} min-h-0 min-w-0 flex-col`}
+          className={`${selected ? "hidden lg:flex" : "flex"} chat-font min-h-0 min-w-0 flex-col`}
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* The list's header, inside the card it filters.
