@@ -1421,6 +1421,10 @@ export default defineSchema({
     // landing on this one. Kept only for the sweep, which matches provider
     // events still queued under this number; gone with the row.
     deletingPhone: v.optional(v.string()),
+    // The folded text the search index reads (lib/customerSearch). Kept by
+    // syncCustomerSearch after every identity write; absent on a customer
+    // being deleted, and on rows from before it until customers:backfillSearch.
+    searchText: v.optional(v.string()),
   })
     .index("by_org", ["orgId"])
     .index("by_org_phone", ["orgId", "phone"])
@@ -1428,7 +1432,11 @@ export default defineSchema({
     // customer nobody has talked to, and a range over gt 0 leaves them out.
     .index("by_org_thread_last", ["orgId", "thread.lastAt"])
     // The unread badge: conversations whose newest inbound clears a floor.
-    .index("by_org_thread_inbound", ["orgId", "thread.lastInboundAt"]),
+    .index("by_org_thread_inbound", ["orgId", "thread.lastInboundAt"])
+    // Search over this business's customers (P13, lib/customerSearch): the
+    // folded name, address and phone forms, so "ayse" finds Ayşe without
+    // reading the book.
+    .searchIndex("search_text", { searchField: "searchText", filterFields: ["orgId"] }),
 
   // Org-defined contact fields (the SMALL core of Nudge's Fields registry —
   // no value maps, no variable keys, no sync scoping). Per-vertical custom

@@ -1,6 +1,8 @@
 import { v } from "convex/values";
+import { customerSearchText, foldSearch, syncCustomerSearch } from "./lib/customerSearch";
 import type { Doc } from "./_generated/dataModel";
-import { internalQuery, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { assertE164, requireOrg, requireOwner } from "./lib/orgAuth";
 import { normalisePhone } from "./lib/phone";
 import { recordActivity } from "./lib/activity";
@@ -156,28 +158,26 @@ export const quickSearch = query({
       phone: v.string(),
     }),
   ),
+  // Off the search index since P13 (lib/customerSearch): it used to read the
+  // whole book and filter in JavaScript on every keystroke. A search reads
+  // only matches now, in relevance order, matching words by their start (the
+  // last word as you type it), so "ayse yil" finds Ayşe Yılmaz and "0532"
+  // finds her number.
   handler: async (ctx, { q }) => {
     const { orgId } = await requireOrg(ctx);
-    const fold = (value: string) =>
-      value
-        .replace(/[İIı]/g, "i")
-        .replace(/ß/g, "ss")
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[̀-ͯ]/g, "");
-    const needle = fold(q.trim());
+    const needle = foldSearch(q.trim());
     // Below two characters most of the book matches and the list is noise.
     // The component applies the same floor; this one holds if it ever slips.
     if (needle.length < 2) return [];
     const rows = await ctx.db
       .query("customers")
-      .withIndex("by_org", (index) => index.eq("orgId", orgId))
-      .collect();
+      .withSearchIndex("search_text", (index) =>
+        index.search("searchText", needle).eq("orgId", orgId),
+      )
+      .take(16);
     const out: Array<{ id: Doc<"customers">["_id"]; name: string; phone: string }> = [];
     for (const c of rows) {
       if (isDeleting(c)) continue;
-      const hay = fold(`${c.firstName} ${c.lastName ?? ""} ${c.phone} ${c.email ?? ""}`);
-      if (!hay.includes(needle)) continue;
       out.push({
         id: c._id,
         name: `${c.firstName} ${c.lastName ?? ""}`.trim(),
@@ -186,6 +186,36 @@ export const quickSearch = query({
       if (out.length >= 8) break;
     }
     return out;
+  },
+});
+
+// The repair for the search text (lib/customerSearch): every customer's
+// recomputed, a page at a time, rescheduling itself until done. Idempotent,
+// so run it after a deploy that adds the field, or whenever a write path is
+// found to have skipped syncCustomerSearch:
+//   npx convex run customers:backfillSearch '{}'
+export const backfillSearch = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  returns: v.object({ patched: v.number(), isDone: v.boolean() }),
+  handler: async (ctx, { cursor }) => {
+    const page = await ctx.db
+      .query("customers")
+      .paginate({ cursor: cursor ?? null, numItems: 200 });
+    let patched = 0;
+    for (const customer of page.page) {
+      const next =
+        customer.deletingAt !== undefined ? undefined : customerSearchText(customer);
+      if (customer.searchText !== next) {
+        await ctx.db.patch(customer._id, { searchText: next });
+        patched += 1;
+      }
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.customers.backfillSearch, {
+        cursor: page.continueCursor,
+      });
+    }
+    return { patched, isDone: page.isDone };
   },
 });
 
@@ -281,6 +311,7 @@ export const create = mutation({
       notes: args.notes?.trim() || undefined,
       consentAt: args.consent ? Date.now() : undefined,
     });
+    await syncCustomerSearch(ctx, customerId);
     await recordCustomerCreated(ctx, { orgId, customerId, source: "staff" });
     return customerId;
   },
@@ -326,6 +357,7 @@ export const update = mutation({
       patch.consentAt = args.consent ? (customer.consentAt ?? Date.now()) : undefined;
     }
     await ctx.db.patch(args.customerId, patch);
+    await syncCustomerSearch(ctx, args.customerId);
     // Staff typing in a missing email repays the same debt the voice path
     // does: a confirmation that failed no-email-address is re-fired for
     // future bookings the moment the address exists.

@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { syncCustomerSearch } from "./lib/customerSearch";
 import { internalAction, internalMutation, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -455,6 +456,7 @@ export async function processInboundMessage(
       firstName: "",
       phone,
     });
+    await syncCustomerSearch(ctx, contactId);
     await recordCustomerCreated(ctx, {
       orgId,
       customerId: contactId,

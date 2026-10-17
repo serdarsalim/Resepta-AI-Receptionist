@@ -1,4 +1,5 @@
 import { v, type Infer, type ObjectType } from "convex/values";
+import { syncCustomerSearch } from "./lib/customerSearch";
 import { builtinAgentVariables } from "./lib/agentVariables";
 import {
   action,
@@ -2786,6 +2787,7 @@ export async function agentBookTx(
       // as the cal.com page).
       consentAt: Date.now(),
     });
+    await syncCustomerSearch(ctx, customerId);
     await recordCustomerCreated(ctx, {
       orgId: args.orgId,
       customerId,
@@ -2815,6 +2817,7 @@ export async function agentBookTx(
         firstName,
         ...(rest.length > 0 ? { lastName: rest.join(" ") } : {}),
       });
+      await syncCustomerSearch(ctx, customer._id);
     }
   }
   if (!customer) throw new Error("customer-failed");
@@ -3418,6 +3421,7 @@ export async function applyVoiceContactValues(
   }
   if (updated.length > 0) {
     await ctx.db.patch(customer._id, { custom, ...identityPatch });
+    if (Object.keys(identityPatch).length > 0) await syncCustomerSearch(ctx, customer._id);
     // The email arriving NOW is what an earlier no-email-address confirmation
     // was waiting for — the agent asks for the address after booking, so the
     // booking-time send raced an empty column and lost. Repay it.
@@ -3502,6 +3506,7 @@ export const updateContactFromVoice = internalMutation({
         firstName: "",
         phone,
       });
+      await syncCustomerSearch(ctx, customerId);
       await recordCustomerCreated(ctx, {
         orgId: agent.orgId,
         customerId,
@@ -3923,6 +3928,7 @@ export const recordCall = internalMutation({
           firstName: "",
           phone: counterparty,
         });
+        await syncCustomerSearch(ctx, customerId);
         await recordCustomerCreated(ctx, {
           orgId: agent.orgId,
           customerId,

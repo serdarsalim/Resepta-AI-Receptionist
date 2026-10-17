@@ -19,6 +19,7 @@
 // or the de_autotakt test account): listed calls that belong to no row of
 // THIS org are skipped, so a shared workspace only ever backfills its own.
 
+import { syncCustomerSearch } from "./lib/customerSearch";
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -315,6 +316,7 @@ export const repairIdentityBatch = internalMutation({
             firstName: "",
             phone: counterparty,
           });
+          await syncCustomerSearch(ctx, customerId);
           await recordCustomerCreated(ctx, {
             orgId: args.orgId,
             customerId,

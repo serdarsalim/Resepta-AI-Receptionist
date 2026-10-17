@@ -150,7 +150,13 @@ export function AppointmentsView({
   // showing the shape of the week. So typing switches you to the view that can
   // show results, rather than the box going missing on two views out of three
   // and leaving you to work out why.
-  const search = useHeaderSearch(t("common.search"));
+  // The header box also finds any customer (P13), so a booking can start from
+  // the person as well as from the time.
+  const jumpToCustomer = useCallback(
+    (customerId: string) => onOpenContact(customerId as Id<"customers">),
+    [onOpenContact],
+  );
+  const search = useHeaderSearch(t("common.search"), jumpToCustomer);
   useEffect(() => {
     if (search.active && view !== "list") setView("list");
   }, [search.active, view]);

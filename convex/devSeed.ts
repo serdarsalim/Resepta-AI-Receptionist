@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { syncCustomerSearch } from "./lib/customerSearch";
 import { internalMutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
@@ -220,6 +221,7 @@ export const seed = internalMutation({
         consentAt: consented ? now - (i + 1) * DAY : undefined,
         lastInboundAt: i % 3 === 0 ? now - (i % 5) * HOUR : undefined,
       });
+      await syncCustomerSearch(ctx, customerId);
 
       // 1–2 appointments per customer: mostly upcoming week, some history.
       const rounds = i % 3 === 0 ? 2 : 1;
@@ -479,6 +481,7 @@ export const seedWhatsappThreads = internalMutation({
           language: "tr",
           consentAt: now - 30 * DAY,
         });
+        await syncCustomerSearch(ctx, id);
         customer = await ctx.db.get(id);
       }
       if (!customer) return;

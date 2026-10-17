@@ -1332,7 +1332,14 @@ day on a 1k WhatsApp blast (its AGENTS.md, 2026-09-02).
    read exactly the customers they show. `threads:backfill` rebuilds every
    row and is idempotent — run it if a write path is ever found to have
    skipped its call.
-3. **Per-agent call figures are counters.** `retellAgents.callCount` and
+3. **Customer search reads the search index, never the book** (2026-10-17,
+   P13). `customers.searchText` is the folded name, address and phone forms
+   (`lib/customerSearch`) under the `search_text` index filtered by `orgId`.
+   **Any mutation that inserts a customer or changes a first name, last name,
+   phone or email calls `syncCustomerSearch` after it**, same standing as
+   `noteMessage`. `customers:backfillSearch` rebuilds every row and is
+   idempotent; run it once after the deploy that adds the field.
+4. **Per-agent call figures are counters.** `retellAgents.callCount` and
    `lastCallStartedAt`, bumped by `recordCall` on the INSERT only; "today"
    is a `by_org_started` range. `retell:backfillCallCounters` seeds them.
 

@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { syncCustomerSearch } from "./lib/customerSearch";
 import {
   internalAction,
   internalMutation,
@@ -239,6 +240,7 @@ export const handleCalcomEvent = internalMutation({
         // Booking through the salon's own cal.com page IS the opt-in moment.
         consentAt: Date.now(),
       });
+      await syncCustomerSearch(ctx, customerId);
       await recordCustomerCreated(ctx, {
         orgId: org._id,
         customerId,

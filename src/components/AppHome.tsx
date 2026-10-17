@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -104,8 +104,17 @@ export function AppHome() {
     }
   }
 
+  // The tab a record opens under, read through a ref so openContact can stay
+  // the same function across renders.
+  const tabRef = useRef(tab);
+  useEffect(() => {
+    tabRef.current = tab;
+  }, [tab]);
+
   // One door, so nothing can set an id without settling the channel with it.
-  const openContact = (
+  // Stable (useCallback over setters only): views hand it to the header
+  // search, whose claiming effect lists it in its deps (lib/HeaderSearch).
+  const openContact = useCallback((
     id: Id<"customers">,
     channel?: FeedFilter,
     itemId?: string,
@@ -113,8 +122,8 @@ export function AppHome() {
     setContactFilter(channel);
     setContactItem(itemId);
     setContactId(id);
-    setContactTab(tab);
-  };
+    setContactTab(tabRef.current);
+  }, []);
 
   // The tab lives in the URL, so a refresh comes back where you were and a
   // link to Settings opens Settings. A bare URL falls back to the last tab

@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { syncCustomerSearch } from "./lib/customerSearch";
 import {
   action,
   internalMutation,
@@ -390,6 +391,7 @@ export const prepareCreate = internalMutation({
         phone,
         consentAt: fresh.consent ? Date.now() : undefined,
       });
+      await syncCustomerSearch(ctx, customerId);
       // Typed into the booking sheet by somebody who is looking at it.
       await recordCustomerCreated(ctx, { orgId, customerId, source: "staff" });
     }

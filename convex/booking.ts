@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { syncCustomerSearch } from "./lib/customerSearch";
 import { internal } from "./_generated/api";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -712,6 +713,7 @@ export const book = mutation({
         // dated — the same reasoning as the request form.
         consentAt: Date.now(),
       });
+      await syncCustomerSearch(ctx, customerId);
       await recordCustomerCreated(ctx, {
         orgId: org._id,
         customerId,
@@ -721,6 +723,7 @@ export const book = mutation({
       // Fill a blank, never overwrite: the record's address may be the one
       // the salon actually corresponds on.
       await ctx.db.patch(customerId, { email });
+      await syncCustomerSearch(ctx, customerId);
     }
 
     const allUpcoming = (

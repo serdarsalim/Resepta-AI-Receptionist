@@ -5,7 +5,7 @@
 // One row per CUSTOMER across all three channels; calls are a channel here,
 // not a separate tab (ported from Nudge's InboxView).
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -123,7 +123,13 @@ export function InboxView({
   const setInboxPin = useMutation(api.messages.setInboxPin);
   const markConversationRead = useMutation(api.messages.markConversationRead);
   const markAllRead = useMutation(api.messages.markAllConversationsRead);
-  const search = useHeaderSearch(t("common.search"));
+  // The header box also finds any customer (P13): the Inbox lists only
+  // people with a conversation, and the one you want may have none.
+  const jumpToCustomer = useCallback(
+    (customerId: string) => onOpenContact(customerId as Id<"customers">),
+    [onOpenContact],
+  );
+  const search = useHeaderSearch(t("common.search"), jumpToCustomer);
   const [selected, setSelected] = useState<Id<"customers"> | null>(null);
   // Re-snapped to the conversation's own channel on every select; "all" is
   // only the before-first-selection default.

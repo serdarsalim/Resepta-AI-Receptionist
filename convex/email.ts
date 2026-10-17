@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { syncCustomerSearch } from "./lib/customerSearch";
 import {
   action,
   internalAction,
@@ -110,6 +111,7 @@ export const recordInbound = internalMutation({
         phone: "",
         email: from,
       });
+      await syncCustomerSearch(ctx, customerId);
       await recordCustomerCreated(ctx, {
         orgId: args.orgId,
         customerId,

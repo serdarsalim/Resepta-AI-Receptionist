@@ -13,6 +13,7 @@
 //      snapshot means an undo silently reverts a stylist's edit made in between.
 //   2. Undo goes forward through the same write path, never a raw patch.
 
+import { syncCustomerSearch } from "./lib/customerSearch";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
@@ -472,6 +473,7 @@ export const createCustomers = internalMutation({
         if (language && language !== existing.language) patch.language = language;
         if (Object.keys(patch).length > 0) {
           await ctx.db.patch(existing._id, patch as Partial<Doc<"customers">>);
+          await syncCustomerSearch(ctx, existing._id);
         }
         updated.push({ id: existing._id, name: fullName({ ...existing, ...patch }) });
         continue;
@@ -494,6 +496,7 @@ export const createCustomers = internalMutation({
         // the correct failure.
         consentAt: row.consentAt,
       });
+      await syncCustomerSearch(ctx, customerId);
       // Composed here rather than read back: a hundred inserts would otherwise
       // cost a hundred extra reads to learn what we just wrote.
       created.push({
