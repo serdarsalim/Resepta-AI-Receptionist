@@ -1,4 +1,6 @@
-import { v } from "convex/values";
+import { v, type Infer } from "convex/values";
+import { paginationOptsValidator, paginationResultValidator } from "convex/server";
+import { foldSearch } from "./lib/customerSearch";
 import {
   internalMutation,
   internalQuery,
@@ -41,10 +43,8 @@ const messageStatus = v.union(
   v.literal("received"),
 );
 
-// How many conversations the inbox list shows. Bounded by rows shown, not by
-// messages scanned: the list reads customers.thread through an index, so this
-// is the only number that decides what an execution costs.
-const INBOX_CAP = 200;
+// The Inbox list has no cap of its own since P13: it reads pages of 50
+// (inboxPage). It used to stop at the 200 newest conversations.
 // How many candidate conversations the unread badge (and mark-all-read) will
 // consider. Only customers whose newest inbound clears the read floor are in
 // the range at all, so on any normal day this is a handful of rows.
@@ -1097,10 +1097,8 @@ export const setInboxPin = mutation({
 
 // Inbox left pane: one row per customer, newest activity first, carrying the
 // last preview plus which channels are waiting on a reply from the business.
-export const conversations = query({
-  args: {},
-  returns: v.array(
-    v.object({
+// One Inbox row, shared by every way the Inbox reads (P13).
+const conversationRow = v.object({
       customerId: v.id("customers"),
       name: v.string(),
       phone: v.string(),
@@ -1140,80 +1138,187 @@ export const conversations = query({
       unseen: v.boolean(),
       // I pinned this conversation. Manual, sticky, and mine alone.
       pinned: v.boolean(),
-    }),
-  ),
-  handler: async (ctx) => {
-    const { user, orgId } = await requireOrg(ctx);
-    const visit = await inboxVisit(ctx, orgId, user._id);
-    const readFloor = inboxReadFloor(visit, user);
-    // Read whole: unpinning deletes, so this holds only live pins.
-    const pins = await ctx.db
-      .query("inboxPins")
-      .withIndex("by_org_user", (q) =>
-        q.eq("orgId", orgId).eq("userId", user._id),
-      )
-      .collect();
-    const pinnedAtByCustomer = new Map(
-      pins.map((p) => [p.customerId as string, p.pinnedAt]),
-    );
+    });
+type ConversationRow = Infer<typeof conversationRow>;
 
-    // The newest conversations, straight off the customer rows. Each row
-    // carries its own summary (customers.thread, kept by the write paths —
-    // lib/thread.ts), so this reads exactly the rows it shows and re-runs
-    // only when one of them changes. It used to group the org's 500 newest
-    // messages and 200 newest calls on every execution, and re-ran on every
-    // message write in the org for every client with the Inbox open.
-    const rows = await ctx.db
-      .query("customers")
-      .withIndex("by_org_thread_last", (q) =>
-        q.eq("orgId", orgId).gt("thread.lastAt", 0),
-      )
-      .order("desc")
-      .take(INBOX_CAP);
+// Who is reading, and what decides their row marks: the read floor and their
+// pins. Pins are read whole: unpinning deletes, so this holds only live pins.
+async function inboxReader(ctx: QueryCtx) {
+  const { user, orgId } = await requireOrg(ctx);
+  const visit = await inboxVisit(ctx, orgId, user._id);
+  const readFloor = inboxReadFloor(visit, user);
+  const pins = await ctx.db
+    .query("inboxPins")
+    .withIndex("by_org_user", (q) => q.eq("orgId", orgId).eq("userId", user._id))
+    .collect();
+  const pinned = new Set(pins.map((p) => p.customerId as string));
+  return { user, orgId, readFloor, pinned, pins };
+}
 
-    const out = [];
-    for (const customer of rows) {
-      const thread = customer.thread;
-      if (!thread) continue;
-      // Muted contacts leave the inbox entirely. The conversation stays whole
-      // and readable from the contact record, which is where you go when you
-      // actually want to look; what mute buys is that it stops arriving here
-      // unasked. Dropping the row rather than only dimming its dot is the
-      // point: a quiet row in a list of forty is still forty rows to read.
-      if (customer.mutedAt) continue;
-      const { awaitingChannels } = summariseThread(thread);
-      // NEW = they wrote since I last opened THIS conversation. Floored, so a
-      // conversation nobody ever opened is only new if it moved after the
-      // baseline. The floor test is free and short-circuits the point lookup,
-      // so only rows that clear it cost a read.
-      const unseen =
-        thread.lastInboundAt > readFloor &&
-        thread.lastInboundAt >
-          (await inboxReadAt(ctx, orgId, user._id, customer._id));
-      out.push({
-        customerId: customer._id,
-        name: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
-        phone: customer.phone,
-        email: customer.email,
-        lastAt: thread.lastAt,
-        lastBody: thread.lastBody,
-        lastMediaContentType: thread.lastMediaContentType,
-        lastMediaFileName: thread.lastMediaFileName,
-        lastDirection: thread.lastDirection,
-        lastChannel: thread.lastChannel,
-        lastId: thread.lastId,
-        lastFailed: thread.lastFailed,
-        awaitingReply: awaitingChannels.length > 0,
-        lastInboundAt: thread.lastInboundAt,
-        unseen,
-        // A pin lasts until it is unpinned (P13, Nudge 0e23423f). The old
-        // SPENT rule cleared it on any outbound, reminders and away-replies
-        // included, so a pinned conversation unpinned itself overnight.
-        pinned: pinnedAtByCustomer.has(customer._id),
-      });
+// A customer's Inbox row, or null when they have no conversation, are muted
+// (muted contacts leave the inbox entirely; the conversation stays whole on
+// the record) or are being deleted.
+async function conversationRowOf(
+  ctx: QueryCtx,
+  reader: Awaited<ReturnType<typeof inboxReader>>,
+  customer: Doc<"customers">,
+): Promise<ConversationRow | null> {
+  const thread = customer.thread;
+  if (!thread || customer.mutedAt || isDeleting(customer)) return null;
+  if (customer.orgId !== reader.orgId) return null;
+  const { awaitingChannels } = summariseThread(thread);
+  // NEW = they wrote since I last opened THIS conversation. Floored, so a
+  // conversation nobody ever opened is only new if it moved after the
+  // baseline. The floor test is free and short-circuits the point lookup,
+  // so only rows that clear it cost a read.
+  const unseen =
+    thread.lastInboundAt > reader.readFloor &&
+    thread.lastInboundAt >
+      (await inboxReadAt(ctx, reader.orgId, reader.user._id, customer._id));
+  return {
+    customerId: customer._id,
+    name: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
+    phone: customer.phone,
+    email: customer.email,
+    lastAt: thread.lastAt,
+    lastBody: thread.lastBody,
+    lastMediaContentType: thread.lastMediaContentType,
+    lastMediaFileName: thread.lastMediaFileName,
+    lastDirection: thread.lastDirection,
+    lastChannel: thread.lastChannel,
+    lastId: thread.lastId,
+    lastFailed: thread.lastFailed,
+    awaitingReply: awaitingChannels.length > 0,
+    lastInboundAt: thread.lastInboundAt,
+    unseen,
+    // A pin lasts until it is unpinned (P13, Nudge 0e23423f).
+    pinned: reader.pinned.has(customer._id),
+  };
+}
+
+// The Inbox, a page at a time (P13, Nudge's listInboxPage). It used to read
+// the 200 newest conversations and filter, count and search them in the
+// browser, so the 201st was unreachable and every chip counted only the
+// first 200. Each view now reads its own index range off the customer rows'
+// summaries (customers.thread, lib/thread):
+//   all    — by_org_thread_last, newest activity first;
+//   unread — by_org_thread_inbound above my read floor, newest inbound first
+//            (only rows past the floor can be new, so the range ends there);
+//   pinned — my pin rows, newest activity first, in one page.
+// A page can come back shorter than asked (a muted or opened row is dropped
+// after the read); the cursor still moves on, and the list asks again.
+export const inboxPage = query({
+  args: {
+    view: v.union(v.literal("all"), v.literal("unread"), v.literal("pinned")),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: paginationResultValidator(conversationRow),
+  handler: async (ctx, { view, paginationOpts }) => {
+    const reader = await inboxReader(ctx);
+    if (view === "pinned") {
+      const rows: ConversationRow[] = [];
+      for (const pin of reader.pins) {
+        const customer = await ctx.db.get(pin.customerId);
+        const row = customer ? await conversationRowOf(ctx, reader, customer) : null;
+        if (row) rows.push(row);
+      }
+      rows.sort((x, y) => y.lastAt - x.lastAt);
+      return { page: rows, isDone: true, continueCursor: "" };
     }
-    // The index walked newest-first, so the rows are already in inbox order.
+    const result =
+      view === "unread"
+        ? await ctx.db
+            .query("customers")
+            .withIndex("by_org_thread_inbound", (q) =>
+              q.eq("orgId", reader.orgId).gt("thread.lastInboundAt", reader.readFloor),
+            )
+            .order("desc")
+            .paginate(paginationOpts)
+        : await ctx.db
+            .query("customers")
+            .withIndex("by_org_thread_last", (q) =>
+              q.eq("orgId", reader.orgId).gt("thread.lastAt", 0),
+            )
+            .order("desc")
+            .paginate(paginationOpts);
+    const page: ConversationRow[] = [];
+    for (const customer of result.page) {
+      const row = await conversationRowOf(ctx, reader, customer);
+      if (!row) continue;
+      if (view === "unread" && !row.unseen) continue;
+      page.push(row);
+    }
+    return { ...result, page };
+  },
+});
+
+// The chips' numbers, counted on the server so they count everything and not
+// only what has loaded. Unread is capped (the badge's own UNSEEN_CAP walk),
+// and `unreadCapped` says the number is a floor.
+export const inboxCounts = query({
+  args: {},
+  returns: v.object({ unread: v.number(), unreadCapped: v.boolean(), pinned: v.number() }),
+  handler: async (ctx) => {
+    const reader = await inboxReader(ctx);
+    const candidates = await ctx.db
+      .query("customers")
+      .withIndex("by_org_thread_inbound", (q) =>
+        q.eq("orgId", reader.orgId).gt("thread.lastInboundAt", reader.readFloor),
+      )
+      .take(UNSEEN_CAP + 1);
+    let unread = 0;
+    for (const customer of candidates.slice(0, UNSEEN_CAP)) {
+      if (customer.mutedAt || isDeleting(customer)) continue;
+      const lastInboundAt = customer.thread?.lastInboundAt ?? 0;
+      if (lastInboundAt > (await inboxReadAt(ctx, reader.orgId, reader.user._id, customer._id))) {
+        unread += 1;
+      }
+    }
+    let pinned = 0;
+    for (const pin of reader.pins) {
+      const customer = await ctx.db.get(pin.customerId);
+      if (customer?.thread && !customer.mutedAt && !isDeleting(customer)) pinned += 1;
+    }
+    return { unread, unreadCapped: candidates.length > UNSEEN_CAP, pinned };
+  },
+});
+
+// The Inbox's search, over every conversation and not only the loaded pages:
+// the customers search index (lib/customerSearch), whose text carries the
+// name, the address, the phone forms and the latest preview. Relevance
+// order; only customers with a conversation.
+export const inboxSearch = query({
+  args: { q: v.string() },
+  returns: v.array(conversationRow),
+  handler: async (ctx, { q }) => {
+    const reader = await inboxReader(ctx);
+    const needle = foldSearch(q.trim());
+    if (needle.length < 2) return [];
+    const hits = await ctx.db
+      .query("customers")
+      .withSearchIndex("search_text", (index) =>
+        index.search("searchText", needle).eq("orgId", reader.orgId),
+      )
+      .take(40);
+    const out: ConversationRow[] = [];
+    for (const customer of hits) {
+      const row = await conversationRowOf(ctx, reader, customer);
+      if (row) out.push(row);
+    }
     return out;
+  },
+});
+
+// One conversation's row, for the one that is open when it is not on a loaded
+// page (a deep scroll, a search since cleared): the right pane must not blank
+// because the list moved.
+export const inboxConversation = query({
+  args: { customerId: v.id("customers") },
+  returns: v.union(conversationRow, v.null()),
+  handler: async (ctx, { customerId }) => {
+    const reader = await inboxReader(ctx);
+    const customer = await ctx.db.get(customerId);
+    return customer ? await conversationRowOf(ctx, reader, customer) : null;
   },
 });
 

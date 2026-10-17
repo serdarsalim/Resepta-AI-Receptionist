@@ -472,11 +472,22 @@ rather than after what it does.
   that is the bug being replaced. `markInboxSeen`/`markInboxLeft` are gone;
   `markConversationRead` is the only writer, called on an explicit row click
   and on a reply landing in the thread you are already looking at. **One rule,
-  two readers:** `messages.conversations` and `messages.inboxUnseenCount` run
-  the same test over the same rows, so the sidebar can never dot something the
+  two readers:** the Inbox's queries (`inboxPage`, `inboxCounts`,
+  `inboxSearch`, `inboxConversation`, one row builder since P13) and
+  `messages.inboxUnseenCount` run the same test over the same rows, so the sidebar can never dot something the
   tab cannot show. Read stamps are POINT LOOKUPS behind the floor test, never
   collected — cost stays bounded by the conversation window rather than
   growing with every conversation a salon has ever opened.
+- **The Inbox pages (P13, 2026-10-17).** `messages.inboxPage` reads 50
+  conversations at a time for the active chip: All off `by_org_thread_last`,
+  Unread off `by_org_thread_inbound` above the read floor, Pinned off the pin
+  rows in one page. The list asks for the next page as its end scrolls into
+  view. `inboxCounts` counts Unread (capped at `UNSEEN_CAP`, with
+  `unreadCapped`) and Pinned on the server; `inboxSearch` searches every
+  conversation through the customers search index (name, address, phone
+  forms and the latest preview); `inboxConversation` keeps the open row in
+  the right pane when it is not on a loaded page. There was a 200-conversation
+  cap before this.
 - **The inbox has All / Unread / Pinned chips**, persisted per browser
   (`randevu.inbox.view.v1`), in the `h-9` track that exists to line the two
   cards up — one line only, or the chips spill out of it. Counts are computed

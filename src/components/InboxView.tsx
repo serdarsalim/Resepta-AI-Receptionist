@@ -5,8 +5,8 @@
 // One row per CUSTOMER across all three channels; calls are a channel here,
 // not a separate tab (ported from Nudge's InboxView).
 
-import { useCallback, useEffect, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
@@ -23,6 +23,31 @@ import { RowMenu } from "./RowMenu";
 // this key; the .v1 suffix is the escape hatch if the shape ever changes.
 type InboxFilter = "all" | "unread" | "pinned";
 const VIEW_STORAGE_KEY = "randevu.inbox.view.v1";
+// How many conversations a page of the Inbox asks for (P13, Nudge's 50).
+const INBOX_PAGE = 50;
+
+// A line at the foot of the list that asks for the next page when it scrolls
+// into view (300px early, so the next rows are there before the reader is).
+function LoadMoreSentinel({ onVisible }: { onVisible: () => void }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const callback = useRef(onVisible);
+  useEffect(() => {
+    callback.current = onVisible;
+  });
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) callback.current();
+      },
+      { rootMargin: "300px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  return <div ref={ref} aria-hidden className="h-px" />;
+}
 
 function formatAgo(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
@@ -119,7 +144,6 @@ export function InboxView({
   ) => void;
 }) {
   const { t } = useLanguage();
-  const conversations = useQuery(api.messages.conversations, {});
   const setInboxPin = useMutation(api.messages.setInboxPin);
   const markConversationRead = useMutation(api.messages.markConversationRead);
   const markAllRead = useMutation(api.messages.markAllConversationsRead);
@@ -145,6 +169,25 @@ export function InboxView({
     const stored = window.localStorage.getItem(VIEW_STORAGE_KEY);
     if (stored === "unread" || stored === "pinned") setView(stored);
   }, []);
+  // The list, a page at a time, filtered by the chip on the server (P13,
+  // messages.inboxPage); a search goes to the server too, over every
+  // conversation (messages.inboxSearch), and overrides the chip, per this
+  // app's search rule: a query must never fail to find a match that exists.
+  const paged = usePaginatedQuery(
+    api.messages.inboxPage,
+    search.active ? "skip" : { view },
+    { initialNumItems: INBOX_PAGE },
+  );
+  const searched = useQuery(
+    api.messages.inboxSearch,
+    search.active ? { q: search.query } : "skip",
+  );
+  const counts = useQuery(api.messages.inboxCounts, {});
+  const conversations = search.active
+    ? searched
+    : paged.status === "LoadingFirstPage"
+      ? undefined
+      : paged.results;
   const chooseView = (next: InboxFilter) => {
     setView(next);
     try {
@@ -172,10 +215,10 @@ export function InboxView({
   // silently mark the newest thread read. With no auto-select there is only one
   // kind of selection left, and `opened` is now simply "the one you clicked".
 
-  // Counts for the chip labels, over the UNFILTERED list: a chip advertises
-  // what switching to it would show, so it cannot count through itself.
-  const unseenCount = (conversations ?? []).filter((c) => c.unseen).length;
-  const pinnedCount = (conversations ?? []).filter((c) => c.pinned).length;
+  // Counts for the chip labels, from the server over every conversation (not
+  // only the loaded pages): a chip advertises what switching to it would show.
+  const unseenCount = counts?.unread ?? 0;
+  const pinnedCount = counts?.pinned ?? 0;
 
   // Search reads the whole row, preview text included: a salon owner looks
   // for "the one who asked about balayage", not for a name they remember.
@@ -184,20 +227,18 @@ export function InboxView({
   // never fail to find a match that exists in the data. Searching from the
   // Pinned chip and getting nothing, because the person you looked for was
   // simply not pinned, is the failure that rule exists to prevent.
-  const shown = (conversations ?? []).filter(
-    (c) =>
-      (search.active ||
-        view === "all" ||
-        (view === "unread" ? c.unseen : c.pinned)) &&
-      search.matches(c.name, c.phone, c.email, c.lastBody),
-  );
+  const shown = conversations ?? [];
 
-  // Falls back outside the filtered list on purpose: opening an unread
+  // Falls back outside the loaded list on purpose: opening an unread
   // conversation while the Unread chip is active would otherwise blank the
-  // right pane the instant its read stamp landed and the row dropped out.
-  const active =
-    shown.find((c) => c.customerId === selected) ??
-    conversations?.find((c) => c.customerId === selected);
+  // right pane the instant its read stamp landed and the row dropped out, and
+  // a conversation past the loaded pages must still fill it.
+  const inList = shown.find((c) => c.customerId === selected);
+  const openedRow = useQuery(
+    api.messages.inboxConversation,
+    selected && !inList ? { customerId: selected } : "skip",
+  );
+  const active = inList ?? openedRow ?? undefined;
 
   return (
     // h-full, not flex-1: `main` in the shell is a block, so there's no flex
@@ -289,7 +330,7 @@ export function InboxView({
               <p className="px-4 py-3 text-sm text-[var(--muted)]">
                 {t("common.loading")}
               </p>
-            ) : conversations.length === 0 ? (
+            ) : shown.length === 0 && !search.active && view === "all" ? (
               <p className="px-4 py-3 text-sm text-[var(--muted)]">
                 {t("inbox.empty")}
               </p>
@@ -576,6 +617,14 @@ export function InboxView({
                   );
                 })}
               </ul>
+            )}
+            {/* The next page, asked for as the end of the list comes into
+                view. A search returns its matches whole and has no pages. */}
+            {!search.active && paged.status === "CanLoadMore" && (
+              <LoadMoreSentinel onVisible={() => paged.loadMore(INBOX_PAGE)} />
+            )}
+            {!search.active && paged.status === "LoadingMore" && (
+              <p className="px-4 py-3 text-xs text-[var(--muted)]">{t("common.loading")}</p>
             )}
           </div>
           </div>

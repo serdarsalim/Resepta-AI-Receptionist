@@ -7,6 +7,10 @@
 // lives on the row (`customers.searchText`) under a search index filtered by
 // orgId, and a search reads only matches.
 //
+// The latest message preview rides in it too, kept by lib/thread's
+// writeThread in the same patch as the summary, so a write path that keeps
+// the thread keeps this without knowing it exists.
+//
 // THE INVARIANT, same standing as noteMessage and syncAppointmentSchedule:
 // any mutation that inserts a customer or changes a first name, last name,
 // phone or email calls `syncCustomerSearch` after it. `customers:backfillSearch`
@@ -41,6 +45,10 @@ export function customerSearchText(customer: {
   lastName?: string;
   phone?: string;
   email?: string;
+  // The conversation's latest preview (customers.thread.lastBody): an owner
+  // looks for "the one who asked about balayage", not only for a name. The
+  // Inbox search matched it in the browser; the index has to carry it.
+  thread?: { lastBody?: string };
 }): string {
   const parts = [
     customer.firstName ?? "",
@@ -50,6 +58,8 @@ export function customerSearchText(customer: {
     // "gmail" both find somebody.
     ...(customer.email ? customer.email.split(/[@.]/) : []),
     ...phoneTokens(customer.phone),
+    // Last, so a long preview can never push the name past the cap.
+    customer.thread?.lastBody ?? "",
   ];
   return foldSearch(parts.filter(Boolean).join(" ")).slice(0, 2000);
 }

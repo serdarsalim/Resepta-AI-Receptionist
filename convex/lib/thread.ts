@@ -34,6 +34,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { isDeleting } from "./customerDeletion";
 import { htmlToText } from "./emailInbound";
+import { customerSearchText } from "./customerSearch";
 
 export const channel = v.union(
   v.literal("whatsapp"),
@@ -307,7 +308,12 @@ async function writeThread(
   // lists a blank row until the sweep finishes (lib/customerDeletion).
   if (isDeleting(customer)) return;
   if (sameThread(customer.thread, next)) return;
-  await ctx.db.patch(customer._id, { thread: next });
+  // The search text carries the latest preview (lib/customerSearch), so it
+  // moves in the same write as the summary it reads.
+  await ctx.db.patch(customer._id, {
+    thread: next,
+    searchText: customerSearchText({ ...customer, thread: next }),
+  });
 }
 
 // A message row was just inserted. One customer read, one fold, one patch.
