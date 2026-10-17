@@ -882,9 +882,9 @@ const dictionary = {
   // Opening hours since 2026-10-17: a run waits while the business is
   // closed and picks up when it opens.
   "bulk.callHint": {
-    tr: "Teker teker ve yalnızca açık olduğunuz saatlerde aranır. Bir görüşme bitmeden sonraki başlamaz.",
-    en: "Dialled one at a time, and only during your opening hours. The next call waits for the current one to end.",
-    de: "Nacheinander und nur während Ihrer Öffnungszeiten. Der nächste Anruf beginnt erst nach dem laufenden.",
+    tr: "Teker teker ve yalnızca açık olduğunuz saatlerde aranır. Yaklaşan randevusu olanlar ve o gün zaten aranmış olanlar atlanır.",
+    en: "Dialled one at a time, and only during your opening hours. Anyone with an appointment coming up, or already called that day, is skipped.",
+    de: "Nacheinander und nur während Ihrer Öffnungszeiten. Wer schon einen anstehenden Termin hat oder an dem Tag schon angerufen wurde, wird übersprungen.",
   },
   "bulk.confirmSend.one": {
     tr: "{n} kişiye gönderilsin mi? Geri alınamaz.",
@@ -1030,6 +1030,18 @@ const dictionary = {
     tr: "Asistanla aranmak istemiyor",
     en: "Asked for no AI calls",
     de: "Möchte keine KI-Anrufe",
+  },
+  // Judged at their turn in a call run (bulkRuns.turnSkipReason): an open
+  // booking still ahead of them, or a call with them already that day.
+  "bulk.skipAlreadyBooked": {
+    tr: "Zaten randevusu var",
+    en: "Already booked",
+    de: "Hat schon einen Termin",
+  },
+  "bulk.skipCalledToday": {
+    tr: "Bugün zaten bir arama yapıldı",
+    en: "Already had a call today",
+    de: "Heute schon ein Anruf",
   },
   "bulk.skipOther": { tr: "Atlandı", en: "Skipped", de: "Übersprungen" },
   "bulk.itemPending": { tr: "Sırada", en: "Waiting", de: "Wartet" },

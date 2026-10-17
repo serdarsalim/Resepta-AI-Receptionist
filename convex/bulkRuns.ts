@@ -63,6 +63,7 @@ import { resolvePublicPhone } from "./lib/publicPhone";
 import { recordActivity } from "./lib/activity";
 import { loadClosures } from "./lib/closureRows";
 import {
+  getLocalPartsSafe,
   hasBusinessHours,
   hasClockBounds,
   nextOpenAt,
@@ -865,6 +866,80 @@ async function callWindowAt(
   return { open: false, until: opensAt, reason: "closed" };
 }
 
+// ── Who is not rung, at their turn ──────────────────────────────────────────
+//
+// What has happened to this customer since the run was launched that makes a
+// call now the wrong call (2026-10-17, Nudge ac5988a5). Asked in
+// claimNextCall at their turn, never at fan-out: a run can wait overnight for
+// opening hours, so "today" has to be the day the phone would ring, and a
+// booking made while they waited in line (by WhatsApp, on the booking page,
+// on another run's call) has to count. Each answer becomes the item's skip
+// reason, which the run detail prints: never a silent gap.
+async function turnSkipReason(
+  ctx: MutationCtx,
+  run: Doc<"bulkRuns">,
+  item: Doc<"bulkRunItems">,
+  customer: Doc<"customers">,
+  org: Doc<"orgs">,
+  now: number,
+): Promise<"already-booked" | "called-today" | null> {
+  // An open booking still ahead of them, read the way the booking page and
+  // the assistants read "upcoming" (booking.ts, retell.bookingProblem), an
+  // open ASAP order included. A call asking someone to book who already has,
+  // or ringing them about the booking they hold, is the call nobody wants.
+  const appointments = await ctx.db
+    .query("appointments")
+    .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+    .collect();
+  if (
+    appointments.some(
+      (row) =>
+        row.orgId === run.orgId &&
+        (row.startAt > now || row.fulfillment?.asap === true) &&
+        (row.status === "scheduled" || row.status === "confirmed"),
+    )
+  ) {
+    return "already-booked";
+  }
+
+  // A call with them already today, in the business's day: from this run or
+  // another, a test call, or one they made to us. One a day is enough; the
+  // bulk chase behind Nudge's version rang people 51 minutes after they had
+  // said no. A call that never reached their phone (refused, failed) does
+  // not count, because they have not been called.
+  const today = getLocalPartsSafe(now, org.timezone);
+  const isToday = (ms: number) => {
+    const p = getLocalPartsSafe(ms, org.timezone);
+    return p.y === today.y && p.m0 === today.m0 && p.d === today.d;
+  };
+  // Newest first: a day's calls are the head of the list, and twenty covers
+  // any real day without reading a regular's whole history.
+  const calls = await ctx.db
+    .query("calls")
+    .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+    .order("desc")
+    .take(20);
+  for (const call of calls) {
+    if (call.orgId !== run.orgId || !isToday(call.startedAt)) continue;
+    const outcome = callOutcome(call.disconnectionReason, call.durationSec);
+    if (outcome === undefined || reachedPhone(outcome)) return "called-today";
+  }
+  // And a call to them live right now in another run, whose calls row is
+  // only written when it ends. Reading this range also makes two runs that
+  // reach the same customer at once conflict, so one of them waits and then
+  // sees the other's call.
+  const items = await ctx.db
+    .query("bulkRunItems")
+    .withIndex("by_org_customer", (q) =>
+      q.eq("orgId", run.orgId).eq("customerId", customer._id),
+    )
+    .take(100);
+  if (items.some((other) => other._id !== item._id && other.status === "dialing")) {
+    return "called-today";
+  }
+  return null;
+}
+
 // The agent's line, resolved and checked before a run is allowed to start.
 export const callLineFor = internalQuery({
   args: { retellAgentId: v.string() },
@@ -974,8 +1049,12 @@ export const claimNextCall = internalMutation({
     const customer = await ctx.db.get(next.customerId);
     // Consent can be withdrawn between fan-out and this customer's turn, which
     // on a long run is minutes to hours. Third check, and the last one before
-    // a phone actually rings.
-    const reason = customer ? skipReason(customer, "call") : "missing-customer";
+    // a phone actually rings; then what happened to them since the run began
+    // (booked, already called today: turnSkipReason).
+    const reason = !customer
+      ? "missing-customer"
+      : (skipReason(customer, "call") ??
+        (await turnSkipReason(ctx, run, next, customer, org, now)));
     if (reason) {
       await ctx.db.patch(next._id, { status: "skipped", reason });
       await ctx.db.patch(args.runId, { skippedCount: run.skippedCount + 1 });

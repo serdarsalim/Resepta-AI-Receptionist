@@ -644,7 +644,11 @@ function ItemOutcome({ item, channel }: { item: RunItem; channel: BulkChannel })
                   ? "bulk.skipNoAiCalls"
                   : item.reason === "unsubscribed"
                     ? "bulk.skipUnsubscribed"
-                    : "bulk.skipOther",
+                    : item.reason === "already-booked"
+                      ? "bulk.skipAlreadyBooked"
+                      : item.reason === "called-today"
+                        ? "bulk.skipCalledToday"
+                        : "bulk.skipOther",
         )}
       </span>
     );
