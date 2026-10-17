@@ -75,7 +75,7 @@ means "read that commit".
 | P13 | 9. Inbox paging + customer search index + (+) customers list paging + pins persist + inbox row + find customer from any tab + HTML-only email previews | E.4, E.7. **Done 2026-10-17** (278a39d..2f4f93f); the row-dot sizes (c47c694c, 2ef5a0b4) ride P21, which resizes them again; prod owes `customers:backfillSearch` and `threads:backfill` |
 | P13b | (+) Bulk run outcomes + follow-up selection | E.flip.6. **Done 2026-10-17** (b785257); screen check and a first real run owed |
 | P14 | 11. Media library + (triage 10-17) Word, PowerPoint and text files from either tab (57bd2d2a) | **Done 2026-10-17** (46c9520); screen check owed (paste, drop, a big phone photo) |
-| P15 | 12. Token chips | |
+| P15 | 12. Token chips | **Done 2026-10-17** (5ba55c3..e30ffe5); screen check owed (typing beside a chip, a phone, an old body with [isletme]) |
 | P16 | (+) Address on invites (`[adres]` token + ICS LOCATION) | E.flip.8 |
 | P17 | (+) Seal provider secrets at rest (optional; needs a dedicated env key and a safe rollout) | E.11 |
 | P18 | (triage 10-17) Stay signed in across browser restarts: the auth cookie gets Convex Auth's 30-day lifetime (ee5537f0). R: `src/proxy.ts` | |
