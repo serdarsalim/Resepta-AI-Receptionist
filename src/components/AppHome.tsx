@@ -9,6 +9,7 @@ import { AppointmentsView } from "@/components/AppointmentsView";
 import { CustomersView } from "@/components/CustomersView";
 import { RevenueView } from "@/components/RevenueView";
 import { InboxView } from "@/components/InboxView";
+import { resetUnreadVisit } from "@/lib/useUnreadVisit";
 import { RemindersView } from "@/components/RemindersView";
 import { VoiceView } from "@/components/VoiceView";
 import { BusinessView } from "@/components/BusinessView";
@@ -109,6 +110,9 @@ export function AppHome() {
   const tabRef = useRef(tab);
   useEffect(() => {
     tabRef.current = tab;
+    // Leaving the Inbox tab ends its Unread visit (lib/useUnreadVisit). A
+    // record opened from the Inbox stays under this tab, so it does not.
+    if (tab !== "inbox") resetUnreadVisit();
   }, [tab]);
 
   // One door, so nothing can set an id without settling the channel with it.

@@ -19,6 +19,7 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import { mediaKindKey } from "@/lib/mediaLabel";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
+import { resetUnreadVisit, useUnreadVisit } from "@/lib/useUnreadVisit";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
 import { TWO_PANE_COLUMNS } from "./ContactView";
 import { FeedFilterPills } from "./FeedFilterPills";
@@ -204,7 +205,7 @@ export function InboxView({
       { view },
       (row) => (row.customerId === customerId ? { ...row, ...change } : row),
     );
-  const setInboxPin = useMutation(api.messages.setInboxPin).withOptimisticUpdate(
+  const setInboxPinMutation = useMutation(api.messages.setInboxPin).withOptimisticUpdate(
     (localStore, args) => patchRow(localStore, args.customerId, { pinned: args.pinned }),
   );
   const markConversationUnread = useMutation(
@@ -223,6 +224,9 @@ export function InboxView({
       ? undefined
       : paged.results;
   const chooseView = (next: InboxFilter) => {
+    // Picking a chip, the lit one included, starts a fresh visit: the rows
+    // kept read in Unread go.
+    resetUnreadVisit();
     setView(next);
     try {
       window.localStorage.setItem(VIEW_STORAGE_KEY, next);
@@ -261,7 +265,18 @@ export function InboxView({
   // never fail to find a match that exists in the data. Searching from the
   // Pinned chip and getting nothing, because the person you looked for was
   // simply not pinned, is the failure that rule exists to prevent.
-  const shown = conversations ?? [];
+  // Rows opened during this visit to Unread stay listed, without their dot
+  // (lib/useUnreadVisit). Per business: kept rows never cross a switch.
+  const orgId = useQuery(api.orgs.current, {})?.org._id;
+  const unreadVisit = useUnreadVisit(
+    conversations ?? [],
+    view === "unread" && !search.active && orgId ? orgId : null,
+  );
+  const shown = conversations === undefined ? [] : unreadVisit.rows;
+  const setInboxPin = async (args: { customerId: Id<"customers">; pinned: boolean }) => {
+    await setInboxPinMutation(args);
+    unreadVisit.patch(args.customerId, { pinned: args.pinned });
+  };
 
   // Falls back outside the loaded list on purpose: opening an unread
   // conversation while the Unread chip is active would otherwise blank the
@@ -279,7 +294,12 @@ export function InboxView({
   // record opens on the channel the row was showing, and ON the mail or call
   // it was quoting, so a click lands where the preview pointed.
   const openRow = (c: ConversationRow) => {
-    void markConversationRead({ customerId: c.customerId }).catch(() => {});
+    unreadVisit.keep(c);
+    // A read that failed releases the kept row, or it would show read
+    // over a conversation the server still calls unread.
+    void markConversationRead({ customerId: c.customerId }).catch(() =>
+      unreadVisit.remove([c.customerId]),
+    );
     onOpenContact(c.customerId, c.lastChannel, c.lastId);
   };
 
@@ -299,6 +319,9 @@ export function InboxView({
     // WhatsApp closes the chat you mark unread, and an open pane re-stamps
     // what it shows, which would undo this a moment later.
     if (selected === c.customerId) setSelected(null);
+    // Out of this visit's kept rows too, or the visit would keep painting
+    // the row read over the server's unread.
+    unreadVisit.remove([c.customerId]);
     void markConversationUnread({ customerId: c.customerId }).catch(() => {});
   };
   const menuItems: ContextMenuItem[] = menuRow
@@ -341,10 +364,13 @@ export function InboxView({
           key: "mute",
           icon: <MenuIcon name="mute" />,
           label: t("inbox.menuMute"),
-          onSelect: () =>
+          onSelect: () => {
+            // A muted customer leaves the Inbox, kept or not.
+            unreadVisit.remove([menuRow.customerId]);
             void setMuted({ customerId: menuRow.customerId, muted: true }).catch(
               () => {},
-            ),
+            );
+          },
         },
       ]
     : [];
