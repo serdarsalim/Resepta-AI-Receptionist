@@ -1,6 +1,6 @@
 # Nudge → Resepta sync: status
 
-**Needs you:** Nothing.
+**Needs you:** Sealing the stored WhatsApp and calendar keys (P17) waits for you to create a dedicated secret in the Convex environment.
 
 **New since last time:**
 - The voice agent's Publish makes one version with a note saying what changed, and the version number opens the agent's history; Restore puts an older version's words back in the editor.
