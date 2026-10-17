@@ -2150,6 +2150,33 @@ is valid JSX, tsc passed, eslint passed, no export was duplicated because the
 copy was inside one component's return. Serdar saw two Members cards on screen.
 Anchor the second search (`s.index(needle, start)`) and assert `end > start`.
 
+## A member's own photo (P33, 2026-10-17)
+
+One resolver for every face a member shows, `lib/memberPhoto.memberPhoto`:
+the photo they uploaded in THIS business, else their Google sign-in picture
+(`users.image`), else nothing and the caller draws initials. It feeds the
+sidebar's account row (`orgs.settings` → `me.image`), the Account page
+(`users.myProfile` → `photo`, `photoUploaded`, `canSetPhoto`) and the
+signature on a note (`messages.feedForCustomer` → `authorPhoto`). Resolved on
+the server, so there is no client-side lookup list.
+
+- **Per membership, not per login** (`memberships.photoStorageId`). A person
+  who works in two businesses is a member of each, and one business's copy of
+  their face stays in it; the sharing block in `team.ts` already gives other
+  businesses ids and roles, never names. It also puts the blob under an
+  org-scoped row: the purge deletes it with the membership (the blob columns
+  in `purgeOrgStep`), and so do `revokeMembership` and `discardDraftOrg`.
+- **Yours alone.** `users.photoUploadUrl` and `users.setMyPhoto` resolve the
+  caller's own membership and take no id. The browser centre-crops and
+  shrinks to a 512px JPEG (`mediaFiles.squarePhoto`); the server holds JPEG
+  or PNG under 1 MB and deletes a refused upload at once. A replaced or
+  removed photo's blob is deleted.
+- **No membership, no upload**: a platform operator working inside a business
+  sees their Google picture and no controls. The demo refuses uploads, since
+  a walk-in's file would outlive the nightly reset that deletes them.
+- Team card rows still mark people by their calendar colour, not by face, and
+  call cards name who placed a call in words; neither draws an avatar.
+
 ## The fleet table answers who uses this (2026-08-25)
 
 It had nine columns and five of them were flavours of a message breaking:
