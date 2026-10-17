@@ -32,6 +32,7 @@ import { formatMoney } from "@/lib/money";
 import {
   ClockIcon,
   MonthGrid,
+  PinIcon,
   TimeList,
   ZonePicker,
   dayInMonth,
@@ -278,6 +279,9 @@ export default function BookingPage({
         <p className="mt-1 text-sm text-[var(--muted)]">
           {done.goods ? [kindLabel, when].filter(Boolean).join(" · ") : when}
         </p>
+        {page.address && kind !== "delivery" && (
+          <p className="mt-1 text-sm text-[var(--muted)]">{page.address}</p>
+        )}
         {done.token && (
           <p className="mt-4 text-sm">
             <a
@@ -453,6 +457,15 @@ export default function BookingPage({
         <p className="hidden items-center gap-2 text-[var(--muted-strong)] md:flex">
           <ClockIcon />
           {minutesLabel(totalMinutes)}
+        </p>
+      )}
+      {/* Where the visit is, once the business gave its address (P16). Not
+          for a delivery: that goes to the customer's address, not the
+          business's. */}
+      {page.address && kind !== "delivery" && (
+        <p className="flex items-start gap-2 text-[var(--muted-strong)]">
+          <PinIcon />
+          <span className="min-w-0">{page.address}</span>
         </p>
       )}
       {step === "time" && (

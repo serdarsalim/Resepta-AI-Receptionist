@@ -336,9 +336,12 @@ export const page = query({
       // page reads two plain booleans.
       fulfillment: v.object({ pickup: v.boolean(), delivery: v.boolean() }),
       // The business's minimum notice in force, hours (lib/minNotice). The
-      // day strip starts on the first day it allows, rather than offering
-      // days the slot grid then answers with nothing.
+      // month starts on the first day it allows, rather than offering days
+      // the time list then answers with nothing.
       minNoticeHours: v.number(),
+      // orgs.address (P16), published because it is where the customer is
+      // going: the booking page names it beside the time (P29).
+      address: v.optional(v.string()),
     }),
     v.null(),
   ),
@@ -382,6 +385,7 @@ export const page = query({
         delivery: org.deliveryEnabled ?? true,
       },
       minNoticeHours: minNoticeHoursOf(org),
+      ...(org.address ? { address: org.address } : {}),
     };
   },
 });
@@ -1016,6 +1020,10 @@ export const manage = query({
       // then the page says "call the salon" instead of half-working buttons.
       canModify: v.boolean(),
       phone: v.union(v.string(), v.null()),
+      // Where the appointment is (orgs.address, P16), for the page that says
+      // when it is (P29). The business's published address, nothing of the
+      // customer's.
+      address: v.optional(v.string()),
     }),
     v.null(),
   ),
@@ -1044,6 +1052,7 @@ export const manage = query({
       canModify: !providerOwned,
       // The number the salon answers on, for the "call us" fallback.
       phone: (await resolvePublicPhone(ctx, org)) ?? null,
+      ...(org.address ? { address: org.address } : {}),
     };
   },
 });

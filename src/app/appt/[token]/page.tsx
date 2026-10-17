@@ -15,6 +15,14 @@ import {
   isLanguage,
   type Language,
 } from "@/lib/i18n";
+import {
+  MonthGrid,
+  TimeList,
+  dayInMonth,
+  monthQuery,
+  shiftMonth,
+  type DayKey,
+} from "@/components/booking/MonthTimes";
 
 function todayIn(timezone: string): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -46,7 +54,10 @@ export default function ManageAppointmentPage({
   const cancel = useMutation(api.booking.cancel);
 
   const [moving, setMoving] = useState(false);
-  const [date, setDate] = useState<string | null>(null);
+  // The Reschedule picker's month and day (P29, the booking page's month and
+  // list). Null month = this month in the business's zone.
+  const [month, setMonth] = useState<string | null>(null);
+  const [day, setDay] = useState<DayKey | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Set once a move lands, carrying which channel its re-sent confirmation is
@@ -63,12 +74,13 @@ export default function ManageAppointmentPage({
   // it. slotsForToken asks with the token instead, and reads the length off
   // the appointment, so neither is needed.
   const canPickSlots = Boolean(appointment?.canModify);
-  const dateValue =
-    date ?? (appointment ? todayIn(appointment.timezone) : "");
-  const slots = useQuery(
-    api.booking.slotsForToken,
-    moving && appointment && canPickSlots ? { token, date: dateValue } : "skip",
+  const minMonth = appointment ? todayIn(appointment.timezone).slice(0, 7) : "";
+  const shownMonth = month && month >= minMonth ? month : minMonth;
+  const offers = useQuery(
+    api.booking.monthSlotsForToken,
+    moving && appointment && canPickSlots ? { token, ...monthQuery(shownMonth) } : "skip",
   );
+  const openDay = appointment ? dayInMonth(offers, appointment.timezone, shownMonth, day) : null;
 
   // Formatter per call — cheap at this scale, and the React Compiler owns
   // the memoization now.
@@ -79,15 +91,6 @@ export default function ManageAppointmentPage({
           weekday: "long",
           day: "numeric",
           month: "long",
-          hour: "2-digit",
-          minute: "2-digit",
-          hourCycle: "h23",
-        }).format(new Date(ms))
-      : "";
-  const timeLabel = (ms: number) =>
-    appointment
-      ? new Intl.DateTimeFormat(appointment.language, {
-          timeZone: appointment.timezone,
           hour: "2-digit",
           minute: "2-digit",
           hourCycle: "h23",
@@ -137,6 +140,12 @@ export default function ManageAppointmentPage({
           </p>
           {order?.address && (
             <p className="text-sm text-[var(--muted)]">{order.address}</p>
+          )}
+          {/* Where to go (orgs.address, P16, shown here since P29). A
+              delivery order is going to the customer, so it shows theirs
+              above instead. */}
+          {appointment.address && order?.kind !== "delivery" && (
+            <p className="text-sm text-[var(--muted)]">{appointment.address}</p>
           )}
           {appointment.status === "cancelled" && (
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">
@@ -201,44 +210,43 @@ export default function ManageAppointmentPage({
 
         {upcoming && moving && canPickSlots && (
           <section className="border-t border-[var(--border)] pt-3">
-            <h2 className="mb-1.5 text-sm font-medium">{t("booking.pickTime")}</h2>
-            <input
-              type="date"
-              value={dateValue}
-              min={todayIn(appointment.timezone)}
-              onChange={(event) => setDate(event.target.value)}
-              className="mb-2"
+            <h2 className="mb-3 text-sm font-medium">{t("booking.pickTime")}</h2>
+            <MonthGrid
+              t={t}
+              language={pageLanguage}
+              zone={appointment.timezone}
+              month={shownMonth}
+              onMonth={(next) => {
+                setMonth(next);
+                setDay(null);
+              }}
+              minMonth={minMonth}
+              maxMonth={shiftMonth(minMonth, 12)}
+              offers={offers}
+              day={openDay}
+              onDay={setDay}
             />
-            {slots === undefined ? (
-              <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
-            ) : slots.length === 0 ? (
-              <p className="text-sm text-[var(--muted)]">{t("booking.noSlots")}</p>
-            ) : (
-              <div className="grid grid-cols-4 gap-1.5">
-                {slots.map((ms) => (
-                  <button
-                    key={ms}
-                    type="button"
-                    disabled={busy}
-                    onClick={async () => {
-                      setBusy(true);
-                      setError(null);
-                      const result = await reschedule({ token, startMs: ms });
-                      setBusy(false);
-                      if (result.ok) {
-                        setMoving(false);
-                        setMoved({ confirmBy: result.confirmBy });
-                      } else if (result.reason === "slot-taken") {
-                        setError("slot-taken");
-                      } else setError(result.reason ?? "error");
-                    }}
-                    className="rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm tabular-nums transition-colors hover:border-[var(--accent)] disabled:opacity-50"
-                  >
-                    {timeLabel(ms)}
-                  </button>
-                ))}
-              </div>
-            )}
+            <TimeList
+              t={t}
+              language={pageLanguage}
+              zone={appointment.timezone}
+              offers={offers}
+              day={openDay}
+              busy={busy}
+              className="mt-5"
+              onPick={async (ms) => {
+                setBusy(true);
+                setError(null);
+                const result = await reschedule({ token, startMs: ms });
+                setBusy(false);
+                if (result.ok) {
+                  setMoving(false);
+                  setMoved({ confirmBy: result.confirmBy });
+                } else if (result.reason === "slot-taken") {
+                  setError("slot-taken");
+                } else setError(result.reason ?? "error");
+              }}
+            />
             <button
               type="button"
               onClick={() => setMoving(false)}
