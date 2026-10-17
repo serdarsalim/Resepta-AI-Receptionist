@@ -58,15 +58,25 @@ means "read that commit".
 | P7 | 6. Voice-agent drafts, versions, dial pinning (6f02acca) + (+) voicemail message + prompt in sans font | E.10 |
 | P8 | 7a. Browser-test backend | |
 | P9 | 7b. Browser-test UI (test card, preview card) + (+) chat simulator | E.flip.4 |
-| P10 | 4. WhatsApp thread + formatter (+ 0772ac98) + (+) failed sends say why + Meta template category/rejection webhooks (a720be3b) | E.3, E.found |
+| P10 | 4. WhatsApp thread + formatter (+ 0772ac98) + (+) failed sends say why + Meta template category/rejection webhooks (a720be3b) + (triage 10-17) narrow chat spacing and joined tails (92ae96d2), Roboto inside the chat only (3298a228, d55ab896) | E.3, E.found |
 | P11 | 5a. Call cards + (+) who placed a call | |
 | P12 | 5b. Notes, property editors, tab title + read-only cards for members show plain values with a ViewOnlyPill instead of dimmed controls (Serdar chose this 2026-10-14, Nudge's way) + + (+) channel pills not greyed, copy phone, customer deep link + cmd-click | |
 | P13 | 9. Inbox paging + customer search index + (+) customers list paging + pins persist + inbox row + find customer from any tab + HTML-only email previews | E.4, E.7 |
 | P13b | (+) Bulk run outcomes + follow-up selection | E.flip.6 |
-| P14 | 11. Media library | |
+| P14 | 11. Media library + (triage 10-17) Word, PowerPoint and text files from either tab (57bd2d2a) | |
 | P15 | 12. Token chips | |
 | P16 | (+) Address on invites (`[adres]` token + ICS LOCATION) | E.flip.8 |
 | P17 | (+) Seal provider secrets at rest (optional; needs a dedicated env key and a safe rollout) | E.11 |
+| P18 | (triage 10-17) Stay signed in across browser restarts: the auth cookie gets Convex Auth's 30-day lifetime (ee5537f0). R: `src/proxy.ts` | |
+| P19 | (triage 10-17) Dropdown lists lift off the card in dark mode (`.menu-surface`, 04fda8a7); the country code picker types in its box, keeps open on list scroll, opens upward hugging the box, shows five rows (900c472f, a7926b1e, 7c97b857). R: `src/app/globals.css`, the country code picker in `RecordField.tsx`/`PhoneField`, menus using `useAnchoredPanel` | |
+| P20 | (triage 10-17) One hover-label look: dark chip, instant, centred under the control, never a native `title` on an icon-only button; the collapsed sidebar shows its labels at once (15d2d8b7, 57b6347d, 5ffe0877, fa6a0d95, 258c9316). R: a `HoverTip` primitive, `AppShell.tsx`, icon buttons | |
+| P21 | (triage 10-17, after P13) Inbox: All / Unread / Pinned always shown with one active, smaller unread and pin dots, counts without `+`, opened rows kept for this Unread visit, rounded fill on the open row, visible hover, fainter dividers from the name, a row menu (right-click or chevron: Open customer, Pin, Mark as read / unread, Mute) with Mark as unread as `inboxReads.unreadAt` honoured by every read path (4b2c868c, fe3baf2d, 63893624, bff29139, 0ed5a4bd, ea44f67c, af43925b, a868cc38, b6fcaa09, efc036f1, 0e6126a8, d4365e9a, 91735572, 2a94bb92). Owner-scope pill is Nudge-only. R: `InboxView.tsx`, `convex/messages.ts`, `lib/thread.ts`, schema `inboxReads` | |
+| P22 | (triage 10-17) The Inbox and the customer record each join their two panes in one card (rounded outside only, desktop divider), dark conversation ground with one subtle border, conversation action buttons aligned with the channel pills, no "Properties" title (2e5b63e7, 46293b4d, 5b81beea, aea8bafd, bb817de5, a958416f, 18dfc375, 9ca6311e). R: `ContactView.tsx` (`TWO_PANE_COLUMNS`), `InboxView.tsx`, `ConversationPanel.tsx`, `globals.css`; edit AGENTS.md's shell section | |
+| P23 | (triage 10-17, after P10) WhatsApp bubble menu: right-click or corner chevron, Reply, Copy, React (WhatsApp's quick reactions, no negative ones), Add to note; sent link buttons open from the thread without counting (daddc71e, e02706eb, b12d5cdb). One `ContextMenu` shared with P21's row menu. Reply/react only where the lane supports them. R: `ConversationPanel.tsx`, `convex/wa.ts` | |
+| P24 | (triage 10-17) Calendar frame follow-ups: 0.5px hairline grid lines, toolbar above the grid card on the pane ground, compact 192px side panel with 24px mini-month rows, the panel slides open and closed (f360cad5, 5904ddbc, 14e9ee88, dda32be5). R: `AppointmentsView.tsx`, the calendar grid and side panel components | |
+| P25 | (triage 10-17) A record opened over a tab names the path in the navbar as a clickable breadcrumb (`Inbox › Name`, `‹ Inbox` below sm) instead of a back arrow; the sidebar width stays fixed whatever the account name; one title inset on every tab (cba4af4c, bb22fa8b, 763509b5, 7a123cf0, 9cff4d72, 5976b84e, ca95e0f8). R: `AppShell.tsx` (`overrideTitle`/`onOverrideBack`), `AppHome`, record views; edit AGENTS.md "A page title names the page" | |
+| P26 | (triage 10-17) Email editor tools: the link button opens the app's dialog (no `window.prompt`), Insert photo with Gmail's image menu and corner resize handles, one header row with a Visual / HTML segmented switch, icon tools, a picked variable goes in as the customer's value in a one-customer composer (541748dc, b4dac12e, 49c31c26, ec043a82, 1f4fafcf, 4a232eae). No dock. R: the email editor component, `ConversationPanel.tsx`, template editor | |
+| P27 | (triage 10-17) Link previews: the booking page's link shows the business and what it offers on a generated card; the manage page's card names nobody and never carries its token (fbeae989). R: `src/app/book/[slug]`, `src/app/appt/[token]`, a `lib/linkPreview` | |
 
 ## A. Feature areas
 
