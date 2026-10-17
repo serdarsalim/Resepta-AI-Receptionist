@@ -17,7 +17,9 @@ import { createPortal } from "react-dom";
 // Mounted only while shown, so a hidden tip has no layout box.
 //
 // `side="right"` is the folded sidebar's: the label sits beside the icon,
-// vertically centred, like a rail's flyout. `disabled` renders the child
+// vertically centred, like a rail's flyout. `side="top"` is for a control at
+// the foot of the screen (the email window's bottom bar, P28), where a tip
+// underneath would fall off the window. `disabled` renders the child
 // alone (the open sidebar already prints its labels). `className` replaces
 // the wrapper's `inline-flex` when the child must keep its own layout: a
 // full-width row takes "flex w-full", and a child positioned absolutely or
@@ -46,7 +48,7 @@ export function HoverTip({
 }: {
   text: string;
   children: ReactNode;
-  side?: "bottom" | "right";
+  side?: "bottom" | "right" | "top";
   disabled?: boolean;
   className?: string;
   // ms before showing. 0 (instant) everywhere except the sidebar's fold
@@ -73,7 +75,11 @@ export function HoverTip({
     // Centred under the control; the layout effect below pulls it back inside
     // the window by its REAL width. Clamping by the max width instead threw a
     // short tip far left of an icon near the window's right edge.
-    setPos({ top: r.bottom + 6, left: r.left + r.width / 2, centred: true });
+    setPos({
+      top: side === "top" ? r.top - 6 : r.bottom + 6,
+      left: r.left + r.width / 2,
+      centred: true,
+    });
   };
   const show = () => {
     if (disabled) return;
@@ -133,7 +139,11 @@ export function HoverTip({
               left: pos.left,
               // Hidden for the one layout pass that measures it.
               visibility: pos.centred ? "hidden" : undefined,
-              ...(side === "right" ? { transform: "translateY(-50%)" } : null),
+              ...(side === "right"
+                ? { transform: "translateY(-50%)" }
+                : side === "top"
+                  ? { transform: "translateY(-100%)" }
+                  : null),
             }}
             className={`pointer-events-none z-[100] overflow-hidden text-ellipsis ${TOOLTIP_LOOK} ${
               side === "right" ? "hover-tip-right" : ""

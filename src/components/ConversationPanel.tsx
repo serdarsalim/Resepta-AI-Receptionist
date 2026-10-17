@@ -1,6 +1,6 @@
 "use client";
 
-import { useAction, useConvex, useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Picker, { Theme, EmojiStyle, type EmojiClickData } from "emoji-picker-react";
@@ -69,6 +69,7 @@ import {
 } from "../../convex/lib/noteBody";
 import { splitQuotedHtml, splitQuotedText } from "../../convex/lib/emailQuote";
 import { HoverTip } from "./HoverTip";
+import { EmailComposeWindow } from "./EmailComposeWindow";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
 
@@ -286,7 +287,6 @@ export function ConversationPanel({
   // never appears rather than appearing and failing.
   const voiceAgents = useQuery(api.retell.list, {});
   const placeCall = useAction(api.retellAgent.testCall);
-  const sendEmail = useAction(api.email.sendToCustomer);
   const addNote = useMutation(api.notes.add);
   const cancelScheduled = useMutation(api.wa.cancelScheduled);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -325,14 +325,13 @@ export function ConversationPanel({
   const [noteSaving, setNoteSaving] = useState(false);
   // Collapsed at rest — see the composer itself.
   const [noteOpen, setNoteOpen] = useState(false);
-  // The email composer is a disclosure, not a permanent bar: unlike WhatsApp,
-  // where you reply constantly, most visits to the email tab are to READ. It
-  // opens on Compose and closes on send.
+  // The email compose window (P28): Gmail's, docked bottom-right over the
+  // page rather than a box inside the email tab, so the thread stays readable
+  // and switching tabs keeps the words. `emailSubject` is what it opens with:
+  // empty for Compose, "Re: …" for a card's Reply, which re-keys the window
+  // to that reply.
   const [composing, setComposing] = useState(false);
   const [emailSubject, setEmailSubject] = useState("");
-  const [emailBody, setEmailBody] = useState("");
-  const [emailSending, setEmailSending] = useState(false);
-  const [emailError, setEmailError] = useState<string | null>(null);
   // Email card the deep link scrolls to (routed from the All index). One-shot.
   // There is no open-thread state any more: since 2026-09-01 the email tab is
   // a flat card timeline with nothing to navigate into (see the card list
@@ -352,8 +351,6 @@ export function ConversationPanel({
   const [calling, setCalling] = useState(false);
   const [confirmCall, confirmCallDialog] = useConfirm();
   const toast = useToast();
-  // The email composer's variables go in as this customer's values (P26).
-  const convex = useConvex();
   const threadRef = useRef<HTMLDivElement>(null);
   // The WhatsApp bubble's menu (P23, Nudge daddc71e): right-click a message
   // (opens at the cursor) or its corner chevron (opens under it). ONE menu
@@ -693,34 +690,6 @@ export function ConversationPanel({
     }
   };
 
-  // An "empty" rich editor is not an empty string — tiptap serialises a blank
-  // document as <p></p>, and a paragraph of non-breaking spaces is emptier
-  // still. Send asks whether anything was WRITTEN, not whether markup exists.
-  const emailHasText =
-    emailBody.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim() !== "";
-
-  const submitEmail = async () => {
-    if (!emailHasText || emailSending) return;
-    setEmailSending(true);
-    setEmailError(null);
-    const result = await sendEmail({
-      customerId,
-      subject: emailSubject,
-      // The action flattens the markup itself and stores both, so the feed
-      // index reads words and the thread renders what was actually sent.
-      body: "",
-      html: emailBody,
-    });
-    setEmailSending(false);
-    if (!result.ok) {
-      setEmailError(result.reason ?? "error");
-      return;
-    }
-    setEmailSubject("");
-    setEmailBody("");
-    setComposing(false);
-  };
-
   // The plane the whole pane stands on, painted ONCE here rather than by the
   // header, the scroller and the composer separately. A repeating background
   // origins at its own element, so three elements each tiling the doodles put
@@ -817,7 +786,7 @@ export function ConversationPanel({
   // resting state is a single right-aligned button, which is what makes one
   // shared row possible; the EXPANDED states (a composer, an open thread's
   // back-and-subject) still get the band below, where they earn the height.
-  const tabAction = !header ? null : filter === "email" && !composing ? (
+  const tabAction = !header ? null : filter === "email" ? (
     <button
       type="button"
       onClick={() => {
@@ -904,97 +873,23 @@ export function ConversationPanel({
           {tabAction && <div className="ml-auto flex shrink-0">{tabAction}</div>}
         </div>
       )}
-      {/* Email tab header. Compose sits top-right, Gmail's convention and
-          Nudge's — the old full-width footer bar spent a whole row on one
-          action. This is the slot the notes composer occupies below; each
-          tab owns what goes here. */}
-      {filter === "email" && (composing || !header) && (
-        <div className={`shrink-0 pt-3 ${FEED_COL_PAD}`}>
-          {composing ? (
-            // Explicitly white, not transparent. The header around it takes the
-            // thread's tinted plane, and a composer that inherits it reads as a
-            // hole in the conversation rather than a sheet of paper laid on top
-            // — which is what a message you are writing is.
-            <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--card)] p-2">
-              <input
-                value={emailSubject}
-                onChange={(event) => setEmailSubject(event.target.value)}
-                placeholder={t("email.subject")}
-                disabled={emailSending}
-              />
-              {/* The real editor, not a textarea. This is EMAIL: the thing a
-                  salon wants to send is a price list with the services in bold
-                  and a link to the booking page, and typing that as plain text
-                  meant the one channel that supports formatting was the one
-                  place they could not use it.
-
-                  onLiveChange as well as onSave, because the editor only
-                  reports on BLUR — Send would otherwise sit disabled the whole
-                  time you were typing and only wake up when you clicked away.
-                  Every keystroke updates the draft; the blur is just the last
-                  one. */}
-              <EmailBodyEditor
-                compact
-                showVariables={false}
-                insertPhoto
-                // A one-off mail to this customer: a picked variable becomes
-                // their value now, since nothing renders this body at send.
-                resolveToken={(token) =>
-                  convex.query(api.email.renderTokenForCustomer, { customerId, token })
-                }
-                onTokenEmpty={(label) => toast(t("email.variableEmpty", { name: label }))}
-                value={emailBody}
-                onSave={setEmailBody}
-                onLiveChange={setEmailBody}
-                disabled={emailSending}
-                placeholder={t("email.bodyPlaceholder")}
-              />
-              {emailError && (
-                <p className="text-xs text-red-600 dark:text-red-400">
-                  {t(ERROR_KEY[emailError] ?? "message.failed")}
-                </p>
-              )}
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setComposing(false);
-                    setEmailError(null);
-                  }}
-                  className="rounded-lg px-3 py-1.5 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-                >
-                  {t("common.cancel")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void submitEmail()}
-                  disabled={emailSending || !emailHasText}
-                  className="rounded-lg bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-50"
-                >
-                  {emailSending ? t("common.saving") : t("contact.send")}
-                </button>
-              </div>
-            </div>
-          ) : (
-            // Only when the pane has no header row to carry it. Compose only:
-            // Reply lives on each card now, where it prefills that email's
-            // own subject.
-            !header && (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmailSubject("");
-                    setComposing(true);
-                  }}
-                  className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90"
-                >
-                  <FeedIcon type="email" size={14} tinted={false} />
-                  {t("email.compose")}
-                </button>
-              </div>
-            )
-          )}
+      {/* Email tab: Compose top-right, Gmail's convention and Nudge's, only
+          when the pane has no header row to carry it. The window it opens
+          is docked over the page (EmailComposeWindow, P28). Reply lives on
+          each card, where it prefills that email's own subject. */}
+      {filter === "email" && !header && (
+        <div className={`flex shrink-0 items-center gap-2 pt-3 ${FEED_COL_PAD}`}>
+          <button
+            type="button"
+            onClick={() => {
+              setEmailSubject("");
+              setComposing(true);
+            }}
+            className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90"
+          >
+            <FeedIcon type="email" size={14} tinted={false} />
+            {t("email.compose")}
+          </button>
         </div>
       )}
       {/* Call tab header: Place call and nothing else — the cards below
@@ -2131,6 +2026,22 @@ export function ConversationPanel({
         </>
       )}
       {confirmCallDialog}
+      {composing && (
+        <EmailComposeWindow
+          key={emailSubject}
+          customerId={customerId}
+          customerName={
+            [customerRecord?.firstName, customerRecord?.lastName].filter(Boolean).join(" ") ||
+            contactName ||
+            ""
+          }
+          firstName={customerRecord?.firstName ?? ""}
+          customerEmail={customerRecord === undefined ? undefined : (customerRecord?.email ?? "")}
+          initialSubject={emailSubject || undefined}
+          errorText={(reason) => t(ERROR_KEY[reason] ?? "message.failed")}
+          onClose={() => setComposing(false)}
+        />
+      )}
     </div>
   );
 }
@@ -2662,7 +2573,12 @@ function EmailCards({
                       </span>
                     )}
                     {!failed && m.status === "queued" && (
-                      <span className="text-[var(--muted)]"> · {t("message.queued")}</span>
+                      // A parked mail (Schedule send, or the window's undo
+                      // hold) says so; its time and Cancel sit at the foot.
+                      <span className="text-[var(--muted)]">
+                        {" · "}
+                        {m.scheduledFor !== undefined ? t("email.scheduled") : t("message.queued")}
+                      </span>
                     )}
                   </p>
                 </div>

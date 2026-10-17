@@ -687,8 +687,13 @@ export function EmailBodyEditor({
   insertPhoto = false,
   resolveToken,
   onTokenEmpty,
+  dock = false,
 }: {
   value: string;
+  // The compose window's shape (P28, Nudge's composeBar): `compact`, but the
+  // text fills the window and scrolls inside it, and the tools sit UNDER the
+  // text, on the bar above Send, the way Gmail lays out its compose window.
+  dock?: boolean;
   // One customer's composer (P26, Nudge 4a232eae): nothing renders this body
   // on the way out, so a variable picked from the list or by "@" goes in as
   // THAT customer's value ("Ayşe"), never as a chip that would reach them as
@@ -857,7 +862,9 @@ export function EmailBodyEditor({
         return false;
       },
       attributes: {
-        class: compact
+        class: dock
+          ? "email-body-editor focus:outline-none py-2 text-sm min-h-full"
+          : compact
           ? "email-body-editor focus:outline-none px-1 py-1 text-sm min-h-[4rem] max-h-[14rem] overflow-y-auto"
           : "email-body-editor email-paper rounded-b-md focus:outline-none px-3 py-2 text-sm min-h-[12rem] max-h-[26rem] overflow-y-auto",
       },
@@ -956,6 +963,45 @@ export function EmailBodyEditor({
     }
     setMode(next);
   };
+
+  if (dock) {
+    return (
+      <div
+        className={`flex min-h-0 flex-1 flex-col ${disabled ? "pointer-events-none opacity-50" : ""}`}
+      >
+        {editor ? (
+          <>
+            {/* The whole area below the subject is the text: a click in the
+                empty space under the last line puts the caret at the end,
+                as a mail client's does. */}
+            <div
+              className="thin-scroll min-h-0 flex-1 cursor-text overflow-y-auto"
+              onMouseDown={(event) => {
+                if (event.target === event.currentTarget) {
+                  event.preventDefault();
+                  editor.commands.focus("end");
+                }
+              }}
+            >
+              <EditorContent editor={editor} className="h-full" />
+            </div>
+            {atList}
+            <ImageMenu editor={editor} onChange={persistNow} />
+            <Toolbar
+              editor={editor}
+              showVariables={offersVariables}
+              divider={false}
+              onChange={persistNow}
+              insertPhoto={insertPhoto}
+              onInsertToken={resolveToken ? (token) => placeValue(token) : undefined}
+            />
+          </>
+        ) : (
+          <div className="min-h-0 flex-1 animate-pulse" aria-busy="true" />
+        )}
+      </div>
+    );
+  }
 
   if (compact) {
     return (

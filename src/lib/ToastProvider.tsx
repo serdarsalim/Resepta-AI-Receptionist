@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { NoticeHost } from "./notices";
 
 // Autosave is the right behaviour and the wrong feeling. Every settings field
 // in this app commits on blur or on change with no Save button anywhere, which
@@ -52,6 +53,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
+      {/* The notes that outlive their caller (lib/notices), bottom-left. */}
+      <NoticeHost />
       {/* pointer-events-none on the stack, so a toast that lands over a
           control never eats the click meant for it. */}
       <div
