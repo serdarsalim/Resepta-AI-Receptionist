@@ -1328,7 +1328,7 @@ day on a 1k WhatsApp blast (its AGENTS.md, 2026-09-02).
    or deletes a scheduled row calls `recomputeThread`.** Same standing as
    `syncAppointmentSchedule`. The Inbox's queries (`inboxPage`,
    `inboxCounts`, `inboxSearch`, `inboxConversation`), `inboxUnseenCount`,
-   `markAllConversationsRead`, `inboxPin`, `customers.list` and
+   `markAllConversationsRead`, `inboxPin`, `customers.listPage` and
    `customers.get` walk `by_org_thread_last` / `by_org_thread_inbound` and
    read exactly the customers they show. `threads:backfill` rebuilds every
    row and is idempotent — run it if a write path is ever found to have

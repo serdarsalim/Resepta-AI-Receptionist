@@ -1,7 +1,7 @@
 "use client";
 
 import { customerHref, wantsNewTab } from "@/lib/customerLink";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
@@ -45,7 +45,7 @@ import { BulkComposer, BulkRunsCard, type BulkChannel } from "./BulkActions";
 // navigates to cold.
 type CustomersSection = "list" | "fields" | "bulk";
 
-type Customer = FunctionReturnType<typeof api.customers.list>[number];
+type Customer = FunctionReturnType<typeof api.customers.listPage>["page"][number];
 type ContactField = Doc<"contactFields">;
 
 // What a table that has never been arranged shows: who they are and how to
@@ -208,6 +208,28 @@ function MutedMark() {
   );
 }
 
+// The table keeps its client-side sort, funnels and search over what is
+// loaded, so it loads the book in pages of 500 in the background, up to a soft
+// cap of 5,000 (five times what the old single take reached). Each page is
+// its own subscription and re-runs alone when one of its customers changes.
+// Past the cap the header search still finds anyone, through the index.
+const CUSTOMER_PAGE = 500;
+const CUSTOMER_BOOK_CAP = 5000;
+
+function useCustomerBook(): Customer[] | undefined {
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.customers.listPage,
+    {},
+    { initialNumItems: CUSTOMER_PAGE },
+  );
+  useEffect(() => {
+    if (status === "CanLoadMore" && results.length < CUSTOMER_BOOK_CAP) {
+      loadMore(CUSTOMER_PAGE);
+    }
+  }, [status, results.length, loadMore]);
+  return status === "LoadingFirstPage" ? undefined : results;
+}
+
 function csvCell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
@@ -218,7 +240,7 @@ export function CustomersView({
   onOpenContact: (id: Id<"customers">) => void;
 }) {
   const { t, language } = useLanguage();
-  const customers = useQuery(api.customers.list, {});
+  const customers = useCustomerBook();
   const contactFields = useQuery(api.contactFields.list, {});
   const setAttention = useMutation(api.messages.setAttention);
   const [adding, setAdding] = useState(false);
@@ -229,7 +251,7 @@ export function CustomersView({
   // VISIBLE list (the one the finger is actually travelling down), and the
   // selection is an inclusion set of ids rather than an exclusion set.
   //
-  // Inclusion works here because customers.list returns one plain array and a
+  // Inclusion works here because the loaded book is one plain array and a
   // tick is an explicit id — a customer arriving mid-selection cannot disturb
   // what is already ticked. Nudge inverts this, but it has to: its recipient
   // list is a live segment that re-runs, so "everyone except these" is the
@@ -551,7 +573,7 @@ export function CustomersView({
   // The selection universe is `rows`: what survived the funnels and the
   // search, in the order shown. So "select all" means every row on screen,
   // never every customer in the table — which is also the only honest
-  // promise available, because customers.list stops at 1000.
+  // promise available, because the table loads at most CUSTOMER_BOOK_CAP.
   const picked = rows.filter((customer) => selected.has(customer._id));
   const allSelected = rows.length > 0 && picked.length === rows.length;
 

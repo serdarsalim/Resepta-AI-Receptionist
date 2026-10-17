@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { customerSearchText, foldSearch, syncCustomerSearch } from "./lib/customerSearch";
 import type { Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
@@ -219,29 +220,34 @@ export const backfillSearch = internalMutation({
   },
 });
 
-export const list = query({
-  args: {},
-  returns: v.array(customerRow),
-  handler: async (ctx) => {
+// The Customers table, a page at a time (P13 of the Nudge port). It used to
+// be one take of the newest 1,000, so the 1,001st customer was not in the
+// table, its counts, its select-all or its export, and one subscription
+// re-read the whole thousand on every write to any of them. The table now
+// loads pages of 500 in the background up to a soft cap (CustomersView), and
+// each page re-runs alone when one of its own customers changes.
+//
+// mutedAt ships raw and the table decides where muted rows land: the table
+// re-sorts what it has loaded by whichever column is active, so a server-side
+// order would be thrown away on arrival. One place decides, and it is the
+// sort. A customer being deleted is dropped from its page, which may then
+// come back short; a page's length is not a promise.
+export const listPage = query({
+  args: { paginationOpts: paginationOptsValidator },
+  returns: paginationResultValidator(customerRow),
+  handler: async (ctx, { paginationOpts }) => {
     const { orgId } = await requireOrg(ctx);
-    const rows = await ctx.db
+    const result = await ctx.db
       .query("customers")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .order("desc")
-      .take(1000);
-    // mutedAt ships raw and the table decides where muted rows land. Nudge
-    // sinks them server-side, through a second query and a by_muted index,
-    // because its Contacts table is paginated: a muted row can only sort late
-    // within the page it happens to land in, so the tail has to be assembled
-    // before the page is. This list is one unpaginated take that the table
-    // re-sorts by whichever column is active, so a server-side order would be
-    // thrown away on arrival. One place decides, and it is the sort.
-    return rows
-      .filter((row) => !isDeleting(row))
-      .map((row) => ({
-        ...row,
-        needsAttention: resolveAttention(row),
-      }));
+      .paginate(paginationOpts);
+    return {
+      ...result,
+      page: result.page
+        .filter((row) => !isDeleting(row))
+        .map((row) => ({ ...row, needsAttention: resolveAttention(row) })),
+    };
   },
 });
 
