@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -17,7 +17,12 @@ import TextAlign from "@tiptap/extension-text-align";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Extension } from "@tiptap/core";
 import { EmojiPicker } from "./EmojiPicker";
-import { VariableInsertDropdown } from "./VariableInsertDropdown";
+import { useMessageVariables, VariableInsertDropdown } from "./VariableInsertDropdown";
+import { VariableToken } from "./VariableToken";
+import { atFragment, matchTokenVariables, TokenSuggestMenu } from "./TokenSuggestMenu";
+import { htmlToTokens, tokensToHtml } from "@/lib/emailTokens";
+import { AT_MENU_W } from "@/lib/caretPosition";
+import type { TokenVariable } from "@/lib/tokenLabels";
 import { SegmentedControl } from "./SegmentedControl";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
@@ -274,11 +279,28 @@ function Toolbar({
       </ToolbarButton>
       <span className="mx-1 h-4 w-px bg-[var(--border)]" />
       {showVariables && (
-        <VariableInsertDropdown onInsert={(token) => editor.chain().focus().insertContent(token).run()} />
+        <VariableInsertDropdown onInsert={(token) => insertToken(editor, token)} />
       )}
       <EmojiPicker onPick={(emoji) => editor.chain().focus().insertContent(emoji).run()} title={t("editor.insertEmoji")} />
     </div>
   );
+}
+
+// What the editor holds, in the form we store: a variable chip back to its
+// `[key]` text (lib/emailTokens).
+function storedHtml(editor: Editor): string {
+  return editor.isEmpty ? "" : htmlToTokens(editor.getHTML());
+}
+
+// A `[key]` from the dropdown goes in as a chip, not as text the input rule
+// never sees (the rule fires on typing only).
+function insertToken(editor: Editor, token: string) {
+  const m = /^\[([A-Za-z0-9_]{1,32})\]$/.exec(token);
+  editor
+    .chain()
+    .focus()
+    .insertContent(m ? { type: "variableToken", attrs: { key: m[1] } } : token)
+    .run();
 }
 
 export function EmailBodyEditor({
@@ -325,6 +347,54 @@ export function EmailBodyEditor({
   const [htmlDraft, setHtmlDraft] = useState(value);
   const htmlAreaRef = useRef<HTMLTextAreaElement>(null);
 
+  // "@" opens the variable list at the caret (P15), where variables are
+  // offered at all (showVariables).
+  const variables = useMessageVariables();
+  const atVariables = useMemo(
+    () => (showVariables ? variables : []),
+    [showVariables, variables],
+  );
+  const [atMenu, setAtMenu] = useState<
+    { left: number; top: number; from: number; fragment: string } | null
+  >(null);
+  const [atActive, setAtActive] = useState(0);
+  const atMatches = useMemo(
+    () => (atMenu ? matchTokenVariables(atVariables, atMenu.fragment) : []),
+    [atMenu, atVariables],
+  );
+  // handleKeyDown is installed into ProseMirror once and would close over the
+  // first render's menu forever, so everything it reads goes through a ref,
+  // written in an effect below.
+  const atState = useRef<{
+    menu: typeof atMenu;
+    matches: TokenVariable[];
+    active: number;
+    accept: (v: TokenVariable) => void;
+  }>({ menu: null, matches: [], active: 0, accept: () => {} });
+  const atVariablesRef = useRef(atVariables);
+  useEffect(() => {
+    atVariablesRef.current = atVariables;
+  });
+
+  const refreshAt = (e: Editor) => {
+    if (atVariablesRef.current.length === 0) return setAtMenu(null);
+    const sel = e.state.selection;
+    if (!sel.empty) return setAtMenu(null);
+    // "\ufffc" for a leaf node keeps one character per position, so the "@"
+    // found in the text is at `from - (fragment + 1)` in the document too.
+    const before = e.state.doc.textBetween(sel.$from.start(), sel.from, "\n", "\ufffc");
+    const hit = atFragment(before);
+    if (!hit) return setAtMenu(null);
+    const c = e.view.coordsAtPos(sel.from);
+    setAtActive(0);
+    setAtMenu({
+      left: Math.min(Math.max(8, c.left), window.innerWidth - AT_MENU_W - 8),
+      top: Math.min(c.bottom + 4, window.innerHeight - 200),
+      from: sel.from - (hit.fragment.length + 1),
+      fragment: hit.fragment,
+    });
+  };
+
   const editor = useEditor({
     // Next.js SSR: render on the client only, avoids hydration mismatch.
     immediatelyRender: false,
@@ -356,13 +426,17 @@ export function EmailBodyEditor({
       TableCell,
       Placeholder.configure({ placeholder: placeholder ?? "" }),
       PreserveEmailAttrs,
+      VariableToken,
     ],
-    content: value || "",
+    content: tokensToHtml(value || ""),
     onUpdate: ({ editor: e }) => {
-      onLiveChange?.(e.isEmpty ? "" : e.getHTML());
+      onLiveChange?.(storedHtml(e));
+      refreshAt(e);
     },
+    onSelectionUpdate: ({ editor: e }) => refreshAt(e),
     onBlur: ({ editor: e }) => {
-      const html = e.isEmpty ? "" : e.getHTML();
+      setAtMenu(null);
+      const html = storedHtml(e);
       if (html !== savedRef.current) {
         savedRef.current = html;
         setHtmlDraft(html);
@@ -370,6 +444,30 @@ export function EmailBodyEditor({
       }
     },
     editorProps: {
+      handleKeyDown: (_view, event) => {
+        const { menu, matches, active, accept } = atState.current;
+        if (!menu || matches.length === 0) return false;
+        if (event.key === "ArrowDown") {
+          setAtActive((a) => (a + 1) % matches.length);
+          return true;
+        }
+        if (event.key === "ArrowUp") {
+          setAtActive((a) => (a - 1 + matches.length) % matches.length);
+          return true;
+        }
+        if (event.key === "Enter" || event.key === "Tab") {
+          accept(matches[active]);
+          return true;
+        }
+        if (event.key === "Escape") {
+          // Kept from the sheet the editor sits in: closing the list is all
+          // this Escape means.
+          event.stopPropagation();
+          setAtMenu(null);
+          return true;
+        }
+        return false;
+      },
       attributes: {
         class: compact
           ? "email-body-editor focus:outline-none px-1 py-1 text-sm min-h-[4rem] max-h-[14rem] overflow-y-auto"
@@ -389,12 +487,38 @@ export function EmailBodyEditor({
       setHtmlDraft(value);
       return;
     }
-    if (editor.getHTML() !== value) {
-      editor.commands.setContent(value || "", { emitUpdate: false });
+    if (storedHtml(editor) !== value) {
+      editor.commands.setContent(tokensToHtml(value || ""), { emitUpdate: false });
     }
-    savedRef.current = editor.isEmpty ? "" : editor.getHTML();
+    savedRef.current = storedHtml(editor);
     setHtmlDraft(value);
   }, [value, editor]);
+
+  // Accepting a pick replaces the "@fragment" with the chip.
+  const acceptAt = (v: TokenVariable) => {
+    const menu = atState.current.menu;
+    if (!editor || !menu) return;
+    const range = { from: menu.from, to: editor.state.selection.from };
+    setAtMenu(null);
+    editor
+      .chain()
+      .focus()
+      .deleteRange(range)
+      .insertContent({ type: "variableToken", attrs: { key: v.key } })
+      .run();
+  };
+  useEffect(() => {
+    atState.current = { menu: atMenu, matches: atMatches, active: atActive, accept: acceptAt };
+  });
+  const atList = atMenu && (
+    <TokenSuggestMenu
+      anchor={atMenu}
+      matches={atMatches}
+      active={atActive}
+      onPick={acceptAt}
+      onHover={setAtActive}
+    />
+  );
 
   const switchMode = (next: "visual" | "html" | "preview") => {
     if (next === mode) return;
@@ -407,10 +531,10 @@ export function EmailBodyEditor({
     }
     if (next === "html") {
       // Carry the latest visual content into the textarea.
-      if (editor) setHtmlDraft(editor.isEmpty ? "" : editor.getHTML());
+      if (editor) setHtmlDraft(storedHtml(editor));
     } else if (editor) {
       // Parse the hand-edited HTML back into the visual editor.
-      editor.commands.setContent(htmlDraft || "", { emitUpdate: false });
+      editor.commands.setContent(tokensToHtml(htmlDraft || ""), { emitUpdate: false });
     }
     setMode(next);
   };
@@ -422,6 +546,7 @@ export function EmailBodyEditor({
           <>
             <Toolbar editor={editor} showVariables={showVariables} divider={false} />
             <EditorContent editor={editor} />
+            {atList}
           </>
         ) : (
           <div className="min-h-[4rem] animate-pulse" aria-busy="true" />
@@ -468,6 +593,7 @@ export function EmailBodyEditor({
           <>
             <Toolbar editor={editor} showVariables={showVariables} />
             <EditorContent editor={editor} />
+            {atList}
           </>
         ) : (
           <div className="min-h-[12rem] animate-pulse" aria-busy="true" />
@@ -488,7 +614,7 @@ export function EmailBodyEditor({
               onSave(htmlDraft);
             }
             // Keep the visual editor in sync for the next toggle.
-            editor?.commands.setContent(htmlDraft || "", { emitUpdate: false });
+            editor?.commands.setContent(tokensToHtml(htmlDraft || ""), { emitUpdate: false });
           }}
           spellCheck={false}
           className="max-h-[26rem] min-h-[12rem] w-full resize-y bg-transparent px-3 py-2 font-mono text-sm focus:outline-none"

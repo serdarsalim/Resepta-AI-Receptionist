@@ -380,6 +380,15 @@ new marketing kind goes into that set.
   do not translate: the stored string cannot be right in three languages at
   once. An unresolved token renders as nothing, never as itself.
 
+**A token is stored by its key and shown by its label** (2026-10-17, P15).
+The plain-text message boxes are `TokenTextField` and the email body is
+`EmailBodyEditor` with the `VariableToken` chip; both read
+`useMessageVariables()` (the dropdown's own list), show `[business]` as
+"İşletme adı" in the reader's language, open the list on "@", and save the
+`[key]` (`lib/tokenLabels`, `lib/emailTokens`). An alias in an old body shows
+as its variable's chip. A new box that holds tokens uses one of the two,
+never a bare textarea.
+
 Campaigns are business-initiated, so on the Cloud lane they MUST ride an
 approved template. The campaign template's `{{3}}` is a free line the campaign
 supplies, which is what makes one Meta approval cover every campaign the salon
