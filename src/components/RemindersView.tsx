@@ -1,5 +1,6 @@
 "use client";
 
+import { waFormat } from "@/lib/waFormat";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   Fragment,
@@ -405,7 +406,7 @@ function LockedPreview({
       ) : (
         <div className="max-w-[90%] space-y-0.5">
           <div className="whitespace-pre-wrap rounded-xl rounded-bl-sm bg-emerald-100 px-3 py-2 text-sm text-emerald-950 dark:bg-emerald-900/40 dark:text-emerald-100">
-            {waBody}
+            {waFormat(waBody)}
           </div>
           {/* The quick replies, the way WhatsApp draws them: separate white
               rows under the bubble, reply arrow, tappable green. These are

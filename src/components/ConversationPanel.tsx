@@ -25,6 +25,7 @@ import { CallTranscript, CollectedList, humanizeCallEnd } from "./CallDetail";
 import { MessageMedia } from "./MessageMedia";
 import { mediaTypeLabel } from "../../convex/lib/mediaKind";
 import { waFailureKind, type WaFailureKind } from "../../convex/lib/waFailure";
+import { waFormat } from "@/lib/waFormat";
 import { EmojiPicker } from "./EmojiPicker";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 
@@ -1296,14 +1297,16 @@ export function ConversationPanel({
                     </p>
                   )}
                   <p className="line-clamp-2 whitespace-pre-wrap text-[var(--muted)]">
-                    {item.replyToBody || t("message.quoteMedia")}
+                    {item.replyToBody ? waFormat(item.replyToBody) : t("message.quoteMedia")}
                   </p>
                 </div>
               )}
               {/* Email never reaches this loop any more (its tab renders
                   EmailCards), so a bubble body is always WhatsApp text. */}
               {item.body ? (
-                <p className="whitespace-pre-wrap">{item.body}</p>
+                // WhatsApp's own *bold*, _italic_, ~strike~ and ```mono```,
+                // as the customer's phone draws them (lib/waFormat).
+                <p className="whitespace-pre-wrap">{waFormat(item.body)}</p>
               ) : item.mediaUrl || item.mediaPending || item.mediaContentType ? null : (
                 // Template sends store no body (the text lives in Meta's
                 // approved template), so the bubble would otherwise be blank.
@@ -1659,7 +1662,7 @@ export function ConversationPanel({
                     </p>
                   )}
                   <p className="line-clamp-2 whitespace-pre-wrap text-[var(--muted)]">
-                    {replyTo.body || t("message.quoteMedia")}
+                    {replyTo.body ? waFormat(replyTo.body) : t("message.quoteMedia")}
                   </p>
                 </div>
                 <button
