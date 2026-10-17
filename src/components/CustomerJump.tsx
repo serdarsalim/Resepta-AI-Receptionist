@@ -94,7 +94,7 @@ export function CustomerJump({
     <div
       ref={panelRef}
       style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width }}
-      className="z-50 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
+      className="menu-surface z-50 overflow-hidden rounded-lg"
     >
       {/* The heading names which list this is. Without it, five names under
           an empty box read as search results for nothing typed. */}

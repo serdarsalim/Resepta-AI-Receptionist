@@ -143,7 +143,7 @@ export function SearchableSelect({
               bottom: pos.bottom,
               width: pos.width,
             }}
-            className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
+            className="menu-surface z-[100] overflow-hidden rounded-lg"
           >
             <input
               ref={searchRef}

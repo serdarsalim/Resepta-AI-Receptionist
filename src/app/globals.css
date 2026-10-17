@@ -304,6 +304,22 @@ thead {
   --event-past: color-mix(in srgb, var(--event) 9%, var(--card));
   --event-past-fg: color-mix(in srgb, var(--event) 45%, var(--muted));
 }
+/* A FLOATING panel (a dropdown's list): only floating things lift (P19,
+   Nudge 04fda8a7). In light the shadow does the lifting; in dark a shadow
+   vanishes into the page and a panel filled like the card it opens over
+   reads as part of it, so dark lifts it by FILL and a visible edge.
+   `.dark .menu-surface` is 0-2-0, so it wins over this whatever the order. */
+.menu-surface {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 30px -8px rgb(0 0 0 / 0.18), 0 2px 6px rgb(0 0 0 / 0.08);
+}
+.dark .menu-surface {
+  background-color: color-mix(in srgb, var(--foreground) 9%, var(--card));
+  border-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+  box-shadow: 0 12px 32px -6px rgb(0 0 0 / 0.6);
+}
+
 .dark .staff-tint {
   --event-soft: color-mix(in srgb, var(--event) 24%, var(--card));
   --event-past: color-mix(in srgb, var(--event) 12%, var(--card));

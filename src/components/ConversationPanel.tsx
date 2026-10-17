@@ -3099,7 +3099,7 @@ function ComposerPlusMenu({
             }}
             className={
               panel.view === "menu"
-                ? "w-[208px] rounded-xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-lg"
+                ? "menu-surface w-[208px] rounded-xl p-1.5"
                 : undefined
             }
           >

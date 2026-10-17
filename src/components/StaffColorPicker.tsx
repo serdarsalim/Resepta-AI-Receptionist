@@ -96,7 +96,7 @@ export function StaffColorPicker({
             role="menu"
             aria-label={t("staffColor.title", { name })}
             style={{ position: "fixed", top: pos.top, bottom: pos.bottom, left: pos.left, width: pos.width }}
-            className="z-[100] rounded-lg border border-[var(--border)] bg-[var(--card)] p-3 shadow-lg"
+            className="menu-surface z-[100] rounded-lg p-3"
           >
             <div className="grid grid-cols-5 gap-2.5">
               {STAFF_COLORS.map((c) => {

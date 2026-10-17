@@ -206,7 +206,7 @@ export function TimeSelect({
               width: pos.width,
               maxHeight: Math.min(256, room),
             }}
-            className="thin-scroll z-[100] overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg"
+            className="menu-surface thin-scroll z-[100] overflow-y-auto rounded-lg py-1"
           >
             {choices.map((m) => {
               const selected = m === minutes;

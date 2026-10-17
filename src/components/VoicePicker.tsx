@@ -154,7 +154,7 @@ export function VoicePicker({
           <div
             ref={panelRef}
             style={{ position: "fixed", ...pos }}
-            className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] text-sm text-[var(--foreground)] shadow-lg"
+            className="menu-surface z-[100] overflow-hidden rounded-lg text-sm text-[var(--foreground)]"
           >
             <input
               ref={searchRef}

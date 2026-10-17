@@ -234,7 +234,7 @@ export function DateRangeField({
               left: pos.left,
               width: pos.width,
             }}
-            className="z-[100] rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-lg"
+            className="menu-surface z-[100] rounded-xl p-3"
             onMouseLeave={() => setHover(null)}
           >
             <div className="mb-2 flex items-center justify-between">

@@ -72,7 +72,7 @@ export function TokenSuggestMenu({
         width: AT_MENU_W,
         zIndex: 60,
       }}
-      className="max-h-64 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 text-xs shadow-lg"
+      className="menu-surface max-h-64 overflow-y-auto rounded-lg py-1 text-xs"
     >
       {matches.map((v, i) => (
         <li key={v.key}>

@@ -164,7 +164,7 @@ export function VariableInsertDropdown({
               bottom: pos.bottom,
               width: pos.width,
             }}
-            className="fixed z-50 rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
+            className="menu-surface fixed z-50 rounded-lg"
           >
             <div className="p-1.5">
               <input

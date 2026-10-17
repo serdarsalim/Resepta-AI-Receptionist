@@ -714,7 +714,7 @@ export function AppointmentModal({
                       left: listPos.left,
                       width: listPos.width,
                     }}
-                    className="z-[100] max-h-56 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
+                    className="menu-surface z-[100] max-h-56 overflow-y-auto rounded-lg"
                   >
                     {customerOptions === undefined ? (
                       <li className="px-3 py-2 text-xs text-[var(--muted)]">

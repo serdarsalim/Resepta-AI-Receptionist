@@ -412,7 +412,7 @@ export function PromptEditor({
               bottom: menuPos.bottom,
               width: menuPos.width,
             }}
-            className="fixed z-[60] max-h-48 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg"
+            className="menu-surface fixed z-[60] max-h-48 overflow-auto rounded-lg py-1"
           >
             {/* An empty menu still renders: silence after typing @ reads as
                 broken. The row says where variables come from instead. */}

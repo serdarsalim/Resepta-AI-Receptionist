@@ -48,8 +48,11 @@ type Props = {
 // Panel geometry. PANEL_W must match the rendered width below, it's what the
 // viewport clamp is computed against.
 const PANEL_W = 256; // 16rem
-const PANEL_MAX_H = 300;
-const MIN_PANEL_H = 180; // below this, flipping above is worth it
+// Five rows tall (P19, Nudge 7c97b857: "too many countries from the get
+// go"): the list scrolls, and typing narrows it at once. A row is py-1.5 +
+// text-sm = 32px, plus the list's 4px padding top and bottom.
+const PANEL_MAX_H = 5 * 32 + 8;
+const MIN_PANEL_H = PANEL_MAX_H; // below this, flipping above is worth it
 const GAP = 6; // trigger to panel; the 8px viewport margin is the hook's
 
 // Strings live here rather than in src/lib/i18n.ts because that dictionary is
@@ -104,13 +107,17 @@ export function CountryCodeSelect({
   // can't contribute scrollWidth anywhere and no overflow-hidden ancestor can
   // crop it. Flips above when there is less than MIN_PANEL_H below and more
   // room above; `room` is what the side it opened on can hold.
-  const { triggerRef, panelRef, pos, room, open, toggle, close } = useAnchoredPanel(
+  // Anchored to the BOX, not the button: open, the button gives way to the
+  // search typed in its place (P19, Nudge 900a9776), and the panel must stay
+  // hung off whichever of the two is there.
+  const boxRef = useRef<HTMLDivElement>(null);
+  const { panelRef, pos, room, open, toggle, close } = useAnchoredPanel<HTMLDivElement>(
     PANEL_W,
-    MIN_PANEL_H - 12,
+    MIN_PANEL_H,
     "left",
-    { gap: GAP },
+    { gap: GAP, triggerRef: boxRef },
   );
-  const maxH = Math.max(MIN_PANEL_H, Math.min(PANEL_MAX_H, room));
+  const maxH = Math.min(PANEL_MAX_H, Math.max(32 + 8, room));
 
   const selectedDigits = String(value ?? "").replace(/\D/g, "");
   const selected = useMemo(
@@ -132,7 +139,8 @@ export function CountryCodeSelect({
 
   const filtered = useMemo(() => {
     const all: CountryOption[] = [NOT_SET, ...countryOptions(language)];
-    const q = query.trim().toLowerCase();
+    // "+90" finds Türkiye: the codes are stored without the plus.
+    const q = query.trim().toLowerCase().replace(/^\+/, "");
     if (!q) return all;
     return all.filter((c) =>
       (c.search ?? `${c.name} ${c.code}`.toLowerCase()).includes(q),
@@ -148,9 +156,30 @@ export function CountryCodeSelect({
   const placeholder = COPY.pick[language];
 
   return (
-    <div className={className}>
+    <div ref={boxRef} className={className}>
+      {/* Open, the box you clicked becomes the search: type a country or a
+          code right where it said "code" (P19, Nudge 900a9776; a picker
+          types IN the box you clicked, never in a second field). */}
+      {open ? (
+        <input
+          ref={searchRef}
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              const first = filtered.find((c) => c.code) ?? filtered[0];
+              if (first) select(first.code);
+            }
+          }}
+          placeholder={COPY.search[language]}
+          aria-label={COPY.search[language]}
+          aria-controls={listId}
+          className={`${triggerCls} outline-none`}
+        />
+      ) : (
       <button
-        ref={triggerRef}
         type="button"
         disabled={disabled}
         onClick={toggle}
@@ -186,6 +215,7 @@ export function CountryCodeSelect({
           ▾
         </span>
       </button>
+      )}
 
       {open &&
         pos &&
@@ -193,20 +223,11 @@ export function CountryCodeSelect({
           <div
             ref={panelRef}
             style={{ top: pos.top, bottom: pos.bottom, left: pos.left, width: PANEL_W }}
-            className="fixed z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
+            className="menu-surface fixed z-[100] overflow-hidden rounded-lg"
             role="listbox"
             id={listId}
           >
-            <input
-              ref={searchRef}
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={COPY.search[language]}
-              aria-label={COPY.search[language]}
-              className="block w-full rounded-none border-0 border-b border-[var(--border)] bg-[var(--background)] px-3 py-2 text-base outline-none"
-            />
-            <div className="thin-scroll overflow-y-auto p-1" style={{ maxHeight: maxH - 44 }}>
+            <div className="thin-scroll overflow-y-auto p-1" style={{ maxHeight: maxH }}>
               {filtered.length === 0 ? (
                 <div className="px-3 py-2 text-sm text-[var(--muted)]">
                   {COPY.none[language]}

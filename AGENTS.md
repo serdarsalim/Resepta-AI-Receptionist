@@ -645,6 +645,13 @@ scrolls, and moving the list must not move the panel), and the panel closes
 only when the trigger has actually left the viewport, since a panel anchored
 to an off-screen control is the drift this exists to prevent.
 
+**A floating list wears `.menu-surface`** (2026-10-17, P19, Nudge
+04fda8a7): the card fill, border and shadow in light, and in dark a fill a
+step lighter than the card with a visible edge, because a dark shadow
+vanishes and a panel filled like the card it opens over reads as part of it.
+A new dropdown, menu or list panel takes the class instead of spelling
+`border bg-[var(--card)] shadow-lg`. Tooltips are not lists and keep theirs.
+
 **Every menu goes through the hook; none positions itself** (2026-10-13).
 Twelve had hand-rolled their own placement. Ten closed on any scroll: the
 calendar's row ⋯ and view menu, the inbox ⋯, the emoji picker, the account

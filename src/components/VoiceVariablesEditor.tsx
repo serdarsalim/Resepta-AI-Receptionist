@@ -1014,7 +1014,7 @@ function SelectOptionsCell({
           <div
             ref={panelRef}
             style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width }}
-            className="fixed z-50 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-lg"
+            className="menu-surface fixed z-50 rounded-lg p-1.5"
           >
             <div className="space-y-1">
               {rows.map((choice, index) => (
@@ -1247,7 +1247,7 @@ function VariablePicker({
           <div
             ref={panelRef}
             style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width }}
-            className="fixed z-50 rounded-xl border border-[var(--border)] bg-[var(--card)] p-2 shadow-lg"
+            className="menu-surface fixed z-50 rounded-xl p-2"
           >
             <input
               ref={inputRef}
@@ -1449,7 +1449,7 @@ function VariableRow({
           <div
             ref={panelRef}
             style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width }}
-            className="fixed z-50 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-lg"
+            className="menu-surface fixed z-50 rounded-lg p-1.5"
           >
             {/* Nudge's TypePicker, structure and reasoning both: the type is
                 a LIST you pick from, not a <select> the OS paints its own

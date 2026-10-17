@@ -87,7 +87,7 @@ export function RowMenu({
               bottom: pos.bottom,
               width: pos.width,
             }}
-            className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg"
+            className="menu-surface z-[100] overflow-hidden rounded-lg py-1"
           >
             {items.map((item) => (
               <button

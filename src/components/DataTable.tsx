@@ -35,7 +35,7 @@ export function CheckMark({ on }: { on: boolean }) {
 }
 
 export const PANEL_CLASS =
-  "thin-scroll z-[100] overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 text-sm text-[var(--foreground)] shadow-lg";
+  "menu-surface thin-scroll z-[100] overflow-y-auto rounded-lg p-1 text-sm text-[var(--foreground)]";
 
 // --row-hover-bg, not --muted-bg: the panel is --card, and in dark the two
 // are one colour, so the hover showed nothing.
@@ -389,7 +389,7 @@ export function ColumnPicker({
           <div
             ref={panelRef}
             style={{ position: "fixed", ...pos }}
-            className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] text-sm text-[var(--foreground)] shadow-lg"
+            className="menu-surface z-[100] overflow-hidden rounded-lg text-sm text-[var(--foreground)]"
           >
             <div className="border-b border-[var(--border)] p-1.5">
               <input

@@ -397,7 +397,7 @@ export function FilterPicker({
             ref={panelRef}
             role="menu"
             style={{ position: "fixed", top: pos.top, bottom: pos.bottom, left: pos.left, width: pos.width }}
-            className="thin-scroll z-[100] max-h-80 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg"
+            className="menu-surface thin-scroll z-[100] max-h-80 overflow-y-auto rounded-lg py-1"
           >
             {options.map((o) => {
               const checked = shown.includes(o.id);

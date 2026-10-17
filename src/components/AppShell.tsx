@@ -1054,7 +1054,7 @@ function UserMenu({
             ref={menuRef}
             role="menu"
             style={{ position: "fixed", ...pos }}
-            className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
+            className="menu-surface z-[100] overflow-hidden rounded-lg"
           >
             <div className="border-b border-[var(--border)] px-3 py-2.5">
               <div className="truncate text-sm font-medium">
@@ -1281,7 +1281,7 @@ function WorkspaceSwitcher({
             ref={menuRef}
             role="menu"
             style={{ position: "fixed", ...pos }}
-            className="z-[100] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg"
+            className="menu-surface z-[100] overflow-hidden rounded-lg"
           >
             <div className="px-3 pb-1 pt-2 text-[11px] font-medium text-[var(--muted-strong)]">
               {t("workspace.switch")}
