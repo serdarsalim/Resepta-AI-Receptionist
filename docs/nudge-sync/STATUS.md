@@ -11,9 +11,10 @@
 - WhatsApp messages show bold, italic and strike; the thread looks like WhatsApp (plain paper, tails, spacing); a failed send says why ("not on WhatsApp", "window closed").
 - Call cards say who placed the call, what it booked, and the player shows the length before loading.
 - A customer record has its own link (cmd-click opens it in a new tab), its name in the browser tab, a copy button on the phone, notes as signed rows, Tab moving through fields, searchable picklists.
+- Team members see read-only cards as plain values instead of a dimmed form.
 
 **Ready to look at:** Voice agent page: edit, Publish, open the version number, Restore, the voicemail row, Test in the browser. Agents table: Try the WhatsApp assistant. A customer's WhatsApp thread, calls tab and notes tab. Admin templates table's category column.
 
 **Before shipping:** Deploy Convex first (new tables agentTests; new optional fields on retellAgents, calls, waTemplates, usageMonthly). Subscribe the Meta app to template_category_update. Check on one real call that inbound answers with the published version.
 
-**Up next:** The rest of P12 (read-only cards for team members), then P13 inbox paging.
+**Up next:** P13 inbox paging and customer search, then P13b bulk-run outcomes.
