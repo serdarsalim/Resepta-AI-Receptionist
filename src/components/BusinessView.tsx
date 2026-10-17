@@ -32,6 +32,7 @@ import { keyFromLabel, normaliseKey } from "../../convex/lib/keys";
 import { slugifyInboundAddress } from "../../convex/lib/inboundAddress";
 import { MAX_MIN_NOTICE_HOURS, type NoticeUnit } from "../../convex/lib/minNotice";
 import { HoverTip } from "./HoverTip";
+import { embedSnippet } from "@/lib/embed";
 
 // Business: how this business is SHAPED. Its identity, who works here, what it
 // sells, and what a customer record holds. Settings next door is the other
@@ -262,6 +263,7 @@ function BookingRow() {
   const update = useMutation(api.orgs.update);
   const enableBooking = useMutation(api.booking.enable);
   const [copied, setCopied] = useState(false);
+  const [embedCopied, setEmbedCopied] = useState(false);
   if (!settings) return null;
   const { bookingEnabled, publicSlug } = settings.org;
   const nativeBookingUrl =
@@ -341,6 +343,34 @@ function BookingRow() {
                 }`}
               >
                 {copied ? <CopiedIcon /> : <CopyIcon />}
+              </button>
+              </HoverTip>
+              {/* The page on the business's own website (P29): the code to
+                  paste, a div naming this page and our loader script
+                  (public/embed.js, lib/embed). One glyph beside Copy, since
+                  it copies too; the hover label says what. */}
+              <HoverTip
+                text={embedCopied ? t("common.copied") : t("settings.copyEmbed")}
+                className="inline-flex shrink-0"
+              >
+              <button
+                type="button"
+                aria-label={embedCopied ? t("common.copied") : t("settings.copyEmbed")}
+                onClick={() => {
+                  void navigator.clipboard
+                    .writeText(embedSnippet(nativeBookingUrl))
+                    .then(() => {
+                      setEmbedCopied(true);
+                      setTimeout(() => setEmbedCopied(false), 1200);
+                    });
+                }}
+                className={`shrink-0 rounded-md p-1.5 transition-colors ${
+                  embedCopied
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {embedCopied ? <CopiedIcon /> : <EmbedIcon />}
               </button>
               </HoverTip>
             </>
@@ -485,6 +515,14 @@ function MinNoticeRow({
 // Local, like every other icon in this app (SearchIcon in HelpCenter,
 // PencilIcon in RecordField). There is no icon module to add to, and one
 // caller does not make one.
+function EmbedIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M8 7l-5 5 5 5M16 7l5 5-5 5" />
+    </svg>
+  );
+}
+
 function CopyIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

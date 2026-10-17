@@ -144,6 +144,10 @@ export const proxy = convexAuthNextjsMiddleware(async (request, { convexAuth }) 
 // page and renders a broken image. The /images directory contains landing-page
 // media only; it calls no backend function and carries no tenant data.
 //
+// /embed.js (P29) is the loader a business pastes into its own website to
+// frame its booking page: a static file in public/ that reads no backend and
+// carries nothing of any business.
+//
 // Every dot here is escaped, because this string is compiled to a regex and an
 // unescaped one matches any character: `favicon.ico` was also excusing
 // /faviconXico from the auth check. Nothing routes there, so nothing leaked —
@@ -151,6 +155,6 @@ export const proxy = convexAuthNextjsMiddleware(async (request, { convexAuth }) 
 // contain them.
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|images|favicon\\.ico|icon\\.svg|apple-icon\\.png|opengraph-image|robots\\.txt|sitemap\\.xml).*)",
+    "/((?!_next/static|_next/image|images|favicon\\.ico|icon\\.svg|apple-icon\\.png|opengraph-image|robots\\.txt|sitemap\\.xml|embed\\.js).*)",
   ],
 };

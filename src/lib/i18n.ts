@@ -2514,6 +2514,13 @@ const dictionary = {
   "settings.address": { tr: "Adres", en: "Address", de: "Adresse" },
   // The business's own terms and privacy pages, linked above the booking
   // page's Book button (P29). Two fields on one row: they answer one question.
+  // The second glyph beside the booking link: copies the code that puts the
+  // page on the business's own website (P29, public/embed.js).
+  "settings.copyEmbed": {
+    tr: "Web sitenize eklemek için kodu kopyala",
+    en: "Copy the code for your website",
+    de: "Code für Ihre Website kopieren",
+  },
   "settings.legalLinks": {
     tr: "Koşullar ve gizlilik",
     en: "Terms and privacy",
