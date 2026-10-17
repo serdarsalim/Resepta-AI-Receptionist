@@ -71,7 +71,13 @@ import {
 } from "./lib/businessHours";
 import { DEFAULT_QUIET_HOURS } from "./orgs";
 import { bulkRunHoldReason } from "./schema";
-import { callOutcome, reachedPhone } from "./lib/callOutcome";
+import {
+  callOutcome,
+  isAccountRefusal,
+  isRetryableCallEnd,
+  isRetryableDialError,
+  reachedPhone,
+} from "./lib/callOutcome";
 
 // A run is capped, for campaigns' reason word for word: a salon with more
 // customers than this wants a filter, not a bigger blast, and a send nobody
@@ -99,6 +105,14 @@ const CALL_STUCK_MS = 20 * 60_000;
 // enough to cost nothing, short enough that hours set in the morning are read
 // the same day.
 const NO_OPENING_RECHECK_MS = 6 * 60 * 60_000;
+// A dial refused for want of a free line goes back in line (requeueCall).
+// This many tries per customer, the run waiting one step longer after each
+// (1, 2, 3, 4, 5 minutes: Nudge abbbbdff's numbers), before the customer is
+// counted as failed and the run moves on. High enough that a busy hour on the
+// shared account drains rather than sheds; low enough that a number the
+// network refuses every time cannot hold the whole list up.
+const MAX_DIAL_ATTEMPTS = 6;
+const DIAL_RETRY_STEP_MS = 60_000;
 
 export type BulkChannel = "email" | "whatsapp" | "call";
 
@@ -1111,6 +1125,57 @@ export const failItem = internalMutation({
   },
 });
 
+// A dial refused for a reason a later try can pass (2026-10-17, Nudge
+// abbbbdff): no free line on the shared account, a carrier briefly
+// unavailable, the provider failing. The phone never rang, so failing the
+// item would burn a customer nobody called. It goes back to the head of the
+// line instead (its place is its _creationTime, which a patch does not move),
+// and the run is held one step longer per try, through claimNextCall's own
+// hold so the reaper cannot dial through it. After MAX_DIAL_ATTEMPTS it rests
+// as failed with the last refusal as its reason, and the run moves on.
+async function requeueRefusedCall(
+  ctx: MutationCtx,
+  item: Doc<"bulkRunItems">,
+  reason: string,
+): Promise<void> {
+  const run = await ctx.db.get(item.runId);
+  if (!run) return;
+  const attempts = item.attempts ?? 1;
+  if (attempts >= MAX_DIAL_ATTEMPTS) {
+    await ctx.db.patch(item._id, { status: "failed", reason });
+    await ctx.db.patch(run._id, { failedCount: run.failedCount + 1 });
+    if (run.status === "running") {
+      await ctx.scheduler.runAfter(0, internal.bulkRuns.dialNext, { runId: run._id });
+    }
+    return;
+  }
+  // Stopped while this one was being refused: there is no line to go back to.
+  if (run.status === "cancelled" || run.status === "done") {
+    await ctx.db.patch(item._id, { status: "cancelled", reason });
+    return;
+  }
+  await ctx.db.patch(item._id, { status: "pending", reason, retellCallId: undefined });
+  // Paused: the resume restarts the chain, and this customer is first.
+  if (run.status !== "running") return;
+  const now = Date.now();
+  const until = now + attempts * DIAL_RETRY_STEP_MS;
+  await ctx.db.patch(run._id, { heldUntil: until, heldReason: "busy" });
+  await ctx.scheduler.runAfter(until - now, internal.bulkRuns.dialNext, {
+    runId: run._id,
+  });
+}
+
+export const requeueCall = internalMutation({
+  args: { itemId: v.id("bulkRunItems"), reason: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.itemId);
+    if (!item || item.status !== "dialing") return null;
+    await requeueRefusedCall(ctx, item, args.reason);
+    return null;
+  },
+});
+
 // Puts a claimed item back and stops the run. Used when the refusal is about
 // the ORG rather than this customer — a suspension, an emptied wallet, a
 // disabled agent — because those will refuse the next four hundred too, and
@@ -1187,6 +1252,16 @@ export const dialNext = internalAction({
       // The reason, not the "Uncaught Error … at handler" frame placeCall's
       // error arrives in across runAction.
       const message = cleanError(error);
+      // The provider said "not now": no free line, too many calls at once,
+      // its own fault. Nothing rang, so the customer goes back in line and
+      // the run waits a little (requeueCall), which schedules the next try.
+      if (isRetryableDialError(message)) {
+        await ctx.runMutation(internal.bulkRuns.requeueCall, {
+          itemId: claim.itemId,
+          reason: message.slice(0, 200),
+        });
+        return null;
+      }
       await ctx.runMutation(internal.bulkRuns.failItem, {
         itemId: claim.itemId,
         reason: message.slice(0, 200),
@@ -1224,13 +1299,38 @@ export const finishByCallId = internalMutation({
       .withIndex("by_retell_call", (q) => q.eq("retellCallId", args.retellCallId))
       .unique();
 
+    const ended = call?.disconnectionReason;
+    // The provider refused it for want of a free line, or the carrier was
+    // briefly away: nothing rang, so back in line rather than counted
+    // (requeueRefusedCall, which holds the run and schedules the next try).
+    if (isRetryableCallEnd(ended)) {
+      await requeueRefusedCall(ctx, item, ended!);
+      return null;
+    }
+    // Refused because of the ACCOUNT the calls go out on: every next call in
+    // this run would end the same way, so the customer goes back in line and
+    // the run pauses rather than spend its list on it (abortRun's reasoning).
+    if (isAccountRefusal(ended)) {
+      const owner = await ctx.db.get(item.runId);
+      const stopped = !owner || owner.status === "cancelled" || owner.status === "done";
+      await ctx.db.patch(item._id, {
+        status: stopped ? "cancelled" : "pending",
+        reason: ended,
+        retellCallId: undefined,
+      });
+      if (owner && owner.status === "running") {
+        await ctx.db.patch(owner._id, { status: "paused" });
+      }
+      return null;
+    }
+
     // What the call came to, from the provider's disconnect code
     // (lib/callOutcome). One that never reached the phone (the network
     // refused it, it broke on the way) is not a call this customer got, so
     // it counts as failed with the code as its reason; anything that rang
     // counts as done, whatever happened next. A row with no code and no
     // duration is counted done, as every call was before.
-    const outcome = callOutcome(call?.disconnectionReason, call?.durationSec);
+    const outcome = callOutcome(ended, call?.durationSec);
     const reached = outcome === undefined || reachedPhone(outcome);
     await ctx.db.patch(item._id, {
       status: reached ? "done" : "failed",

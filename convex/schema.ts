@@ -21,6 +21,7 @@ export const appointmentStatus = v.union(
 export const bulkRunHoldReason = v.union(
   v.literal("closed"),
   v.literal("no-opening"),
+  v.literal("busy"),
 );
 
 export default defineSchema({
@@ -2243,7 +2244,9 @@ export default defineSchema({
     // anywhere else would be dialled straight through. "closed": the business
     // is shut (outside its hours or in blocked time) and heldUntil is when it
     // opens. "no-opening": nothing opens within the horizon, and heldUntil is
-    // only when to look again. Unset: free to dial.
+    // only when to look again. "busy": a dial was refused for want of a free
+    // line (the provider's capacity, the carrier, the platform's own cap) and
+    // heldUntil is the next try. Unset: free to dial.
     heldUntil: v.optional(v.number()),
     heldReason: v.optional(bulkRunHoldReason),
 

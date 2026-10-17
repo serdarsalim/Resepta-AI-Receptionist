@@ -19,8 +19,12 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { useLanguage, useT } from "@/lib/LanguageProvider";
-import { formatAge, formatDateTimeWithWeekday } from "@/lib/datetime";
-import { callOutcome } from "../../convex/lib/callOutcome";
+import { formatAge, formatDateTimeWithWeekday, formatTime } from "@/lib/datetime";
+import {
+  callOutcome,
+  isRetryableCallEnd,
+  isRetryableDialError,
+} from "../../convex/lib/callOutcome";
 import { humanizeCallEnd } from "./CallDetail";
 import { useConfirm } from "./ConfirmDialog";
 import { EmojiPicker } from "./EmojiPicker";
@@ -572,9 +576,13 @@ function RunDetail({
           <p className="mt-1 text-xs text-[var(--muted-strong)]">
             {run.heldReason === "no-opening"
               ? t("bulk.heldNoOpening")
-              : t("bulk.heldClosed", {
-                  when: formatDateTimeWithWeekday(run.heldUntil, language, timezone),
-                })}
+              : run.heldReason === "busy"
+                ? t("bulk.heldBusy", {
+                    time: formatTime(run.heldUntil, language, timezone),
+                  })
+                : t("bulk.heldClosed", {
+                    when: formatDateTimeWithWeekday(run.heldUntil, language, timezone),
+                  })}
           </p>
         )}
         {/* What was actually written, kept because a run is looked at weeks
@@ -660,6 +668,11 @@ function ItemOutcome({ item, channel }: { item: RunItem; channel: BulkChannel })
   if (channel === "call" && (item.status === "done" || item.status === "failed")) {
     const ended = callOutcome(item.disconnectionReason, item.durationSec);
     if (ended) return <CallOutcomeText item={item} outcome={ended} />;
+    // Given up on after the provider refused every try for want of a free
+    // line (bulkRuns.requeueRefusedCall): nothing ever rang.
+    if (item.status === "failed" && retryableRefusal(item.reason)) {
+      return <CallOutcomeText item={item} outcome="refused" gaveUp />;
+    }
     if (item.status === "done") return <span className={muted}>{t("bulk.itemCalled")}</span>;
   }
   if (item.status === "failed") {
@@ -679,7 +692,15 @@ function ItemOutcome({ item, channel }: { item: RunItem; channel: BulkChannel })
       </span>
     );
   }
-  if (item.status === "pending") return <span className={muted}>{t("bulk.itemPending")}</span>;
+  if (item.status === "pending") {
+    // Back in line after a refused dial, and the run is waiting to try again
+    // (bulkRuns.requeueRefusedCall): not the same as never tried.
+    return (
+      <span className={muted}>
+        {t(retryableRefusal(item.reason) ? "bulk.itemRetrying" : "bulk.itemPending")}
+      </span>
+    );
+  }
 
   // Done, or a message row still working its way through the delivery queue.
   if (item.repliedAt) {
@@ -696,15 +717,25 @@ function ItemOutcome({ item, channel }: { item: RunItem; channel: BulkChannel })
   return <span className={muted}>{t("bulk.itemSent")}</span>;
 }
 
+// A refusal the call queue retries rather than counts: no free line on the
+// shared account, the carrier briefly away, the provider failing.
+function retryableRefusal(reason: string | undefined): boolean {
+  return Boolean(reason) && (isRetryableCallEnd(reason) || isRetryableDialError(reason!));
+}
+
 // One call's outcome in a word or two. The two that never reached the phone
 // are red, like any failure on this screen, and carry the call card's own
 // sentence for the code on hover; the rest are facts about a call that rang.
 function CallOutcomeText({
   item,
   outcome,
+  gaveUp,
 }: {
   item: RunItem;
   outcome: NonNullable<ReturnType<typeof callOutcome>>;
+  // Refused on every try (requeueRefusedCall gave up): the hover says so
+  // rather than print the provider's raw error.
+  gaveUp?: boolean;
 }) {
   const t = useT();
   const muted = "shrink-0 text-xs text-[var(--muted)]";
@@ -730,7 +761,11 @@ function CallOutcomeText({
       return (
         <span
           className="shrink-0 truncate text-xs text-red-600 dark:text-red-400"
-          title={humanizeCallEnd(item.disconnectionReason, t) ?? item.reason}
+          title={
+            gaveUp
+              ? t("bulk.gaveUpTitle")
+              : (humanizeCallEnd(item.disconnectionReason, t) ?? item.reason)
+          }
         >
           {t(outcome === "refused" ? "bulk.outcomeRefused" : "bulk.itemFailed")}
         </span>

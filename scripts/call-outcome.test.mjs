@@ -2,7 +2,13 @@
 // (convex/lib/callOutcome.ts). Run: node --test scripts/call-outcome.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { callOutcome, reachedPhone } from "../convex/lib/callOutcome.ts";
+import {
+  callOutcome,
+  isAccountRefusal,
+  isRetryableCallEnd,
+  isRetryableDialError,
+  reachedPhone,
+} from "../convex/lib/callOutcome.ts";
 
 test("reads the provider's codes before the duration", () => {
   assert.equal(callOutcome("voicemail_reached", 41), "voicemail");
@@ -43,4 +49,24 @@ test("an unknown or missing code falls back to the duration", () => {
   assert.equal(callOutcome(undefined, undefined), undefined);
   assert.equal(callOutcome("constructor", undefined), undefined);
   assert.equal(callOutcome("  Dial_Busy "), "busy");
+});
+
+test("only a refusal a later try can pass is retried", () => {
+  // Ended by the provider before anything rang.
+  assert.equal(isRetryableCallEnd("concurrency_limit_reached"), true);
+  assert.equal(isRetryableCallEnd("telephony_provider_unavailable"), true);
+  assert.equal(isRetryableCallEnd("telephony_provider_permission_denied"), false);
+  assert.equal(isRetryableCallEnd("dial_no_answer"), false);
+  assert.equal(isRetryableCallEnd(undefined), false);
+  // Refused at dial time, as cleanError leaves the message.
+  assert.equal(isRetryableDialError('retell-429: {"error_message":"Too many requests"}'), true);
+  assert.equal(isRetryableDialError("retell-503: upstream unavailable"), true);
+  assert.equal(isRetryableDialError('retell-400: {"error_message":"Concurrency limit reached"}'), true);
+  assert.equal(isRetryableDialError('retell-400: {"error_message":"Invalid to_number"}'), false);
+  assert.equal(isRetryableDialError("retell-401: unauthorized"), false);
+  // A thrown fetch may have reached the provider: never dialled twice.
+  assert.equal(isRetryableDialError("fetch failed"), false);
+  assert.equal(isRetryableDialError("retell-no-call-id"), false);
+  assert.equal(isAccountRefusal("no_valid_payment"), true);
+  assert.equal(isAccountRefusal("dial_busy"), false);
 });

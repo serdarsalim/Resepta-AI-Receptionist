@@ -994,6 +994,13 @@ const dictionary = {
     en: "Closed now. Calling resumes {when}.",
     de: "Gerade geschlossen. Die Anrufe laufen ab {when} weiter.",
   },
+  // The provider or the network refused a dial for want of a free line, and
+  // the run tries again at {time} (bulkRuns.requeueRefusedCall).
+  "bulk.heldBusy": {
+    tr: "Şu an boş hat yok. {time} itibarıyla yeniden denenecek.",
+    en: "No free line right now. Trying again at {time}.",
+    de: "Gerade keine freie Leitung. Neuer Versuch um {time}.",
+  },
   "bulk.heldNoOpening": {
     tr: "Önümüzdeki haftalarda açık saatiniz görünmüyor. Açık olduğunuz ilk saatte aramalar sürecek.",
     en: "No opening hours in the coming weeks. Calling resumes once you are open.",
@@ -1045,6 +1052,18 @@ const dictionary = {
   },
   "bulk.skipOther": { tr: "Atlandı", en: "Skipped", de: "Übersprungen" },
   "bulk.itemPending": { tr: "Sırada", en: "Waiting", de: "Wartet" },
+  // Back in line after a refused dial: nothing rang, and it will be tried
+  // again shortly.
+  "bulk.itemRetrying": {
+    tr: "Birazdan yeniden denenecek",
+    en: "Trying again shortly",
+    de: "Wird gleich erneut versucht",
+  },
+  "bulk.gaveUpTitle": {
+    tr: "Birkaç denemede de boş hat bulunamadı, telefon hiç çalmadı",
+    en: "No free line on any of several tries; the phone never rang",
+    de: "Auch nach mehreren Versuchen keine freie Leitung; es hat nie geklingelt",
+  },
   "bulk.itemQueued": { tr: "Kuyrukta", en: "Queued", de: "In Warteschlange" },
   "bulk.itemRinging": { tr: "Çalıyor", en: "Ringing", de: "Klingelt" },
   "bulk.itemSent": { tr: "Gönderildi", en: "Sent", de: "Gesendet" },
