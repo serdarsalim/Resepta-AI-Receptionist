@@ -57,7 +57,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
 import { isDemo } from "./demo";
 import { customerSender, emailBodyHtml, emailLaneConfigured } from "./lib/email";
-import { emailConfig, resolveWaAccount } from "./lib/platformConfig";
+import { bulkCallLimit, emailConfig, resolveWaAccount } from "./lib/platformConfig";
 import { renderTokens } from "./lib/renderTokens";
 import { resolvePublicPhone } from "./lib/publicPhone";
 import { recordActivity } from "./lib/activity";
@@ -113,6 +113,11 @@ const NO_OPENING_RECHECK_MS = 6 * 60 * 60_000;
 // network refuses every time cannot hold the whole list up.
 const MAX_DIAL_ATTEMPTS = 6;
 const DIAL_RETRY_STEP_MS = 60_000;
+// How long a run waits when the platform-wide limit on bulk calls ringing at
+// once is reached before it looks again. A call ending frees a line for its
+// own run at once (finishByCallId); every other waiting run finds it within
+// this.
+const PLATFORM_LIMIT_WAIT_MS = 30_000;
 
 export type BulkChannel = "email" | "whatsapp" | "call";
 
@@ -1073,6 +1078,30 @@ export const claimNextCall = internalMutation({
       await ctx.db.patch(next._id, { status: "skipped", reason });
       await ctx.db.patch(args.runId, { skippedCount: run.skippedCount + 1 });
       return { state: "skipped" as const };
+    }
+
+    // The platform's own limit on bulk calls ringing at once, across every
+    // business (platformConfig bulkCallConcurrency). One provider account
+    // carries every business's calls and every inbound call, and its lines
+    // are one pool: a few businesses' runs at once could take the lines a
+    // caller ringing in needs. Unset, nothing is read here and every run
+    // keeps its one call at a time. Counted in the transaction that claims,
+    // so two runs claiming at once conflict and the second sees the first's
+    // call; only the count of live calls is read, nothing about whose.
+    const limit = await bulkCallLimit(ctx);
+    if (limit !== null) {
+      const live = await ctx.db
+        .query("bulkRunItems")
+        .withIndex("by_status", (q) => q.eq("status", "dialing"))
+        .take(limit);
+      if (live.length >= limit) {
+        const until = now + PLATFORM_LIMIT_WAIT_MS;
+        await ctx.db.patch(args.runId, { heldUntil: until, heldReason: "busy" });
+        await ctx.scheduler.runAfter(PLATFORM_LIMIT_WAIT_MS, internal.bulkRuns.dialNext, {
+          runId: args.runId,
+        });
+        return { state: "held" as const, until };
+      }
     }
 
     // A call run without an agent or a line cannot dial anything, and every

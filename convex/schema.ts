@@ -2344,7 +2344,14 @@ export default defineSchema({
     // The webhook's way home.
     .index("by_retell_call", ["retellCallId"])
     // One customer's items across every run, for deleting that customer.
-    .index("by_org_customer", ["orgId", "customerId"]),
+    .index("by_org_customer", ["orgId", "customerId"])
+    // Status ACROSS orgs, for the platform-wide cap on bulk calls ringing at
+    // once (claimNextCall, platformConfig bulkCallConcurrency): the one
+    // provider account carries every business's calls. Only a COUNT of
+    // "dialing" rows is ever read through it, inside the claim, and nothing
+    // read here reaches a business; bulkRuns.by_status is the same shape for
+    // the reaper.
+    .index("by_status", ["status"]),
 
   // Images the salon sends OUT — a price list, a before-and-after, the card
   // machine being broken today. Inbound images already land in Convex storage
