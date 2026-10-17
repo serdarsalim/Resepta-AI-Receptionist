@@ -9,6 +9,7 @@
 // never in a band above the conversation card. A band pushes the right card
 // down and the two panes stop starting on the same line (Nudge's rule).
 
+import { filterPillClass } from "./filterPill";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -107,29 +108,16 @@ export function FeedFilterPills({
         onClick={() => onChange(active ? "all" : tab)}
         aria-label={label}
         aria-pressed={active}
-        // Geometry and the three states are Nudge's, read off its live DOM
-        // rather than eyeballed: no explicit height (the text sets it), no
-        // background on the resting pill, and ink that carries the weight —
-        // a resting tab sits at 75% foreground whether or not it has rows yet
-        // (P12), the open one goes accent and semibold.
         // text-sm and the glyph at 15: the pills sit beside the conversation's
-        // name and were reading a size below everything around them. py-1 is
-        // unchanged — the row lives in a fixed h-9 track that the empty track
-        // over the list mirrors, and growing it breaks the two cards' shared
-        // top edge.
-        // bg-[var(--card)] on the resting states: the row sits above the
-        // inbox's two cards, directly on the washed plane, and an unfilled
-        // pill there is a ring around a piece of the gradient. White makes it
-        // read as a control on the same paper as the cards under it.
-        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm transition-colors ${
-          active
-            ? "border-[var(--accent)] bg-[var(--accent)]/10 font-semibold text-[var(--accent)]"
-            : // A channel with nothing in it yet is still a live control (it
-              // opens the composer for that channel), so it is not greyed
-              // out (P12, Nudge 1a1b00dd: "no dimmed pills"). The count
-              // already says there is nothing there.
-              "border-[var(--border)] bg-[var(--card)] font-medium text-[var(--foreground)]/75 hover:text-[var(--foreground)]"
-        }`}
+        // name and were reading a size below everything around them. 28px
+        // tall, inside the fixed h-9 header track.
+        // The shared filter pill since P21 (filterPill.ts): selected is an
+        // accent fill, not an accent outline with semibold ink, and the
+        // height is fixed at the 28px py-1 used to give. A channel with
+        // nothing in it yet is still a live control (it opens the composer
+        // for that channel), so it is not greyed out (P12, Nudge 1a1b00dd:
+        // "no dimmed pills"). The count already says there is nothing there.
+        className={filterPillClass(active)}
       >
         {/* Every pill with a mark is its mark and its count, nothing else
             (Serdar's call, 2026-08-17). Notes and Form used to carry their word

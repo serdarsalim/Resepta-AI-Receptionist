@@ -19,6 +19,7 @@ import { FeedFilterPills } from "./FeedFilterPills";
 import { FeedIcon, type FeedIconType } from "./FeedIcon";
 import { RowMenu } from "./RowMenu";
 import { HoverTip } from "./HoverTip";
+import { filterPillClass } from "./filterPill";
 
 // Which slice of the list the chips are showing. Persisted per browser under
 // this key; the .v1 suffix is the escape hatch if the shape ever changes.
@@ -117,8 +118,9 @@ function InboxMenu({
 }) {
   const { t } = useLanguage();
   return (
-    <span className="ml-auto">
+    <span className="ml-auto shrink-0">
       <RowMenu
+        trigger="pill"
         label={t("inbox.menu")}
         items={[
           {
@@ -290,37 +292,59 @@ export function InboxView({
 
               ONE LINE ONLY — a second row of chips spills rather than pushing
               the list down. */}
-          {/* No "All" chip any more (Serdar, 2026-08-25, matching Nudge). All
-              is the REST state, not a filter you pick: two toggle chips, and
-              clicking the active one releases it back to everything. A third
-              chip whose only job was "neither of the other two" spent a slot
-              restating the default. Bulk verbs live behind the ⋯ on the right
-              instead of widening this row — one line only, as above. Nudge
-              also filters by owner there; this app has no owner on a
-              conversation, so the menu is just the read stroke. */}
+          {/* All / Unread / Pinned, always all three, exactly one lit, and a
+              lit chip never toggles off (P21, Nudge fe3baf2d, reversing the
+              2026-08-25 "no All chip"). They are a radio, and a radio needs a
+              visible off: "show me everything again" had become clicking the
+              lit chip a second time, a gesture you had to already know about.
+              Bulk verbs live behind the menu on the right instead of widening
+              this row. Nudge also filters by owner here; a Resepta
+              conversation has no owner, so there is no fourth pill. The row
+              scrolls sideways in a narrow pane rather than growing a second
+              line. */}
           <div className="flex h-11 shrink-0 items-center gap-1.5 px-3">
+            <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
             {(
               [
+                ["all", t("inbox.filterAll"), 0],
                 ["unread", t("inbox.filterUnread"), unseenCount],
                 ["pinned", t("inbox.filterPinned"), pinnedCount],
               ] as const
-            ).map(([key, label, count]) => (
-              <button
-                key={key}
-                type="button"
-                aria-pressed={view === key}
-                onClick={() => chooseView(view === key ? "all" : key)}
-                className={`inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-sm transition-colors ${
-                  view === key
-                    ? "border-[var(--accent)] bg-[var(--accent)]/10 font-semibold text-[var(--accent)]"
-                    : "border-[var(--border)] bg-[var(--card)] font-medium text-[var(--foreground)]/75 hover:text-[var(--foreground)]"
-                }`}
-              >
-                {label}
-                {/* Zero renders nothing: a row of noughts is noise. */}
-                {count > 0 && <span className="tabular-nums">{count}</span>}
-              </button>
-            ))}
+            ).map(([key, label, count]) => {
+              // The unread count stops at the scan's cap. The chip shows the
+              // bare number (Nudge bff29139 dropped the "+"), and the hover
+              // and the accessible name say it is a floor.
+              const atLeast =
+                key === "unread" && counts?.unreadCapped && count > 0
+                  ? t("inbox.unreadAtLeast", { n: count })
+                  : undefined;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={view === key}
+                  aria-label={atLeast}
+                  title={atLeast}
+                  onClick={() => chooseView(key)}
+                  className={filterPillClass(view === key)}
+                >
+                  {/* gap-1, tighter than the pill's own: the number belongs
+                      to its word (Nudge ea44f67c). */}
+                  <span className="inline-flex items-center gap-1">
+                    {label}
+                    {/* Zero renders nothing: a row of noughts is noise. A
+                        size smaller than the word, so the count reads as a
+                        fact about the chip, not a second label. */}
+                    {count > 0 && (
+                      <span className="text-xs font-medium tabular-nums opacity-75">
+                        {count}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+            </div>
             <InboxMenu
               unseenCount={unseenCount}
               onMarkAllRead={() => void markAllRead({})}

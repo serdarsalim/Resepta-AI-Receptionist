@@ -2,6 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
+import { filterPillClass } from "./filterPill";
 
 // A ⋯ that opens a short list of verbs about the thing it sits on. Built on
 // useAnchoredPanel, so it portals, positions fixed off its trigger, and
@@ -38,6 +39,7 @@ export function RowMenu({
   items,
   label,
   reveal = false,
+  trigger = "dots",
 }: {
   items: RowMenuItem[];
   // What the menu is about, for screen readers: "Customer actions".
@@ -46,6 +48,10 @@ export function RowMenu({
   // carries `group`): the calendar list's convention, where a ⋯ on every
   // row read as a column of noise. Always shown where there is no hover.
   reveal?: boolean;
+  // "pill" wears the filter pill's outline and a filled down-arrow, for a
+  // menu at the end of a row of filter pills: the Inbox's (P21, Nudge
+  // 63893624), where people missed a bare ⋯ beside three outlined chips.
+  trigger?: "dots" | "pill";
 }) {
   const { triggerRef, panelRef, pos, open, toggle, close } = useAnchoredPanel(
     MENU_WIDTH,
@@ -62,7 +68,7 @@ export function RowMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={toggle}
-        className={`flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-sm transition-colors ${
+        className={trigger === "pill" ? `${filterPillClass(open)} w-9 px-0` : `flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-sm transition-colors ${
           open
             ? "bg-[var(--control-hover)] text-[var(--foreground)]"
             : "text-[var(--muted)] hover:bg-[var(--control-hover)] hover:text-[var(--foreground)]"
@@ -72,7 +78,13 @@ export function RowMenu({
             : ""
         }`}
       >
-        ⋯
+        {trigger === "pill" ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+            <path d="m6 9 6 6 6-6H6z" />
+          </svg>
+        ) : (
+          "⋯"
+        )}
       </button>
       {pos &&
         createPortal(

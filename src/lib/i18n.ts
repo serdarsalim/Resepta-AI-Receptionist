@@ -2726,8 +2726,38 @@ const dictionary = {
   // those name a row's STATE for a screen reader ("Sabitlendi" = this one is
   // pinned), and a chip names an ACTION on the list ("show me the pinned
   // ones"). Turkish separates the two where English happens not to.
+  // All is a visible choice again (P21, Nudge fe3baf2d): the three are a
+  // radio, and "show me everything" was clicking the lit chip a second time,
+  // a gesture nobody could see.
+  "inbox.filterAll": { tr: "Tümü", en: "All", de: "Alle" },
   "inbox.filterUnread": { tr: "Okunmamış", en: "Unread", de: "Ungelesen" },
   "inbox.filterPinned": { tr: "Sabitlenenler", en: "Pinned", de: "Angeheftet" },
+  // The Unread chip's hover and accessible name when its count stopped at the
+  // scan's cap. The chip itself shows the bare number, no "+".
+  "inbox.unreadAtLeast": {
+    tr: "En az {n} okunmamış konuşma",
+    en: "At least {n} unread conversations",
+    de: "Mindestens {n} ungelesene Unterhaltungen",
+  },
+  // The row menu (right-click a conversation, or its chevron).
+  "inbox.rowMenu": {
+    tr: "{name} konuşması için seçenekler",
+    en: "Conversation options for {name}",
+    de: "Optionen für die Unterhaltung mit {name}",
+  },
+  "inbox.menuPin": { tr: "Sabitle", en: "Pin", de: "Anheften" },
+  "inbox.menuUnpin": { tr: "Sabitlemeyi kaldır", en: "Unpin", de: "Lösen" },
+  "inbox.markRead": {
+    tr: "Okundu olarak işaretle",
+    en: "Mark as read",
+    de: "Als gelesen markieren",
+  },
+  "inbox.markUnread": {
+    tr: "Okunmadı olarak işaretle",
+    en: "Mark as unread",
+    de: "Als ungelesen markieren",
+  },
+  "inbox.menuMute": { tr: "Sessize al", en: "Mute", de: "Stummschalten" },
   "inbox.menu": {
     tr: "Diğer işlemler",
     en: "More actions",

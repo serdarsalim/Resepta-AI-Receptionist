@@ -14,6 +14,7 @@
 // approved template, or that eleven of the forty people ticked never gave
 // consent, is before the button — not in the run detail afterwards.
 
+import { filterPillClass } from "./filterPill";
 import { useMemo, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -640,11 +641,7 @@ function RunDetail({
                 type="button"
                 aria-pressed={active}
                 onClick={() => toggleAnswer(key)}
-                className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors ${
-                  active
-                    ? "border-[var(--accent)] bg-[var(--accent)]/10 font-semibold text-[var(--accent)]"
-                    : "border-[var(--border)] bg-[var(--card)] font-medium text-[var(--foreground)]/75 hover:text-[var(--foreground)]"
-                }`}
+                className={filterPillClass(active, "sm")}
               >
                 {active && <span aria-hidden>✓</span>}
                 {t(ANSWER_LABEL[key])}
