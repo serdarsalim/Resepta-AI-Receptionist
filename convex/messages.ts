@@ -874,9 +874,10 @@ export const setAttention = mutation({
 //   GREY  they wrote while I was away. Objective, automatic, and it clears
 //         itself when I leave the tab — so it is never a backlog to work
 //         through by hand, and it never asks a colleague to care.
-//   GREEN I pinned this. Manual, sticky, mine alone, and spent the moment
-//         somebody replies, so answering a thread clears its pin without any
-//         send path knowing pins exist.
+//   GREEN I pinned this. Manual, sticky, mine alone, and it LASTS until I
+//         unpin it (P13, Nudge 0e23423f). It used to be spent by the next
+//         outbound, and every outbound counts: a reminder or an away-reply
+//         going out unpinned a conversation nobody had answered.
 //
 // The old shared dot (attentionClearedAt, still on the customer and still read
 // by the Customers table) put both jobs on one stamp and made dismissing a row
@@ -1029,9 +1030,7 @@ export const markAllConversationsRead = mutation({
 // inside `conversations`; the contact record needs it for a single customer,
 // because the pin toggle now sits beside that person's name.
 //
-// The SPENT rule (a pin older than the newest outbound has been paid) reads
-// the same customers.thread.lastOutboundAt the inbox list reads, so the two
-// surfaces cannot disagree about one pin.
+// One rule for both surfaces since P13: a pin row is a pin, until unpinned.
 export const inboxPin = query({
   args: { customerId: v.id("customers") },
   returns: v.boolean(),
@@ -1048,9 +1047,9 @@ export const inboxPin = query({
           .eq("customerId", args.customerId),
       )
       .unique();
-    // No row is the common case and it settles without touching the feed.
-    if (!pin) return false;
-    return pin.pinnedAt > (customer.thread?.lastOutboundAt ?? 0);
+    // A pin lasts until it is unpinned (P13): no comparison with what was
+    // sent since, which is the inbox list's rule too.
+    return pin !== null;
   },
 });
 
@@ -1207,10 +1206,10 @@ export const conversations = query({
         awaitingReply: awaitingChannels.length > 0,
         lastInboundAt: thread.lastInboundAt,
         unseen,
-        // A pin older than the newest outbound is SPENT: you pinned the debt
-        // and then paid it. That is how replying clears a pin without the send
-        // path ever hearing about pins.
-        pinned: (pinnedAtByCustomer.get(customer._id) ?? 0) > thread.lastOutboundAt,
+        // A pin lasts until it is unpinned (P13, Nudge 0e23423f). The old
+        // SPENT rule cleared it on any outbound, reminders and away-replies
+        // included, so a pinned conversation unpinned itself overnight.
+        pinned: pinnedAtByCustomer.has(customer._id),
       });
     }
     // The index walked newest-first, so the rows are already in inbox order.

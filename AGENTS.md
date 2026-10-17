@@ -1189,12 +1189,12 @@ unread is a fact that clears itself the moment the row opens — if green won,
 pinning a new conversation would look like the click did nothing. Nudge's inbox
 is the same control with the same precedence; keep them in step.
 
-**`messages.inboxPin`** reads ONE conversation's pin. It pays for the whole
-org's entries to answer about one row, deliberately: the SPENT rule (a pin
-older than the newest outbound has been paid) lives in `summariseEntries`, and
-a cheaper read that skipped it would let the record show a pin the Inbox had
-already retired. Two surfaces disagreeing about one pin is worse than a read
-the record page makes once.
+**A pin lasts until it is unpinned** (2026-10-17, P13; Nudge 0e23423f). It
+used to be SPENT by the next outbound, and every outbound counts, reminders
+and away-replies included, so a pinned conversation unpinned itself
+overnight without anybody answering it. `messages.inboxPin` (the record) and
+`conversations` (the Inbox) both read a pin row as a pin, so the two
+surfaces cannot disagree.
 
 ## Knowledge reads as prose, not as a form (2026-08-21)
 

@@ -108,8 +108,7 @@ export const threadValidator = v.object({
   lastMediaFileName: v.optional(v.string()),
   lastFailed: v.boolean(),
   // Newest entry in each direction, 0 when there is none. An inbound newer
-  // than my last visit is what "they wrote while I was away" means; a pin is
-  // spent the moment an outbound lands after it.
+  // than my last visit is what "they wrote while I was away" means.
   lastInboundAt: v.number(),
   lastOutboundAt: v.number(),
   // Newest failed send, 0 when none. Feeds the dot the same way an unanswered
