@@ -522,6 +522,27 @@ export function ConversationPanel({
     el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
   }, [draft, filter]);
 
+  // Text from the + menu (an emoji, the booking link) goes in at the cursor,
+  // not appended: someone who went back to fix a word and then reached for it
+  // means it to land there.
+  const insertIntoComposer = (text: string) => {
+    const field = composerRef.current;
+    if (!field) {
+      setDraft((prev) => prev + text);
+      return;
+    }
+    const at = field.selectionStart ?? field.value.length;
+    const end = field.selectionEnd ?? at;
+    setDraft(field.value.slice(0, at) + text + field.value.slice(end));
+    // Restored after React has painted the new value, or the caret snaps to
+    // the end of the box and the next insert lands somewhere the writer did
+    // not ask for.
+    requestAnimationFrame(() => {
+      field.focus();
+      field.setSelectionRange(at + text.length, at + text.length);
+    });
+  };
+
   // The assistant's draft lands IN the composer — there is no second box
   // (Serdar, 2026-08-31). Seeded on the draft's identity, never its text,
   // and only into space the reader has not claimed: an empty box, or the
@@ -1897,25 +1918,24 @@ export function ConversationPanel({
             <ComposerPlusMenu
               disabled={!composerLive || sending}
               active={attaching || Boolean(attached) || scheduling || Boolean(scheduleAt)}
-              onPickEmoji={(emoji) => {
-                // At the cursor, not appended: someone who went back to fix a
-                // word and then reached for an emoji means it to land there.
-                const field = composerRef.current;
-                if (!field) {
-                  setDraft((prev) => prev + emoji);
-                  return;
-                }
-                const at = field.selectionStart ?? field.value.length;
-                const end = field.selectionEnd ?? at;
-                setDraft(field.value.slice(0, at) + emoji + field.value.slice(end));
-                // Restored after React has painted the new value, or the
-                // caret snaps to the end of the box and the next emoji lands
-                // somewhere the writer did not ask for.
-                requestAnimationFrame(() => {
-                  field.focus();
-                  field.setSelectionRange(at + emoji.length, at + emoji.length);
-                });
-              }}
+              onPickEmoji={insertIntoComposer}
+              // The business's booking page as a menu row (P29, Nudge
+              // 6387c9ad's button, kept inside the + by the one-+ rule):
+              // this composer sends what is typed, never a [booking_link]
+              // token, so the row puts the address itself in. Only while the
+              // page is on.
+              onBookingLink={
+                settings?.org.bookingEnabled && settings.org.bookingUrl
+                  ? () => {
+                      const url = settings.org.bookingUrl ?? "";
+                      const before = composerRef.current?.value.slice(
+                        0,
+                        composerRef.current.selectionStart ?? undefined,
+                      );
+                      insertIntoComposer(before && !/\s$/.test(before) ? ` ${url}` : url);
+                    }
+                  : undefined
+              }
               onAttach={() => setAttaching((prev) => !prev)}
               onSchedule={() => setScheduling((prev) => !prev)}
             />
@@ -3159,6 +3179,7 @@ function AutoSendCountdown({ deadline }: { deadline: number }) {
 // hook re-places it when Emoji swaps the menu for the taller grid.
 const PLUS_MENU_W = 208;
 const PLUS_MENU_H = 128;
+const PLUS_MENU_ROW_H = 40;
 const PLUS_EMOJI_W = 320;
 const PLUS_EMOJI_H = 400;
 
@@ -3168,6 +3189,7 @@ function ComposerPlusMenu({
   onPickEmoji,
   onAttach,
   onSchedule,
+  onBookingLink,
 }: {
   disabled?: boolean;
   // A chosen attachment or a set schedule keeps the + accent-coloured while
@@ -3176,6 +3198,8 @@ function ComposerPlusMenu({
   onPickEmoji: (emoji: string) => void;
   onAttach: () => void;
   onSchedule: () => void;
+  // Absent while the business has no booking page on: no row, not a dead one.
+  onBookingLink?: () => void;
 }) {
   const { t } = useLanguage();
   // Which face the open panel shows. Back to the menu whenever it shuts
@@ -3192,7 +3216,7 @@ function ComposerPlusMenu({
     close,
   } = useAnchoredPanel(
     view === "menu" ? PLUS_MENU_W : PLUS_EMOJI_W,
-    view === "menu" ? PLUS_MENU_H : PLUS_EMOJI_H,
+    view === "menu" ? PLUS_MENU_H + (onBookingLink ? PLUS_MENU_ROW_H : 0) : PLUS_EMOJI_H,
     "right",
     { prefer: "above", gap: 6 },
   );
@@ -3305,6 +3329,22 @@ function ComposerPlusMenu({
                   </svg>
                   {t("message.scheduleAt")}
                 </button>
+                {onBookingLink && (
+                  <button
+                    type="button"
+                    className={row}
+                    onClick={() => {
+                      close();
+                      onBookingLink();
+                    }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--muted)]" aria-hidden>
+                      <rect x="3" y="5" width="18" height="16" rx="2" />
+                      <path d="M16 3v4M8 3v4M3 10h18" />
+                    </svg>
+                    {t("contact.insertBookingLink")}
+                  </button>
+                )}
               </>
             ) : (
               <Picker

@@ -2516,6 +2516,13 @@ const dictionary = {
   // page's Book button (P29). Two fields on one row: they answer one question.
   // The second glyph beside the booking link: copies the code that puts the
   // page on the business's own website (P29, public/embed.js).
+  // The WhatsApp composer's + menu row that puts the booking page's address
+  // into the message (P29).
+  "contact.insertBookingLink": {
+    tr: "Randevu linki",
+    en: "Booking link",
+    de: "Buchungslink",
+  },
   "settings.copyEmbed": {
     tr: "Web sitenize eklemek için kodu kopyala",
     en: "Copy the code for your website",
