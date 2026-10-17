@@ -1226,7 +1226,21 @@ pinned this) beats brand green (they wrote, I have not opened it) beats a
 hollow ring that fades in on hover. The pin wins because it is a decision and
 unread is a fact that clears itself the moment the row opens — if green won,
 pinning a new conversation would look like the click did nothing. Nudge's inbox
-is the same control with the same precedence; keep them in step.
+is the same control with the same precedence; keep them in step. Since P21
+(2026-10-17) the dot sits on the NAME line, an 8px dot in a 14px target, and
+the lit row (its menu open, or open beside the list) is a rounded neutral
+fill (`--row-active-bg`), never a left bar.
+
+**A row has a menu, and Mark as unread is a FLAG** (P21, Nudge 2a94bb92).
+Right-click a row or its chevron for one portalled `ContextMenu`: Open
+customer, Pin, Mark as read / unread, Mute. Mark as unread is
+`inboxReads.unreadAt`, per person, checked AHEAD of the read floor, unioned
+into `inboxUnseenCount`, `inboxCounts` and the Unread page (marked rows below
+the floor join its last page), and cleared by `stampConversationRead`, which
+every read path goes through. A new read path or unread count must honour it;
+a deleted stamp cannot make an old conversation unread, because the floor
+already calls it read. The Inbox's chips are All / Unread / Pinned, always
+all three, exactly one lit, and a lit chip never toggles off.
 
 **A pin lasts until it is unpinned** (2026-10-17, P13; Nudge 0e23423f). It
 used to be SPENT by the next outbound, and every outbound counts, reminders

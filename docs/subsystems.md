@@ -470,8 +470,13 @@ rather than after what it does.
   user._creationTime)), which is what stopped every existing salon waking up
   to its whole history lit green. A moving floor silently marks things read —
   that is the bug being replaced. `markInboxSeen`/`markInboxLeft` are gone;
-  `markConversationRead` is the only writer, called on an explicit row click
-  and on a reply landing in the thread you are already looking at. **One rule,
+  `markConversationRead` is the only reading writer (through
+  `stampConversationRead`, which also clears a Mark as unread), called on an
+  explicit row click, on opening the record, and on a reply landing in the
+  thread you are already looking at. **Mark as unread (P21)** is
+  `markConversationUnread`, a flag (`inboxReads.unreadAt`) every reader checks
+  ahead of the floor; marked rows below the floor are added by hand to the
+  counts and to the last page of the Unread view. **One rule,
   two readers:** the Inbox's queries (`inboxPage`, `inboxCounts`,
   `inboxSearch`, `inboxConversation`, one row builder since P13) and
   `messages.inboxUnseenCount` run the same test over the same rows, so the sidebar can never dot something the
@@ -488,9 +493,21 @@ rather than after what it does.
   forms and the latest preview); `inboxConversation` keeps the open row in
   the right pane when it is not on a loaded page. There was a 200-conversation
   cap before this.
-- **The inbox has All / Unread / Pinned chips**, persisted per browser
-  (`randevu.inbox.view.v1`), in the `h-9` track that exists to line the two
-  cards up — one line only, or the chips spill out of it. Counts are computed
+- **The inbox has All / Unread / Pinned chips** (all three always shown,
+  exactly one lit, P21), persisted per browser (`randevu.inbox.view.v1`), in
+  the `h-11` header track, one line only (the strip scrolls sideways in a
+  narrow pane). They wear `filterPillClass` (`components/filterPill.ts`), the
+  one filter pill the conversation's channel pills and a bulk run's answer
+  chips share: selected is an accent fill, idle hover tints the fill. A
+  capped unread count shows no "+" and says "at least" on hover.
+- **The Unread visit (P21).** A row opened from Unread stays listed, read,
+  until the reader picks a chip, leaves the Inbox tab or switches business
+  (`lib/useUnreadVisit`, module state because opening a row unmounts the
+  Inbox; `AppHome` resets it on a tab change).
+- **The row menu (P21).** Right-click or the preview line's chevron opens
+  `ContextMenu` (`components/ContextMenu.tsx`, one per list, aimed at the
+  row): Open customer, Pin/Unpin, Mark as read/unread, Mute
+  (`customers.setMuted`; no Unmute, a muted customer has no row). Counts are computed
   over the UNFILTERED list, because a chip advertises what switching to it
   would show and cannot count through itself. **A live search overrides the
   chip**, per `useTableState`'s rule that a query must never fail to find a
