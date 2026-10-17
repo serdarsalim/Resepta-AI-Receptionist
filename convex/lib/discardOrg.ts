@@ -82,6 +82,8 @@ export async function discardDraftOrg(
     .query("memberships")
     .withIndex("by_org", (q) => q.eq("orgId", orgId))
     .collect()) {
+    // A photo set before the draft was discarded (P33) goes with it.
+    if (row.photoStorageId) await ctx.storage.delete(row.photoStorageId);
     await ctx.db.delete(row._id);
   }
   await ctx.db.delete(orgId);

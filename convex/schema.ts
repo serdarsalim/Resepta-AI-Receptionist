@@ -110,6 +110,11 @@ export default defineSchema({
     // one address per business, so Nudge's "a default per sending address"
     // is one default here. Unset = no signature.
     emailSignatureId: v.optional(v.id("emailSignatures")),
+    // The photo this person uploaded for THIS business (P33), ahead of their
+    // Google picture in lib/memberPhoto. Per membership so it stays inside
+    // the business that holds it, and so the purge and member removal delete
+    // the blob with the row. Only its owner sets it (users.setMyPhoto).
+    photoStorageId: v.optional(v.id("_storage")),
   })
     .index("by_user", ["userId"])
     .index("by_org", ["orgId"])

@@ -2327,6 +2327,10 @@ export const purgeOrgStep = internalMutation({
         if ("mediaStorageId" in row && row.mediaStorageId) {
           await ctx.storage.delete(row.mediaStorageId).catch(() => {});
         }
+        // A member's own photo (P33) rides their membership row.
+        if ("photoStorageId" in row && row.photoStorageId) {
+          await ctx.storage.delete(row.photoStorageId).catch(() => {});
+        }
         await ctx.db.delete(row._id);
         deleted += 1;
         if (deleted >= PURGE_BUDGET || (await nearTransactionLimit(ctx, true))) {

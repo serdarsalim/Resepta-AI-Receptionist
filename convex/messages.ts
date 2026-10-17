@@ -20,6 +20,7 @@ import { classifyFailure, nextAttemptDelay } from "./lib/sendFailure";
 import { recordSendUsage } from "./lib/usage";
 import { supersedePendingSuggestions } from "./lib/agentDrafts";
 import { noteBulkItemResult } from "./bulkRuns";
+import { memberPhoto } from "./lib/memberPhoto";
 import {
   channel,
   channelOfMessage,
@@ -627,6 +628,10 @@ const feedItem = v.object({
   buttons: v.optional(v.array(v.string())),
   // Note-only.
   authorName: v.optional(v.string()),
+  // The writer's face (lib/memberPhoto: their upload in this business, else
+  // Google's picture). Absent for the customer's own booking-page note and a
+  // member with no picture, which draw initials.
+  authorPhoto: v.optional(v.string()),
   editedAt: v.optional(v.number()),
 });
 
@@ -721,12 +726,15 @@ export const feedForCustomer = query({
     // Authors resolved once per distinct writer, not once per note: a salon
     // owner who left forty notes on a regular is one read, not forty.
     const authors = new Map<string, string | undefined>();
+    const authorPhotos = new Map<string, string>();
     for (const authorId of new Set(notes.map((n) => n.authorId))) {
       // Skipped, not looked up: an author-less note is one the CUSTOMER left
       // through the booking page, and there is no user row to read.
       if (!authorId) continue;
       const author = await ctx.db.get(authorId);
       authors.set(authorId, author?.name ?? author?.email ?? undefined);
+      const photo = await memberPhoto(ctx, orgId, author);
+      if (photo) authorPhotos.set(authorId, photo);
     }
     // Their own name, not "System". The note is in this customer's feed and
     // came out of this customer's booking, so naming them is both the honest
@@ -806,6 +814,9 @@ export const feedForCustomer = query({
         kind: "note",
         body: n.body,
         authorName: n.authorId ? authors.get(n.authorId) : customerName,
+        ...(n.authorId && authorPhotos.has(n.authorId)
+          ? { authorPhoto: authorPhotos.get(n.authorId) }
+          : {}),
         editedAt: n.editedAt,
       })),
     ];

@@ -72,6 +72,7 @@ import type * as lib_lifecycleSend from "../lib/lifecycleSend.js";
 import type * as lib_llm from "../lib/llm.js";
 import type * as lib_mcpProtocol from "../lib/mcpProtocol.js";
 import type * as lib_mediaKind from "../lib/mediaKind.js";
+import type * as lib_memberPhoto from "../lib/memberPhoto.js";
 import type * as lib_members from "../lib/members.js";
 import type * as lib_metaSig from "../lib/metaSig.js";
 import type * as lib_metaTemplate from "../lib/metaTemplate.js";
@@ -217,6 +218,7 @@ declare const fullApi: ApiFromModules<{
   "lib/llm": typeof lib_llm;
   "lib/mcpProtocol": typeof lib_mcpProtocol;
   "lib/mediaKind": typeof lib_mediaKind;
+  "lib/memberPhoto": typeof lib_memberPhoto;
   "lib/members": typeof lib_members;
   "lib/metaSig": typeof lib_metaSig;
   "lib/metaTemplate": typeof lib_metaTemplate;

@@ -1,7 +1,13 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import { requireOrg, requireUser } from "./lib/orgAuth";
+import { isDemo } from "./demo";
+import {
+  MAX_PHOTO_BYTES,
+  PHOTO_TYPES,
+  uploadedMemberPhoto,
+} from "./lib/memberPhoto";
 import { foundOrg } from "./lib/foundOrg";
 import { discardDraftOrg, draftIsUntouched } from "./lib/discardOrg";
 import { alertEnabled } from "./lib/alerts";
@@ -28,10 +34,23 @@ export const myProfile = query({
     notifyNewContact: v.boolean(),
     notifyNewBooking: v.boolean(),
     notifyCancelledBooking: v.boolean(),
+    // The face the app shows for them here (lib/memberPhoto: their upload in
+    // this business, else Google's picture), and whether it is an upload, so
+    // Remove shows only when there is something of theirs to remove.
+    // `canSetPhoto` is false where there is no membership to hold one (a
+    // platform operator working inside a business) and in the demo.
+    photo: v.union(v.string(), v.null()),
+    photoUploaded: v.boolean(),
+    canSetPhoto: v.boolean(),
   }),
   handler: async (ctx) => {
     const { user, role, orgId } = await requireOrg(ctx);
     const org = await ctx.db.get(orgId);
+    const membership = await ctx.db
+      .query("memberships")
+      .withIndex("by_user_org", (q) => q.eq("userId", user._id).eq("orgId", orgId))
+      .unique();
+    const uploaded = await uploadedMemberPhoto(ctx, membership);
     return {
       name: user.name,
       email: user.email,
@@ -47,7 +66,70 @@ export const myProfile = query({
       notifyNewContact: alertEnabled(user, "new-contact"),
       notifyNewBooking: alertEnabled(user, "new-booking"),
       notifyCancelledBooking: alertEnabled(user, "booking-cancelled"),
+      photo: uploaded ?? user.image ?? null,
+      photoUploaded: uploaded !== null,
+      canSetPhoto: membership !== null && !isDemo(org),
     };
+  },
+});
+
+// ── Your own photo (P33, Nudge df492c1c, 0c2ec1c7, 867f90d6) ────────────────
+//
+// Set on the Account page, for THIS business only (lib/memberPhoto says why it
+// is per membership). Yours alone: the target is always the caller's own
+// membership, resolved here, never an id the client names, so nobody can set
+// or remove a colleague's face. The browser squares and shrinks the picture;
+// the server holds the type and the size whatever arrives.
+
+async function myPhotoMembership(ctx: MutationCtx) {
+  const { user, orgId } = await requireOrg(ctx);
+  const org = await ctx.db.get(orgId);
+  // A walk-in's upload would outlive the nightly reset that deletes them.
+  if (isDemo(org)) throw new ConvexError("demo");
+  const membership = await ctx.db
+    .query("memberships")
+    .withIndex("by_user_org", (q) => q.eq("userId", user._id).eq("orgId", orgId))
+    .unique();
+  if (!membership) throw new ConvexError("not-a-member");
+  return membership;
+}
+
+export const photoUploadUrl = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx) => {
+    await myPhotoMembership(ctx);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const setMyPhoto = mutation({
+  // null removes the upload, so the Google picture (or initials) shows again.
+  args: { storageId: v.union(v.id("_storage"), v.null()) },
+  returns: v.object({
+    ok: v.boolean(),
+    reason: v.optional(v.union(v.literal("not-an-image"), v.literal("too-large"))),
+  }),
+  handler: async (ctx, { storageId }) => {
+    const membership = await myPhotoMembership(ctx);
+    if (storageId) {
+      const meta = await ctx.db.system.get(storageId);
+      if (!meta) throw new ConvexError("upload-not-found");
+      // A refused upload is deleted at once: nothing points at it, and an
+      // orphan blob is invisible from every screen and still costs storage.
+      if (!meta.contentType || !PHOTO_TYPES.has(meta.contentType)) {
+        await ctx.storage.delete(storageId);
+        return { ok: false, reason: "not-an-image" as const };
+      }
+      if (meta.size > MAX_PHOTO_BYTES) {
+        await ctx.storage.delete(storageId);
+        return { ok: false, reason: "too-large" as const };
+      }
+    }
+    const old = membership.photoStorageId;
+    await ctx.db.patch(membership._id, { photoStorageId: storageId ?? undefined });
+    if (old && old !== storageId) await ctx.storage.delete(old);
+    return { ok: true };
   },
 });
 

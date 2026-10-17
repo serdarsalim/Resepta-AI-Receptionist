@@ -17,6 +17,7 @@ import {
 import { resolvePublicPhone } from "./lib/publicPhone";
 import { clampNoticeHours, minNoticeHoursOf, noticeUnitOf } from "./lib/minNotice";
 import { isWordingLocked } from "./lib/templateTexts";
+import { memberPhoto } from "./lib/memberPhoto";
 
 export const DEFAULT_REMINDER_OFFSETS = [24, 2];
 // Reminder send window in the org's local hours (Türkiye default 09–21).
@@ -143,8 +144,9 @@ export const current = query({
     me: v.object({
       name: v.optional(v.string()),
       email: v.optional(v.string()),
-      // The Google profile picture stored at sign-in (auth.ts), for the
-      // sidebar's account row. A URL on Google's photo host, the reader's own.
+      // The reader's face for the sidebar's account row, resolved through
+      // lib/memberPhoto (P33): the photo they uploaded in this business, else
+      // the Google picture stored at sign-in (auth.ts).
       image: v.optional(v.string()),
       role: v.optional(v.union(v.literal("owner"), v.literal("staff"))),
       themePreference: v.optional(
@@ -290,7 +292,7 @@ export const current = query({
       me: {
         name: user.name,
         email: user.email,
-        image: user.image,
+        image: (await memberPhoto(ctx, orgId, user)) ?? undefined,
         role,
         themePreference: user.themePreference,
         language: user.language,

@@ -187,6 +187,9 @@ export async function revokeMembership(
   if (await wouldOrphanOrg(ctx, args.orgId, args.userId)) throw new Error("last-admin");
   await unlinkStaff(ctx, args.orgId, args.userId);
   await removeSignaturesOf(ctx, args.orgId, args.userId);
+  // Their photo here (P33) is this business's copy of their face; it leaves
+  // with them.
+  if (membership.photoStorageId) await ctx.storage.delete(membership.photoStorageId);
   await ctx.db.delete(membership._id);
   const removed = await ctx.db.get(args.userId);
   await recordActivity(ctx, {
