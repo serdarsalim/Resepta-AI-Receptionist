@@ -260,6 +260,9 @@ export function CustomersView({
   const anchor = useRef<number | null>(null);
   // Which composer is open over the list, if any. Null is the resting state.
   const [composing, setComposing] = useState<BulkChannel | null>(null);
+  // A follow-up's recipients (P13b): the people a past run's detail showed,
+  // composed to instead of the list's selection, which stays as it was.
+  const [followUp, setFollowUp] = useState<Doc<"customers">[] | null>(null);
   // Read here rather than taken as a prop, the same way VoiceView does it:
   // FieldsCard needs it, this is the only other caller, and threading a
   // permission down through AppShell for one card puts the answer somewhere
@@ -994,7 +997,15 @@ export function CustomersView({
 
       {section === "list" && list}
       {section === "fields" && <FieldsCard isOwner={isOwner} />}
-      {section === "bulk" && <BulkRunsCard onOpenContact={onOpenContact} />}
+      {section === "bulk" && (
+        <BulkRunsCard
+          onOpenContact={onOpenContact}
+          onFollowUp={(channel, people) => {
+            setFollowUp(people);
+            setComposing(channel);
+          }}
+        />
+      )}
 
       {/* Mounted beside the list rather than inside it: the composer is a
           drill-in over the whole tab (AGENTS: adding is a sheet you open),
@@ -1003,11 +1014,15 @@ export function CustomersView({
       {composing && (
         <BulkComposer
           channel={composing}
-          customers={picked}
-          onClose={() => setComposing(null)}
+          customers={followUp ?? picked}
+          onClose={() => {
+            setComposing(null);
+            setFollowUp(null);
+          }}
           onSent={() => {
             setComposing(null);
-            clearSelection();
+            if (followUp) setFollowUp(null);
+            else clearSelection();
             setSection("bulk");
           }}
         />

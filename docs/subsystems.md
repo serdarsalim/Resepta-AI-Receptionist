@@ -2548,3 +2548,21 @@ message that customer ever received carried it. `claimSuggestion` now returns
 the line still owed and `sendSuggestion` re-prepends it when it is missing.
 The rule generalises: **anything the system guarantees mechanically has to be
 re-guaranteed at the point a human can edit it.**
+
+## What a bulk run came to, and following it up (2026-10-17, P13b)
+
+A run's detail (`bulkRuns.detail`) gives every reached person an ANSWER
+(`runAnswer`): **booked** when they have an appointment created after the
+run reached them that no import brought in (`appointments.imported`, set by
+the office MCP's `create_appointments`), else **replied** when their thread's
+newest inbound is later than that moment (any channel, read off
+`customers.thread`, no messages scan), else **no answer yet**. "Reached" is
+the message's `sentAt` or the call's `dialedAt` on a `done` item; everybody
+else is **not reached**. Each bucket is a filter pill on the detail with its
+count, and **Follow up** (owners) hands the people the list shows to the
+composer as a new run's recipients, through the same consent and address
+checks a selection gets. Nothing about a follow-up is stored on the new run.
+
+Email reply attribution credits the newest email of ours, a bulk mail
+included (it used to require a `templateId`, which no bulk mail has, so a
+bulk mail's reply was credited to an older template mail).

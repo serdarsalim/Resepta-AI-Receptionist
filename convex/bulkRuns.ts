@@ -52,6 +52,7 @@ import {
   mutation,
   query,
   type MutationCtx,
+  type QueryCtx,
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
@@ -1500,6 +1501,41 @@ export const list = query({
   },
 });
 
+// What a reached person did after the run reached them (P13b, Nudge
+// 2eeef0a7): booked beats replied beats nothing. "Reached" is when the message
+// went out or the call was placed; anybody never reached has no answer, which
+// is a different fact from not answering. Booked reads the customer's newest
+// appointments and skips one an import brought in (`imported`), because
+// loading last year's book is not a booking the run earned. Replied reads the
+// thread summary's newest inbound, so it covers every channel without a
+// messages scan: a WhatsApp reply, an email, a call they made back.
+async function runAnswer(
+  ctx: QueryCtx,
+  customer: Doc<"customers">,
+  item: Doc<"bulkRunItems">,
+  message: Doc<"messages"> | null,
+): Promise<"booked" | "replied" | "none" | undefined> {
+  const reachedAt =
+    item.status === "done"
+      ? (message?.sentAt ?? item.dialedAt ?? message?._creationTime)
+      : undefined;
+  if (reachedAt === undefined) return undefined;
+  const recent = await ctx.db
+    .query("appointments")
+    .withIndex("by_customer", (q) => q.eq("customerId", customer._id))
+    .order("desc")
+    .take(10);
+  const booked = recent.some(
+    (appointment) =>
+      appointment.orgId === customer.orgId &&
+      appointment.imported !== true &&
+      appointment._creationTime > reachedAt,
+  );
+  if (booked) return "booked";
+  if ((customer.thread?.lastInboundAt ?? 0) > reachedAt) return "replied";
+  return "none";
+}
+
 // One run, opened. Here the item scan is the point, and it is bounded by the
 // run's own cap rather than by the table.
 //
@@ -1523,8 +1559,15 @@ export const detail = query({
 
     const rows = [];
     for (const item of items) {
-      const customer = await ctx.db.get(item.customerId);
+      // The item's own org, not only the run's: a row is read only when both
+      // say this business (AGENTS.md, the one invariant).
+      if (item.orgId !== orgId) continue;
+      const loaded = await ctx.db.get(item.customerId);
+      const customer = loaded && loaded.orgId === orgId && !isDeleting(loaded) ? loaded : null;
       const message = item.messageId ? await ctx.db.get(item.messageId) : null;
+      const answer = customer
+        ? await runAnswer(ctx, customer, item, message)
+        : undefined;
       rows.push({
         _id: item._id,
         customerId: item.customerId,
@@ -1545,7 +1588,11 @@ export const detail = query({
         // relay prefetch opens pixels no human saw, and a per-person badge
         // would launder that guess into a fact.
         openedAt: message?.openedAt,
-        repliedAt: message?.repliedAt,
+        answer,
+        // The whole record, for Follow up: the composer judges who it can
+        // reach (consent, an address, a number) the same way it does for a
+        // selection made in the list.
+        customer,
       });
     }
     rows.sort((a, b) => a.position - b.position);

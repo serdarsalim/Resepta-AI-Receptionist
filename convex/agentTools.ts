@@ -870,6 +870,7 @@ export const createAppointments = internalMutation({
         // "manual" is honest: a person is importing their own book. The absent
         // externalUid is what says cal.com does not hold this one.
         source: "manual",
+        imported: true,
         ...(alreadyDue.length > 0 ? { sentRuleIds: alreadyDue } : {}),
       });
       // Arms whatever is genuinely still ahead. Idempotent and cheap, and the

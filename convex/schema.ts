@@ -1719,6 +1719,10 @@ export default defineSchema({
       ),
     ),
     externalUid: v.optional(v.string()),
+    // Brought in by the office MCP's create_appointments: an existing book
+    // being loaded, not a booking anybody made today. A bulk run's outcomes
+    // (bulkRuns.detail) never count one as "booked after the run".
+    imported: v.optional(v.boolean()),
     // The self-serve capability: whoever holds this token may view, reschedule
     // and cancel THIS appointment from the public manage page (/appt/<token>).
     // A random UUID, minted when the appointment first earns a confirmation

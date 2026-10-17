@@ -1068,7 +1068,20 @@ const dictionary = {
   "bulk.itemRinging": { tr: "Çalıyor", en: "Ringing", de: "Klingelt" },
   "bulk.itemSent": { tr: "Gönderildi", en: "Sent", de: "Gesendet" },
   "bulk.itemOpened": { tr: "Açıldı", en: "Opened", de: "Geöffnet" },
-  "bulk.itemReplied": { tr: "Yanıtladı", en: "Replied", de: "Geantwortet" },
+  "bulk.answerBooked": { tr: "Randevu aldı", en: "Booked", de: "Gebucht" },
+  "bulk.answerReplied": { tr: "Yanıtladı", en: "Replied", de: "Geantwortet" },
+  "bulk.answerNone": { tr: "Yanıt yok", en: "No answer yet", de: "Noch keine Antwort" },
+  "bulk.answerUnreached": { tr: "Ulaşılmadı", en: "Not reached", de: "Nicht erreicht" },
+  "bulk.answerShown": {
+    tr: "{shown} / {total} gösteriliyor",
+    en: "{shown} of {total} shown",
+    de: "{shown} von {total} angezeigt",
+  },
+  "bulk.followUp": {
+    tr: "{n} kişiyle devam et:",
+    en: "Follow up with {n}:",
+    de: "Mit {n} weitermachen:",
+  },
   "bulk.itemAnswered": { tr: "{s} sn görüştü", en: "Talked {s}s", de: "{s} s gesprochen" },
   "bulk.itemNoAnswer": { tr: "Açmadı", en: "No answer", de: "Nicht abgenommen" },
   // What a finished call came to (lib/callOutcome), beside "No answer" and

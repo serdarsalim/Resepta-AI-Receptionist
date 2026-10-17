@@ -352,8 +352,12 @@ export function BulkComposer({
 // happened to these people".
 export function BulkRunsCard({
   onOpenContact,
+  onFollowUp,
 }: {
   onOpenContact: (id: Id<"customers">) => void;
+  // A run's people, as filtered on its detail, handed to the composer as a
+  // new run's recipients (P13b).
+  onFollowUp: (channel: BulkChannel, customers: Doc<"customers">[]) => void;
 }) {
   const { t, language } = useLanguage();
   const runs = useQuery(api.bulkRuns.list, {});
@@ -368,6 +372,7 @@ export function BulkRunsCard({
         runId={openRun}
         onBack={() => setOpenRun(null)}
         onOpenContact={onOpenContact}
+        onFollowUp={onFollowUp}
       />
     );
   }
@@ -457,13 +462,18 @@ function RunDetail({
   runId,
   onBack,
   onOpenContact,
+  onFollowUp,
 }: {
   runId: Id<"bulkRuns">;
   onBack: () => void;
   onOpenContact: (id: Id<"customers">) => void;
+  onFollowUp: (channel: BulkChannel, customers: Doc<"customers">[]) => void;
 }) {
   const { t, language } = useLanguage();
   const detail = useQuery(api.bulkRuns.detail, { runId });
+  // Which answers the list shows; empty is everyone. Several at once, the
+  // way every filter here works (Nudge 2eeef0a7).
+  const [answers, setAnswers] = useState<ReadonlySet<RunAnswer>>(new Set());
   // The history is readable by everyone on the team — a member of staff should
   // be able to see that four hundred people were called this morning. Changing
   // a run is the owner's, the same line the composer draws. list and detail
@@ -514,6 +524,33 @@ function RunDetail({
 
   const pill =
     "h-8 rounded-lg border border-[var(--border)] px-2.5 text-xs font-medium transition-colors hover:bg-[var(--row-hover-bg)]";
+
+  const typedItems = items as RunItem[];
+  const answerCounts = new Map<RunAnswer, number>();
+  for (const item of typedItems) {
+    const key = answerOf(item);
+    answerCounts.set(key, (answerCounts.get(key) ?? 0) + 1);
+  }
+  const reachedAny = typedItems.some((item) => item.answer !== undefined);
+  const shown =
+    answers.size === 0
+      ? typedItems
+      : typedItems.filter((item) => answers.has(answerOf(item)));
+  const toggleAnswer = (key: RunAnswer) =>
+    setAnswers((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  // Follow up acts on the people the list shows, so the count on the button
+  // is the count on the screen. A customer since deleted has no record and
+  // drops out here.
+  const followUpPeople = shown
+    .map((item) => item.customer)
+    .filter((customer): customer is Doc<"customers"> => customer != null);
+  const ghost =
+    "h-8 rounded-lg px-2.5 text-xs font-medium text-[var(--muted-strong)] transition-colors hover:bg-[var(--control-hover)] hover:text-[var(--foreground)]";
 
   return (
     <div className="space-y-3">
@@ -595,15 +632,73 @@ function RunDetail({
         )}
       </div>
 
+      {/* What the people did after the run reached them: each count is a
+          filter on the list below, and Follow up takes whoever the list
+          shows into a new run (Nudge 12eb5b78, d8348836). Shown once anybody
+          has been reached; before that every count would be "not reached". */}
+      {reachedAny && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {ANSWERS.map((key) => {
+            const count = answerCounts.get(key) ?? 0;
+            const active = answers.has(key);
+            if (count === 0 && !active) return null;
+            return (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => toggleAnswer(key)}
+                className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors ${
+                  active
+                    ? "border-[var(--accent)] bg-[var(--accent)]/10 font-semibold text-[var(--accent)]"
+                    : "border-[var(--border)] bg-[var(--card)] font-medium text-[var(--foreground)]/75 hover:text-[var(--foreground)]"
+                }`}
+              >
+                {active && <span aria-hidden>✓</span>}
+                {t(ANSWER_LABEL[key])}
+                <span className="tabular-nums">{count}</span>
+              </button>
+            );
+          })}
+          {answers.size > 0 && (
+            <span className="text-xs text-[var(--muted)]">
+              {t("bulk.answerShown", { shown: shown.length, total: typedItems.length })}
+            </span>
+          )}
+          {options?.isOwner === true && followUpPeople.length > 0 && (
+            <span className="ml-auto flex flex-wrap items-center gap-1">
+              <span className="text-xs text-[var(--muted)]">
+                {t("bulk.followUp", { n: followUpPeople.length })}
+              </span>
+              {(["whatsapp", "email", "call"] as const).map((channel) => (
+                <button
+                  key={channel}
+                  type="button"
+                  className={ghost}
+                  onClick={() => onFollowUp(channel, followUpPeople)}
+                >
+                  {t(`bulk.${channel}`)}
+                </button>
+              ))}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-lg bg-[var(--card)] shadow-[var(--card-shadow)]">
         <ul className="divide-y divide-[var(--table-divider)]">
-          {items.map((item: RunItem) => (
+          {shown.map((item) => (
             <li
               key={item._id}
               className="flex cursor-pointer items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-[var(--row-hover-bg)]"
               onClick={() => onOpenContact(item.customerId)}
             >
               <span className="min-w-0 flex-1 truncate">{item.name}</span>
+              {(item.answer === "booked" || item.answer === "replied") && (
+                <span className="shrink-0 text-xs text-emerald-600 dark:text-emerald-400">
+                  {t(item.answer === "booked" ? "bulk.answerBooked" : "bulk.answerReplied")}
+                </span>
+              )}
               <ItemOutcome item={item} channel={run.channel} />
             </li>
           ))}
@@ -624,12 +719,29 @@ type RunItem = {
   messageStatus?: string;
   messageError?: string;
   openedAt?: number;
-  repliedAt?: number;
+  // What they did after the run reached them (bulkRuns.runAnswer); unset
+  // when they were never reached.
+  answer?: "booked" | "replied" | "none";
+  customer?: Doc<"customers"> | null;
 };
 
+// The answer filter's four buckets, in the order they matter. "unreached"
+// is everybody the run never got to: skipped, failed, cancelled, waiting.
+type RunAnswer = "booked" | "replied" | "none" | "unreached";
+const ANSWERS: readonly RunAnswer[] = ["booked", "replied", "none", "unreached"];
+const ANSWER_LABEL = {
+  booked: "bulk.answerBooked",
+  replied: "bulk.answerReplied",
+  none: "bulk.answerNone",
+  unreached: "bulk.answerUnreached",
+} as const;
+function answerOf(item: RunItem): RunAnswer {
+  return item.answer ?? "unreached";
+}
+
 // One line per recipient, and the ladder is deliberate: the most meaningful
-// thing that happened wins. A reply beats an open beats a delivery, because
-// by the time somebody answered, "it was delivered" is not the news.
+// thing that happened to the message wins. An open beats a delivery. What the
+// person did about it (booked, replied) is its own word beside this line.
 //
 // A skipped row says WHY, verbatim. That is the whole point of skipping rather
 // than dropping: a run that quietly lost eleven people is how "I sent it to
@@ -702,14 +814,9 @@ function ItemOutcome({ item, channel }: { item: RunItem; channel: BulkChannel })
     );
   }
 
-  // Done, or a message row still working its way through the delivery queue.
-  if (item.repliedAt) {
-    return (
-      <span className="shrink-0 text-xs text-emerald-600 dark:text-emerald-400">
-        {t("bulk.itemReplied")}
-      </span>
-    );
-  }
+  // Done, or a message row still working its way through the delivery
+  // queue. A reply or a booking is said beside this (RunDetail's answer), so
+  // this line stays about the message itself.
   if (item.openedAt) return <span className={muted}>{t("bulk.itemOpened")}</span>;
   if (item.status === "queued" && item.messageStatus === "queued") {
     return <span className={muted}>{t("bulk.itemQueued")}</span>;

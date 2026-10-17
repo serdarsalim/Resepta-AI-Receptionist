@@ -141,7 +141,11 @@ export const recordInbound = internalMutation({
     // reply to the newest tracked email the customer was sent in the past 30
     // days. Inbound mail carries no In-Reply-To we can trust through the
     // webhook, so newest-wins IS the attribution. A row already credited is
-    // skipped — a chatty customer must not read as a 400% reply rate.
+    // skipped — a chatty customer must not read as a 400% reply rate. Any
+    // email of ours counts, not only a template's (P13b): a bulk mail carries
+    // no templateId, and requiring one handed its reply to whichever older
+    // template mail sat behind it. The template's counter moves only when the
+    // credited mail had a template.
     // Bounded scan: the customer's newest 100 rows.
     const now = Date.now();
     const recent = await ctx.db
@@ -155,7 +159,6 @@ export const recordInbound = internalMutation({
         m.kind.startsWith("email_") &&
         m.status === "sent" &&
         m.repliedAt === undefined &&
-        m.templateId !== undefined &&
         (m.sentAt ?? 0) > now - 30 * 24 * 3600_000,
     );
     if (repliedTo) {
