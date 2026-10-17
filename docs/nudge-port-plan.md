@@ -74,7 +74,7 @@ means "read that commit".
 | P12 | 5b. Notes, property editors, tab title + read-only cards for members show plain values with a ViewOnlyPill instead of dimmed controls (Serdar chose this 2026-10-14, Nudge's way) + + (+) channel pills not greyed, copy phone, customer deep link + cmd-click | **Done 2026-10-17** (16d8a7f..the read-only commit); screen checks owed |
 | P13 | 9. Inbox paging + customer search index + (+) customers list paging + pins persist + inbox row + find customer from any tab + HTML-only email previews | E.4, E.7. **Done 2026-10-17** (278a39d..2f4f93f); the row-dot sizes (c47c694c, 2ef5a0b4) ride P21, which resizes them again; prod owes `customers:backfillSearch` and `threads:backfill` |
 | P13b | (+) Bulk run outcomes + follow-up selection | E.flip.6. **Done 2026-10-17** (b785257); screen check and a first real run owed |
-| P14 | 11. Media library + (triage 10-17) Word, PowerPoint and text files from either tab (57bd2d2a) | |
+| P14 | 11. Media library + (triage 10-17) Word, PowerPoint and text files from either tab (57bd2d2a) | **Done 2026-10-17** (46c9520); screen check owed (paste, drop, a big phone photo) |
 | P15 | 12. Token chips | |
 | P16 | (+) Address on invites (`[adres]` token + ICS LOCATION) | E.flip.8 |
 | P17 | (+) Seal provider secrets at rest (optional; needs a dedicated env key and a safe rollout) | E.11 |

@@ -15,9 +15,10 @@
 - The Inbox scrolls through every conversation (no more 700 cap), with counts and search done on the server; a pin stays until you unpin it; email sent as HTML previews as words.
 - Searching for a customer (header search, booking sheet) finds anyone, not only the newest 1,000; the Customers table loads up to 5,000.
 - A bulk run's page says who booked and who replied after it; tap a count to see just them, and Follow up sends those people a new message or call.
+- Paste a screenshot into the WhatsApp message box, or drop a file on the conversation, and it attaches; big phone photos shrink to fit; PowerPoint and text files can be sent; a file uploaded twice is kept once; files can be deleted from the library.
 
-**Ready to look at:** Voice agent page: edit, Publish, open the version number, Restore, the voicemail row, Test in the browser. Agents table: Try the WhatsApp assistant. A customer's WhatsApp thread, calls tab and notes tab. Admin templates table's category column. The Inbox: scroll far, Unread and Pinned counts, search. The booking sheet's customer picker. A past bulk run's page.
+**Ready to look at:** Voice agent page: edit, Publish, open the version number, Restore, the voicemail row, Test in the browser. Agents table: Try the WhatsApp assistant. A customer's WhatsApp thread, calls tab and notes tab. Admin templates table's category column. The Inbox: scroll far, Unread and Pinned counts, search. The booking sheet's customer picker. A past bulk run's page. Pasting and dropping a file into a WhatsApp conversation.
 
 **Before shipping:** Deploy Convex first (new tables agentTests; new optional fields on retellAgents, calls, waTemplates, usageMonthly). Subscribe the Meta app to template_category_update. Check on one real call that inbound answers with the published version. After the deploy run `customers:backfillSearch` and `threads:backfill`, or search finds nobody.
 
-**Up next:** P14 media library, then P15 token chips.
+**Up next:** P15 token chips, then P16 address on invites.
