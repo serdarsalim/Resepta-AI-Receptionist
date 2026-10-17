@@ -816,8 +816,24 @@ function OrgRow({
                           {row.status}
                         </span>
                       </td>
+                      {/* The landed category, and amber when it is not what
+                          was asked for or Meta has announced a refile: a
+                          utility template filed as marketing costs more per
+                          message and is capped per customer (P10). */}
                       <td className="px-2 py-1.5 text-xs text-[var(--muted)]">
                         {row.metaCategory ?? ""}
+                        {row.metaCategory &&
+                          row.metaRequestedCategory &&
+                          row.metaRequestedCategory !== row.metaCategory && (
+                            <span className="ml-1 text-amber-700 dark:text-amber-400">
+                              (asked {row.metaRequestedCategory})
+                            </span>
+                          )}
+                        {row.metaCategoryPending && (
+                          <span className="ml-1 text-amber-700 dark:text-amber-400">
+                            → {row.metaCategoryPending}
+                          </span>
+                        )}
                       </td>
                       <td className="px-2 py-1.5 text-xs text-[var(--muted)]">
                         {row.submittedAt !== null ? `${ago(row.submittedAt)} ago` : ""}

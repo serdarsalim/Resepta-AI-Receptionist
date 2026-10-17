@@ -17,7 +17,7 @@
 //                                   for webhooks that never came
 
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import {
   action,
@@ -136,10 +136,14 @@ export const recordSubmission = internalMutation({
     ),
     metaStatusDetail: v.optional(v.string()),
     metaCategory: v.optional(v.string()),
+    metaRequestedCategory: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     await ctx.db.patch(args.templateId, {
+      ...(args.metaRequestedCategory
+        ? { metaRequestedCategory: args.metaRequestedCategory.toLowerCase() }
+        : {}),
       metaName: args.metaName,
       metaTemplateId: args.metaTemplateId,
       metaWabaId: args.metaWabaId,
@@ -172,31 +176,15 @@ export const applyStatusUpdate = internalMutation({
     // Meta's raw word.
     status: v.string(),
     reason: v.optional(v.string()),
+    // Meta's own sentence and recommendation from the webhook's
+    // rejection_info: what is wrong and what to change. Preferred over
+    // `reason`, which is a code word.
+    rejectionDetail: v.optional(v.string()),
     category: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    let row = args.metaTemplateId
-      ? await ctx.db
-          .query("waTemplates")
-          .withIndex("by_meta_template_id", (q) =>
-            q.eq("metaTemplateId", args.metaTemplateId),
-          )
-          .first()
-      : null;
-    if (!row && args.wabaId && args.metaName) {
-      // Unindexed on purpose: this is the fallback for rows that never had an
-      // id, it runs once per template per lifetime, and the alternative is an
-      // index that exists for a path taken almost never.
-      const candidates = await ctx.db.query("waTemplates").collect();
-      row =
-        candidates.find(
-          (t) =>
-            t.metaWabaId === args.wabaId &&
-            t.metaName === args.metaName &&
-            (!args.language || t.language === args.language),
-        ) ?? null;
-    }
+    const row = await findTemplateRow(ctx, args);
     if (!row) {
       // A template on the WABA that this app did not create — registered in
       // Business Manager, or belonging to another product sharing the account.
@@ -213,17 +201,78 @@ export const applyStatusUpdate = internalMutation({
       metaStatusDetail: args.status.trim().toUpperCase(),
       // Undefined DELETES the field, which is right: an approval clears the
       // reason the previous rejection gave.
-      metaRejectionReason: status === "rejected" ? args.reason || undefined : undefined,
-      // The landed category, when the caller learned one (the sync pull
-      // does; the status webhook does not) — review recategorises, and the
-      // landed value is what sends are billed at.
-      ...(args.category ? { metaCategory: args.category.toLowerCase() } : {}),
+      metaRejectionReason:
+        status === "rejected" ? args.rejectionDetail || args.reason || undefined : undefined,
+      // The landed category whenever the caller learned one: the sync pull
+      // and, since P10, the status webhook (message_template_category) — on
+      // an approval it is the verdict, and it can differ from the request.
+      ...(args.category
+        ? { metaCategory: args.category.toLowerCase(), metaCategoryPending: undefined }
+        : {}),
       // Learned late for a hand-made template the sync just matched by name.
       ...(row.metaTemplateId ? {} : { metaTemplateId: args.metaTemplateId }),
     });
     return null;
   },
 });
+
+// Meta refiling an approved template under another category
+// (template_category_update): an announced change carries correct_category
+// and a date, a completed one previous_category and new_category. The
+// announced one writes only the pending mark; the completed one lands it.
+export const applyCategoryUpdate = internalMutation({
+  args: {
+    metaTemplateId: v.optional(v.string()),
+    wabaId: v.optional(v.string()),
+    metaName: v.optional(v.string()),
+    language: v.optional(v.string()),
+    newCategory: v.optional(v.string()),
+    correctCategory: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await findTemplateRow(ctx, args);
+    if (!row) return null;
+    if (args.newCategory) {
+      await ctx.db.patch(row._id, {
+        metaCategory: args.newCategory.toLowerCase(),
+        metaCategoryPending: undefined,
+      });
+    } else if (args.correctCategory) {
+      await ctx.db.patch(row._id, { metaCategoryPending: args.correctCategory.toLowerCase() });
+    }
+    return null;
+  },
+});
+
+// The row Meta's event is about. By Meta's template id first — the only
+// globally unique key — and by (WABA, name, language) for a template created
+// in Business Manager that we have adopted but never had an id for.
+async function findTemplateRow(
+  ctx: MutationCtx,
+  args: { metaTemplateId?: string; wabaId?: string; metaName?: string; language?: string },
+): Promise<Doc<"waTemplates"> | null> {
+  const byId = args.metaTemplateId
+    ? await ctx.db
+        .query("waTemplates")
+        .withIndex("by_meta_template_id", (q) => q.eq("metaTemplateId", args.metaTemplateId))
+        .first()
+    : null;
+  if (byId) return byId;
+  if (!args.wabaId || !args.metaName) return null;
+  // Unindexed on purpose: this is the fallback for rows that never had an
+  // id, it runs once per template per lifetime, and the alternative is an
+  // index that exists for a path taken almost never.
+  const candidates = await ctx.db.query("waTemplates").collect();
+  return (
+    candidates.find(
+      (t) =>
+        t.metaWabaId === args.wabaId &&
+        t.metaName === args.metaName &&
+        (!args.language || t.language === args.language),
+    ) ?? null
+  );
+}
 
 // ---- Submit -------------------------------------------------------------
 
@@ -392,6 +441,8 @@ async function performSubmit(
     status: json.status ? normalizeMetaStatus(json.status) : "pending",
     metaStatusDetail: json.status?.toUpperCase(),
     metaCategory: json.category?.toLowerCase(),
+    // An edit sends no category and keeps the one it was created with.
+    ...(payload.category ? { metaRequestedCategory: String(payload.category) } : {}),
   });
   return { ok: true };
 }
@@ -1343,6 +1394,8 @@ export const fleetTemplateStatus = query({
           metaStatusDetail: v.optional(v.string()),
           metaRejectionReason: v.optional(v.string()),
           metaCategory: v.optional(v.string()),
+          metaRequestedCategory: v.optional(v.string()),
+          metaCategoryPending: v.optional(v.string()),
           submittedAt: v.union(v.number(), v.null()),
           // Whether the wording this row WOULD submit differs from what it
           // LAST submitted. false greys the button (a resubmit would push
@@ -1409,6 +1462,8 @@ export const fleetTemplateStatus = query({
         metaStatusDetail?: string;
         metaRejectionReason?: string;
         metaCategory?: string;
+        metaRequestedCategory?: string;
+        metaCategoryPending?: string;
         submittedAt: number | null;
         changed: boolean | null;
       }[];
@@ -1426,6 +1481,8 @@ export const fleetTemplateStatus = query({
           metaStatusDetail: row.metaStatusDetail,
           metaRejectionReason: row.metaRejectionReason,
           metaCategory: row.metaCategory,
+          metaRequestedCategory: row.metaRequestedCategory,
+          metaCategoryPending: row.metaCategoryPending,
           submittedAt: row.submittedAt ?? null,
           changed:
             row.submittedBody === undefined

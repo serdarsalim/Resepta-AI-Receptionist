@@ -85,6 +85,17 @@ const CANCEL_WORDS = [
   "nein", "storno", "stornieren", "absagen", // de
 ];
 
+// rejection_info on a template status event: Meta's reason sentence and its
+// recommendation, joined. Empty when absent.
+function rejectionDetailOf(info: unknown): string {
+  if (!info || typeof info !== "object") return "";
+  const { reason, recommendation } = info as { reason?: unknown; recommendation?: unknown };
+  return [reason, recommendation]
+    .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+    .map((part) => part.trim())
+    .join(" ");
+}
+
 // `bareOnly` is the agent boundary. The prefix match exists for orgs where
 // nobody else will read the message — there, "ok thanks" confirming beats
 // silence. An org running an agent is the opposite case: "Tamam saat 14
@@ -212,8 +223,31 @@ export const handleWhatsappEvent = internalMutation({
               language: value.message_template_language as string | undefined,
               status: event,
               reason: (value.reason as string | null | undefined) ?? undefined,
+              // Meta's own words on a rejection, and the category it filed
+              // the template under: on an approval that is the verdict, and
+              // a utility template read as promotional is approved as
+              // marketing rather than rejected (Nudge a720be3b). Both were
+              // dropped here until P10.
+              rejectionDetail: rejectionDetailOf(value.rejection_info) || undefined,
+              category:
+                (value.message_template_category as string | undefined) || undefined,
             });
           }
+          continue;
+        }
+
+        // Meta refiling an approved template under another category: first
+        // announced (correct_category), then made (new_category).
+        if (change.field === "template_category_update") {
+          const templateId = value.message_template_id as number | string | undefined;
+          await ctx.runMutation(internal.waTemplates.applyCategoryUpdate, {
+            metaTemplateId: templateId != null ? String(templateId) : undefined,
+            wabaId: entry.id as string | undefined,
+            metaName: value.message_template_name as string | undefined,
+            language: value.message_template_language as string | undefined,
+            newCategory: (value.new_category as string | undefined) || undefined,
+            correctCategory: (value.correct_category as string | undefined) || undefined,
+          });
           continue;
         }
 

@@ -1941,6 +1941,15 @@ export default defineSchema({
     // what it disagrees with, the landed category is what every send is
     // billed at, and Business Manager is the only other place to learn it.
     metaCategory: v.optional(v.string()),
+    // What we ASKED for at the last submission (P10, Nudge a720be3b). Meta
+    // files a utility template it reads as promotional as marketing and
+    // approves it, never rejects it, so "approved" alone hides a price and a
+    // per-customer frequency cap. The operator's templates table shows the two
+    // side by side when they differ.
+    metaRequestedCategory: v.optional(v.string()),
+    // A refile Meta has announced and not yet made (template_category_update
+    // with correct_category). Cleared when the completed change lands.
+    metaCategoryPending: v.optional(v.string()),
     // Why review said no, verbatim. The single most useful thing on this row
     // when it is red, and there is nowhere else to read it without opening
     // Business Manager.
