@@ -1415,6 +1415,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                     }}
                     aria-label={`${service.name} — ${t("common.delete")}`}
                     title={t("common.delete")}
+                    data-edit-only
                     className="flex h-7 w-7 items-center justify-center rounded-md text-lg leading-none text-[var(--muted)] opacity-0 transition-colors transition-opacity hover:bg-[var(--muted-bg)] hover:text-red-600 focus-visible:opacity-100 group-hover:opacity-100 dark:hover:text-red-400 max-sm:absolute max-sm:right-0 max-sm:top-0.5 sm:justify-self-end [@media(hover:none)]:opacity-100"
                   >
                     ×

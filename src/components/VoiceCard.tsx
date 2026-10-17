@@ -361,7 +361,7 @@ export function VoiceCard({
     // Not a Card: the table is the main actor and frames itself. The fieldset
     // is the one job the card chrome was doing — staff see all of this
     // read-only — and it stays, invisible (min-w-0 per Card's own lesson).
-    <fieldset disabled={!isOwner} className={`min-w-0 ${!isOwner ? "opacity-70" : ""}`}>
+    <fieldset disabled={!isOwner} className={`min-w-0 ${!isOwner ? "readonly-form" : ""}`}>
       {/* No agents yet: nothing to frame, so the actions keep a row of their
           own. This is the ONE case where they sit outside — and it is the
           case where Add agent matters most, since it is the only way to get

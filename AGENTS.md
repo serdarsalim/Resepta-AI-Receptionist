@@ -1073,6 +1073,14 @@ sat at the foot of a list, or were shared between two cards.
 - **`action` renders OUTSIDE the fieldset.** `Card`'s `disabled` cannot reach
   it, so an action on a card that can go read-only must gate itself —
   every current caller does (`isOwner ? … : undefined`).
+- **Read-only reads as facts, not a dimmed form** (2026-10-17, P12; Serdar
+  chose Nudge's way 2026-10-14). `Card`'s `disabled` puts `.readonly-form` on
+  its fieldset, not `opacity-70`: fields, switches and inline values
+  (`data-value`) stay at full strength with a default cursor, a disabled
+  ACTION button keeps its own disabled look, and a control that only ever
+  changes something carries `data-edit-only` and is gone. The page says
+  "View only" once (`ViewOnlyPill`). A new row ×, add or remove control on a
+  card a member can read carries `data-edit-only`.
 - **A card that is the PAGE keeps its toolbar row instead** (Customers, Voice
   agent). Same visual corner; the difference is that a page-level table's
   controls are a toolbar, not a card header — and the Customers table is a

@@ -57,9 +57,14 @@ export function Card({
           agent table was clipped past the border for exactly this reason, and
           two fixes on the table itself did nothing because the table was never
           the problem. */}
+      {/* Read-only for a team member reads as FACTS, not a dimmed form
+          (P12, Serdar 2026-10-14, Nudge's way): .readonly-form keeps every
+          disabled value and switch at full strength and drops the controls
+          that only change things ([data-edit-only]). The page says "View
+          only" once, with ViewOnlyPill. */}
       <fieldset
         disabled={disabled}
-        className={`min-w-0 ${disabled ? "opacity-70" : ""}`}
+        className={`min-w-0 ${disabled ? "readonly-form" : ""}`}
       >
         {children}
       </fieldset>

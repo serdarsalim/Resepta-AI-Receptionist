@@ -390,6 +390,24 @@ thead {
    those cards and leave a dead strip under a pane that never scrolls the page.
    A card that fills the window has no "last card" to give room to. So this is
    opt-in, and the views that stack cards opt in. */
+/* A card a team member may read and not change (Card's `disabled`, P12).
+   Values and switches stay at full strength, because a value you cannot edit
+   is still a fact you read; the cursor says nothing is clickable; and a
+   control that only ever changes something ([data-edit-only], a row's ×) is
+   gone rather than greyed. Nudge's .readonly-form. VALUES only: a disabled
+   action button keeps its own disabled look, or it would read as live. */
+.readonly-form input:disabled,
+.readonly-form select:disabled,
+.readonly-form textarea:disabled,
+.readonly-form [role="switch"]:disabled,
+.readonly-form [data-value]:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.readonly-form [data-edit-only] {
+  display: none;
+}
+
 .page-stack {
   padding-bottom: 6rem;
 }

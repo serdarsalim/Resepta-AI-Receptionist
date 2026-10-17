@@ -166,7 +166,10 @@ export function InlineEditValue({
         onClick={() => setEditing(true)}
         // -mx-2 + px-2: the value stays flush with the label grid while the
         // hover wash bleeds outward instead of indenting the text.
-        className={`group/iv flex min-w-0 items-center gap-1 rounded-md py-1 text-left ${size} transition-colors hover:bg-[var(--muted-bg)] ${
+        // disabled (a read-only card): no wash and no pencil, so the value
+        // reads as a fact rather than as a control that refuses.
+        data-value
+        className={`group/iv flex min-w-0 items-center gap-1 rounded-md py-1 text-left ${size} transition-colors hover:bg-[var(--muted-bg)] disabled:hover:bg-transparent ${
           compact
             ? "px-1"
             : "-mx-2 w-[calc(100%+1rem)] justify-between gap-2 px-2"
@@ -175,7 +178,7 @@ export function InlineEditValue({
         <span className={`min-w-0 break-words ${value ? "" : "text-[var(--muted)]"}`}>
           {(value && labelFor ? labelFor(value) : value) || placeholder || ""}
         </span>
-        <span className="shrink-0 text-[var(--muted)] opacity-0 transition-opacity group-hover/iv:opacity-100 group-focus-visible/iv:opacity-100">
+        <span className="shrink-0 text-[var(--muted)] opacity-0 transition-opacity group-hover/iv:opacity-100 group-focus-visible/iv:opacity-100 group-disabled/iv:hidden">
           {options ? <ChevronIcon /> : <PencilIcon />}
         </span>
       </button>,
