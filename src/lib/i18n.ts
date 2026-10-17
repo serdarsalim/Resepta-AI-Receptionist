@@ -5967,14 +5967,41 @@ const dictionary = {
   // Two ceilings, one sentence. Naming both beats naming the one that happens
   // to be wrong for the file somebody just picked.
   "media.tooLarge": {
-    tr: "Dosya çok büyük (görsel en fazla 2 MB, belge 5 MB).",
-    en: "That file is too large (2 MB for an image, 5 MB for a document).",
-    de: "Die Datei ist zu groß (Bild maximal 2 MB, Dokument 5 MB).",
+    tr: "Dosya çok büyük (video en fazla 16 MB, belge 5 MB).",
+    en: "That file is too large (16 MB for a video, 5 MB for a document).",
+    de: "Die Datei ist zu groß (Video maximal 16 MB, Dokument 5 MB).",
   },
   "media.unsupported": {
-    tr: "Yalnızca JPG, PNG, WebP, PDF, Word ve Excel gönderilebilir.",
-    en: "Only JPG, PNG, WebP, PDF, Word and Excel can be sent.",
-    de: "Es können nur JPG, PNG, WebP, PDF, Word und Excel gesendet werden.",
+    tr: "Yalnızca görsel, MP4 video, PDF, Word, Excel, PowerPoint ve metin dosyası gönderilebilir.",
+    en: "Only images, MP4 video, PDF, Word, Excel, PowerPoint and text files can be sent.",
+    de: "Es können nur Bilder, MP4-Videos, PDF, Word, Excel, PowerPoint und Textdateien gesendet werden.",
+  },
+  "media.uploading": {
+    tr: "Yükleniyor… %{percent}",
+    en: "Uploading… {percent}%",
+    de: "Wird hochgeladen… {percent} %",
+  },
+  "media.deduped": {
+    tr: "Bu dosya zaten dosyalarınızda vardı, o kullanıldı.",
+    en: "This file was already in your files, so that one is used.",
+    de: "Diese Datei war schon in Ihren Dateien, sie wird verwendet.",
+  },
+  "media.dropToAttach": {
+    tr: "Mesaja eklemek için bırakın",
+    en: "Drop to attach to the message",
+    de: "Zum Anhängen an die Nachricht loslassen",
+  },
+  "media.uploadHint": {
+    tr: "Dosya yükleyin. Mesaj kutusuna yapıştırmak ya da sürükleyip bırakmak da olur.",
+    en: "Upload a file. You can also paste one into the message box or drop it on the conversation.",
+    de: "Datei hochladen. Sie können sie auch ins Nachrichtenfeld einfügen oder auf das Gespräch ziehen.",
+  },
+  "media.pastedName": { tr: "Yapıştırılan", en: "Pasted", de: "Eingefügt" },
+  "media.delete": { tr: "Dosyalardan sil", en: "Delete from files", de: "Aus Dateien löschen" },
+  "media.deleteConfirm": {
+    tr: "{name} dosyalardan silinsin mi?",
+    en: "Delete {name} from your files?",
+    de: "{name} aus Ihren Dateien löschen?",
   },
   "media.inUse": {
     tr: "Bu dosya gönderilmiş bir mesajda var, silinemez.",

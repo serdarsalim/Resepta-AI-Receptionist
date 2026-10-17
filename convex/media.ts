@@ -8,7 +8,8 @@
 // because the same price list goes out forty times.
 
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
+import { mutation, query, type QueryCtx } from "./_generated/server";
 import { requireOrg } from "./lib/orgAuth";
 
 // Meta accepts images up to 5 MB on the Cloud API. Capped lower here on
@@ -42,6 +43,11 @@ export const DOC_EXTENSIONS: Record<string, string> = {
   "application/vnd.ms-excel": "xls",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
   "application/msword": "doc",
+  // PowerPoint and plain text (P14, Nudge 57bd2d2a): all three are document
+  // types the Cloud API carries.
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+  "application/vnd.ms-powerpoint": "ppt",
+  "text/plain": "txt",
 };
 
 // The filename the customer sees on their phone. Asset names may or may not
@@ -66,18 +72,53 @@ export const generateUploadUrl = mutation({
   },
 });
 
+// What the library hands the browser for one asset. register returns the
+// same shape as list, so a composer that just uploaded a pasted image can
+// attach it without waiting for the list to come round.
+const assetView = v.object({
+  _id: v.id("mediaAssets"),
+  name: v.string(),
+  size: v.number(),
+  url: v.union(v.string(), v.null()),
+  storageId: v.id("_storage"),
+  contentType: v.string(),
+  // Documents only, null for an image or a video. Resolved here rather than
+  // in the picker so the send path and the tile agree on one string.
+  fileName: v.union(v.string(), v.null()),
+});
+
+async function viewOf(ctx: QueryCtx, row: Doc<"mediaAssets">) {
+  return {
+    _id: row._id,
+    name: row.name,
+    size: row.size,
+    url: await ctx.storage.getUrl(row.storageId),
+    storageId: row.storageId,
+    contentType: row.contentType,
+    fileName:
+      row.contentType in DOC_EXTENSIONS
+        ? fileNameForAsset(row.name, row.contentType)
+        : null,
+  };
+}
+
 // Called after the browser has PUT the bytes. Validates what actually landed
 // rather than trusting what the client said it was uploading — the upload URL
 // accepts anything, so this is the only place the limits are real.
+//
+// Same bytes, same asset: when this business's library already holds a file
+// with this hash, the new blob is deleted and the existing row comes back
+// (`deduped`), moved to the front. Scoped by org: another business holding
+// the same file is not a twin, and naming it would say what they keep.
 export const register = mutation({
   args: {
     storageId: v.id("_storage"),
     name: v.string(),
   },
-  returns: v.id("mediaAssets"),
+  returns: v.object({ asset: assetView, deduped: v.boolean() }),
   handler: async (ctx, args) => {
     const { orgId, user } = await requireOrg(ctx);
-    const meta = await ctx.storage.getMetadata(args.storageId);
+    const meta = await ctx.db.system.get(args.storageId);
     if (!meta) throw new Error("upload-missing");
 
     const contentType = meta.contentType ?? "";
@@ -100,7 +141,25 @@ export const register = mutation({
       throw new Error("too-large");
     }
 
-    return await ctx.db.insert("mediaAssets", {
+    const now = Date.now();
+    const twin = meta.sha256
+      ? await ctx.db
+          .query("mediaAssets")
+          .withIndex("by_org_sha256", (q) =>
+            q.eq("orgId", orgId).eq("sha256", meta.sha256),
+          )
+          .first()
+      : null;
+    // A twin whose own blob is gone is no twin: reusing it would hand back
+    // an asset with nothing behind it.
+    const twinBlob = twin ? await ctx.db.system.get(twin.storageId) : null;
+    if (twin && twinBlob && twin.storageId !== args.storageId) {
+      await ctx.storage.delete(args.storageId);
+      await ctx.db.patch(twin._id, { lastUsedAt: now });
+      return { asset: await viewOf(ctx, twin), deduped: true };
+    }
+
+    const assetId = await ctx.db.insert("mediaAssets", {
       orgId,
       storageId: args.storageId,
       name:
@@ -109,46 +168,44 @@ export const register = mutation({
       contentType,
       size: meta.size,
       uploadedBy: user._id,
+      sha256: meta.sha256,
+      lastUsedAt: now,
     });
+    const row = await ctx.db.get(assetId);
+    return { asset: await viewOf(ctx, row!), deduped: false };
   },
 });
 
+// The library, most recently used first. A business's library is a few
+// dozen files; the newest 200 by upload are read and re-sorted by use.
 export const list = query({
   args: {},
-  returns: v.array(
-    v.object({
-      _id: v.id("mediaAssets"),
-      name: v.string(),
-      size: v.number(),
-      url: v.union(v.string(), v.null()),
-      storageId: v.id("_storage"),
-      contentType: v.string(),
-      // Documents only, null for an image. Resolved here rather than in the
-      // picker so the send path and the thumbnail agree on one string.
-      fileName: v.union(v.string(), v.null()),
-    }),
-  ),
+  returns: v.array(assetView),
   handler: async (ctx) => {
     const { orgId } = await requireOrg(ctx);
     const rows = await ctx.db
       .query("mediaAssets")
       .withIndex("by_org", (q) => q.eq("orgId", orgId))
       .order("desc")
-      .take(100);
-    return await Promise.all(
-      rows.map(async (row) => ({
-        _id: row._id,
-        name: row.name,
-        size: row.size,
-        url: await ctx.storage.getUrl(row.storageId),
-        storageId: row.storageId,
-        contentType: row.contentType,
-        fileName:
-          row.contentType in DOC_EXTENSIONS
-            ? fileNameForAsset(row.name, row.contentType)
-            : null,
-      })),
+      .take(200);
+    rows.sort(
+      (a, b) =>
+        (b.lastUsedAt ?? b._creationTime) - (a.lastUsedAt ?? a._creationTime),
     );
+    return await Promise.all(rows.map((row) => viewOf(ctx, row)));
+  },
+});
+
+// Picking an asset moves it to the front of the library.
+export const touch = mutation({
+  args: { assetId: v.id("mediaAssets") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { orgId } = await requireOrg(ctx);
+    const asset = await ctx.db.get(args.assetId);
+    if (!asset || asset.orgId !== orgId) return null;
+    await ctx.db.patch(args.assetId, { lastUsedAt: Date.now() });
+    return null;
   },
 });
 

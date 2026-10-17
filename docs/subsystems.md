@@ -2566,3 +2566,25 @@ checks a selection gets. Nothing about a follow-up is stored on the new run.
 Email reply attribution credits the newest email of ours, a bulk mail
 included (it used to require a `templateId`, which no bulk mail has, so a
 bulk mail's reply was credited to an older template mail).
+
+## The attachment library (2026-10-17, P14)
+
+`mediaAssets` is each business's library of files to send on WhatsApp:
+images, MP4 video and documents (PDF, Word, Excel, PowerPoint, text). Three
+ways in, all through `src/lib/useLibraryUpload.ts`: the + tile in the
+composer's library strip, a paste into the message box (`pastedFiles`: a
+paste that also carries text stays text), and a drop onto the conversation.
+Every one lands in the library and attaches to the message.
+
+- **Images are made to fit in the browser** (`lib/mediaFiles.prepareImage`):
+  anything that is not JPEG or PNG, or is over 2 MB, is redrawn (PNG first
+  for crisp screenshots, then JPEG at falling quality and size). Video and
+  documents are only checked against their caps (16 MB, 5 MB).
+  `convex/media.ts register` re-checks every upload; the browser's checks
+  only save a wasted upload.
+- **The same bytes are one asset per business.** `register` looks the
+  storage row's `sha256` up on `by_org_sha256`; a twin with a live blob comes
+  back (`deduped`) and the new blob is deleted. Never across businesses.
+- **Most recently used first**: `lastUsedAt`, set on upload and on pick
+  (`media.touch`).
+- Delete (hover × on a tile) is refused while a sent message shows the file.

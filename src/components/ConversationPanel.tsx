@@ -28,6 +28,8 @@ import { MessageMedia } from "./MessageMedia";
 import { mediaTypeLabel } from "../../convex/lib/mediaKind";
 import { waFailureKind, type WaFailureKind } from "../../convex/lib/waFailure";
 import { waFormat } from "@/lib/waFormat";
+import { isFileDrag, MEDIA_ACCEPT, pastedFiles } from "@/lib/mediaFiles";
+import { useLibraryUpload, type LibraryAsset } from "@/lib/useLibraryUpload";
 import { EmojiPicker } from "./EmojiPicker";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 
@@ -556,6 +558,32 @@ export function ConversationPanel({
   // type back into. The notes tab has its own, at the top.
   const canCompose = filter === "all" || filter === "whatsapp";
 
+  // Paste or drop a file and it is uploaded into the library and attached to
+  // this message, without opening the library first (P14, Nudge's composers).
+  // The + tile in the library takes the same path.
+  const library = useLibraryUpload();
+  const [dropping, setDropping] = useState(false);
+  const dragDepth = useRef(0);
+  const acceptsFiles = canCompose && composerLive && !sending;
+  const pickAsset = (asset: LibraryAsset) => {
+    if (!asset.url) return;
+    setAttached({
+      storageId: asset.storageId,
+      name: asset.name,
+      url: asset.url,
+      contentType: asset.contentType,
+      fileName: asset.fileName,
+    });
+    setAttaching(false);
+    // The media lanes carry no quote context: dropping the chip keeps the
+    // composer honest about what will actually send.
+    setReplyTo(null);
+  };
+  const attachFile = async (file: File) => {
+    const asset = await library.upload(file);
+    if (asset) pickAsset(asset);
+  };
+
   const saveNote = async () => {
     const body = noteDraft.trim();
     if (!hasNoteText(body) || noteSaving) return;
@@ -730,7 +758,45 @@ export function ConversationPanel({
   ) : null;
 
   return (
-    <div className={`pane-measure flex min-h-0 flex-col ${surface} ${className ?? ""}`}>
+    <div
+      className={`pane-measure relative flex min-h-0 flex-col ${surface} ${className ?? ""}`}
+      // A file dragged from the desktop onto the conversation attaches to the
+      // next message. The depth counter is because dragenter and dragleave
+      // fire for every child the pointer crosses.
+      onDragEnter={(event) => {
+        if (!acceptsFiles || !isFileDrag(event.dataTransfer)) return;
+        event.preventDefault();
+        dragDepth.current += 1;
+        setDropping(true);
+      }}
+      onDragOver={(event) => {
+        if (!acceptsFiles || !isFileDrag(event.dataTransfer)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      }}
+      onDragLeave={() => {
+        if (!dropping) return;
+        dragDepth.current = Math.max(0, dragDepth.current - 1);
+        if (dragDepth.current === 0) setDropping(false);
+      }}
+      onDrop={(event) => {
+        if (!acceptsFiles || !isFileDrag(event.dataTransfer)) return;
+        event.preventDefault();
+        dragDepth.current = 0;
+        setDropping(false);
+        const file = event.dataTransfer.files?.[0];
+        if (file) void attachFile(file);
+      }}
+    >
+      {dropping && (
+        // Covers its own panel, not a popover: nothing here floats over
+        // anything outside the card, so the portal rule has nothing to do.
+        <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-xl border-2 border-dashed border-[var(--accent)] bg-[var(--card)]/85">
+          <span className="text-sm font-medium text-[var(--accent)]">
+            {t("media.dropToAttach")}
+          </span>
+        </div>
+      )}
       {header && (
         // h-11 px-3 matches the list card's header across the gap. It sits on
         // the card's white rather than the thread's tinted plane: this row is
@@ -1803,6 +1869,15 @@ export function ConversationPanel({
                   void cancelAutoSend({ customerId, turnId: p.turnId });
                 }
               }}
+              onPaste={(event) => {
+                // A screenshot or a copied file attaches; copied text (even
+                // text that carries a picture of itself, as spreadsheet cells
+                // do) stays text.
+                const files = pastedFiles(event.clipboardData);
+                if (files.length === 0) return;
+                event.preventDefault();
+                void attachFile(files[0]);
+              }}
               onKeyDown={(event) => {
                 // Enter sends, Shift+Enter breaks the line — what every chat
                 // app trains people to expect. Without it a two-line message
@@ -1858,14 +1933,23 @@ export function ConversationPanel({
           {attaching && (
             <MediaStrip
               selectedId={attached?.storageId}
-              onPick={(asset) => {
-                setAttached(asset);
-                setAttaching(false);
-                // The media lanes carry no quote context — dropping the chip
-                // here keeps the strip honest about what will actually send.
-                setReplyTo(null);
-              }}
+              onPick={pickAsset}
+              onUpload={(file) => void attachFile(file)}
+              uploading={library.progress !== null}
             />
+          )}
+          {/* One line for every way a file arrives (tile, paste, drop), so a
+              paste with the library shut still says how it went. */}
+          {(library.progress !== null || library.error || library.deduped) && (
+            <p
+              className={`px-[var(--pane-inline)] pb-2 text-xs ${
+                library.error ? "text-red-600 dark:text-red-400" : "text-[var(--muted)]"
+              }`}
+            >
+              {library.progress !== null
+                ? t("media.uploading", { percent: Math.round(library.progress * 100) })
+                : (library.error ?? t("media.deduped"))}
+            </p>
           )}
           {sendError && (
             // Same rule as the bubbles: a known reason gets its sentence, an
@@ -1898,106 +1982,111 @@ type AttachedFile = {
 // forty times, and re-picking it off a phone every time is the difference
 // between a feature someone uses and one they try once. Uploading is the LAST
 // tile rather than the first control, because after the first week the common
-// case is picking something that is already there.
+// case is picking something that is already there. Most recently used first
+// (media.list), and picking one moves it to the front (media.touch).
 function MediaStrip({
   selectedId,
   onPick,
+  onUpload,
+  uploading,
 }: {
   selectedId?: Id<"_storage">;
-  onPick: (asset: AttachedFile) => void;
+  onPick: (asset: LibraryAsset) => void;
+  onUpload: (file: File) => void;
+  uploading: boolean;
 }) {
   const { t } = useLanguage();
   const assets = useQuery(api.media.list, {});
-  const generateUploadUrl = useMutation(api.media.generateUploadUrl);
-  const register = useMutation(api.media.register);
-  const [uploading, setUploading] = useState(false);
+  const touch = useMutation(api.media.touch);
+  const remove = useMutation(api.media.remove);
+  const [confirm, confirmDialog] = useConfirm();
   const [error, setError] = useState<string | null>(null);
 
-  const upload = async (file: File) => {
+  const deleteAsset = async (asset: LibraryAsset) => {
     setError(null);
-    setUploading(true);
+    const ok = await confirm({
+      title: t("media.deleteConfirm", { name: asset.name }),
+      confirmLabel: t("media.delete"),
+      destructive: true,
+    });
+    if (!ok) return;
     try {
-      const url = await generateUploadUrl();
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "content-type": file.type },
-        body: file,
-      });
-      const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
-      // The backend re-checks type and size against what actually landed —
-      // the upload URL accepts anything, so this is where the limits are real.
-      // Its error slug is what the reader sees, translated.
-      await register({ storageId, name: file.name });
+      await remove({ assetId: asset._id });
     } catch (err) {
       const reason = err instanceof Error ? err.message : "";
-      setError(
-        reason.includes("too-large")
-          ? t("media.tooLarge")
-          : reason.includes("unsupported-type")
-            ? t("media.unsupported")
-            : t("message.failed"),
-      );
+      setError(reason.includes("in-use") ? t("media.inUse") : t("message.failed"));
     }
-    setUploading(false);
   };
 
   return (
     <div className="px-[var(--pane-inline)] pb-2">
+      {confirmDialog}
       <div className="flex items-center gap-2 overflow-x-auto pb-1">
         {assets?.map(
           (asset) =>
             asset.url && (
-              <button
-                key={asset._id}
-                type="button"
-                onClick={() =>
-                  onPick({
-                    storageId: asset.storageId,
-                    name: asset.name,
-                    url: asset.url!,
-                    contentType: asset.contentType,
-                    fileName: asset.fileName,
-                  })
-                }
-                title={asset.name}
-                className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg transition-opacity hover:opacity-80 ${
-                  selectedId === asset.storageId
-                    ? "ring-2 ring-[var(--accent)]"
-                    : ""
-                }`}
-              >
-                {asset.fileName || asset.contentType.startsWith("video/") ? (
-                  // A document has no thumbnail to show, so the tile says what
-                  // it IS — "PDF" over a truncated name. A generic file glyph
-                  // on every one of them turns a library of six price lists
-                  // into six identical squares.
-                  <span className="flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-1">
-                    <span className="text-[10px] font-semibold text-[var(--muted-strong,var(--foreground))]">
-                      {mediaTypeLabel(asset.contentType, asset.fileName ?? undefined)}
+              <div key={asset._id} className="group relative h-14 w-14 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void touch({ assetId: asset._id });
+                    onPick(asset);
+                  }}
+                  title={asset.name}
+                  className={`h-14 w-14 overflow-hidden rounded-lg transition-opacity hover:opacity-80 ${
+                    selectedId === asset.storageId
+                      ? "ring-2 ring-[var(--accent)]"
+                      : ""
+                  }`}
+                >
+                  {asset.fileName || asset.contentType.startsWith("video/") ? (
+                    // A document has no thumbnail to show, so the tile says what
+                    // it IS — "PDF" over a truncated name. A generic file glyph
+                    // on every one of them turns a library of six price lists
+                    // into six identical squares.
+                    <span className="flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--muted-bg)] px-1">
+                      <span className="text-[10px] font-semibold text-[var(--muted-strong,var(--foreground))]">
+                        {mediaTypeLabel(asset.contentType, asset.fileName ?? undefined)}
+                      </span>
+                      <span className="w-full truncate text-center text-[9px] leading-tight text-[var(--muted)]">
+                        {asset.name}
+                      </span>
                     </span>
-                    <span className="w-full truncate text-center text-[9px] leading-tight text-[var(--muted)]">
-                      {asset.name}
-                    </span>
-                  </span>
-                ) : (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={asset.url}
-                    alt={asset.name}
-                    className="h-full w-full object-cover"
-                  />
-                )}
-              </button>
+                  ) : (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={asset.url}
+                      alt={asset.name}
+                      className="h-full w-full object-cover"
+                    />
+                  )}
+                </button>
+                {/* Delete off the library, hover-revealed so the strip stays
+                    a row of files. Refused while a sent message shows it. */}
+                <button
+                  type="button"
+                  onClick={() => void deleteAsset(asset)}
+                  aria-label={t("media.delete")}
+                  title={t("media.delete")}
+                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--card)] text-[var(--muted)] opacity-0 shadow-sm transition-opacity hover:text-red-600 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
+                    <path d="M18 6 6 18" />
+                    <path d="m6 6 12 12" />
+                  </svg>
+                </button>
+              </div>
             ),
         )}
         <label
+          title={t("media.uploadHint")}
           className={`flex h-14 w-14 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-dashed border-[var(--border)] text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] ${
             uploading ? "opacity-50" : ""
           }`}
         >
           <input
             type="file"
-            accept="image/jpeg,image/png,image/webp,video/mp4,video/3gpp,application/pdf,.xlsx,.xls,.docx,.doc"
+            accept={MEDIA_ACCEPT}
             className="hidden"
             disabled={uploading}
             onChange={(event) => {
@@ -2005,7 +2094,7 @@ function MediaStrip({
               // Cleared so picking the SAME file again after a failed upload
               // still fires a change event.
               event.target.value = "";
-              if (file) void upload(file);
+              if (file) onUpload(file);
             }}
           />
           {uploading ? "…" : "+"}

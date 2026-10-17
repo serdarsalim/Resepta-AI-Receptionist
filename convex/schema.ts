@@ -2477,8 +2477,18 @@ export default defineSchema({
     contentType: v.string(),
     size: v.number(),
     uploadedBy: v.optional(v.id("users")),
+    // The bytes' hash, copied off the storage row (P14, Nudge's library). The
+    // same file uploaded twice in one business comes back as the asset
+    // already there, so pasting one screenshot into two messages is one
+    // asset, not two.
+    sha256: v.optional(v.string()),
+    // When it was last uploaded or picked: the library lists most recently
+    // used first, because the price list sent yesterday is the one wanted
+    // today. Unset reads as the row's creation.
+    lastUsedAt: v.optional(v.number()),
   })
     .index("by_org", ["orgId"])
+    .index("by_org_sha256", ["orgId", "sha256"])
     .index("by_storage", ["storageId"]),
 
   // A business asking the platform to provision it a phone number, with the
