@@ -104,6 +104,12 @@ export default defineSchema({
     // for a demo walk-in. Leaving those unset would greet every new owner with
     // a notice about their own business.
     seenAt: v.optional(v.number()),
+    // The email signature this person's compose window opens with (P28): one
+    // of their own or a colleague's shared one, in THIS business. Per
+    // membership because a signature is per business and Resepta sends from
+    // one address per business, so Nudge's "a default per sending address"
+    // is one default here. Unset = no signature.
+    emailSignatureId: v.optional(v.id("emailSignatures")),
   })
     .index("by_user", ["userId"])
     .index("by_org", ["orgId"])
@@ -2482,6 +2488,21 @@ export default defineSchema({
   // fact that this org owns it. Deleting a row is refused while any message
   // still shows the image — a thread that renders a broken image is a worse
   // outcome than an asset list with an old entry in it.
+  // A team member's named email signatures (P28, Nudge cc709ea8), each
+  // private (only me) or shared with everyone in the business. Only the
+  // person who made one edits or deletes it; a colleague can pick a shared one
+  // as their default (memberships.emailSignatureId). Removed with the
+  // membership (lib/members.revokeMembership) and with the business.
+  emailSignatures: defineTable({
+    orgId: v.id("orgs"),
+    userId: v.id("users"),
+    name: v.string(),
+    html: v.string(),
+    shared: v.boolean(),
+  })
+    .index("by_org_user", ["orgId", "userId"])
+    .index("by_org_shared", ["orgId", "shared"]),
+
   mediaAssets: defineTable({
     orgId: v.id("orgs"),
     storageId: v.id("_storage"),

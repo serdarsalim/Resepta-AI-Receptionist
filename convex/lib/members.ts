@@ -25,6 +25,7 @@ import type { MutationCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
 import { recordActivity } from "./activity";
+import { removeSignaturesOf } from "./emailSignatures";
 
 export type MemberRole = "owner" | "staff";
 
@@ -185,6 +186,7 @@ export async function revokeMembership(
   if (!membership) throw new Error("not-found");
   if (await wouldOrphanOrg(ctx, args.orgId, args.userId)) throw new Error("last-admin");
   await unlinkStaff(ctx, args.orgId, args.userId);
+  await removeSignaturesOf(ctx, args.orgId, args.userId);
   await ctx.db.delete(membership._id);
   const removed = await ctx.db.get(args.userId);
   await recordActivity(ctx, {
