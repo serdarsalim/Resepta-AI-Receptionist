@@ -14,6 +14,8 @@ import { withoutNonAnswers } from "./lib/nonAnswer";
 import { NO_AI_CALLS_FIELD, VOICE_SUMMARY_FIELD } from "./lib/voiceAgentTemplate";
 import { callErased, erasedCallMarker } from "./lib/customerDeletion";
 import { placedByOf } from "./lib/browserTest";
+import { callOutcome } from "./lib/callOutcome";
+import { customerSpokenText, detectTextLanguage } from "./lib/textLanguage";
 
 // A boolean analysis field arrives as a JSON boolean; a stringified one is
 // read the same way rather than dropped.
@@ -355,6 +357,24 @@ export const process = internalAction({
           retellAgentId: row.retellAgentId,
           phone,
           retellCallId: row.retellCallId,
+        });
+      }
+
+      // The language they spoke replaces the business's as their guess
+      // (P30). Only on an event that SAYS the call was answered: the
+      // analysis event carries no disconnect code, and its duration alone
+      // cannot tell a person from a voicemail greeting, whose language is the
+      // phone network's.
+      const spoken =
+        callOutcome(String(call.disconnection_reason ?? "") || undefined) === "answered"
+          ? detectTextLanguage(customerSpokenText(call.transcript_object, call.transcript))
+          : null;
+      if (phone && spoken) {
+        await ctx.runMutation(internal.retell.learnLanguageFromCall, {
+          retellAgentId: row.retellAgentId,
+          phone,
+          retellCallId: row.retellCallId,
+          language: spoken,
         });
       }
 

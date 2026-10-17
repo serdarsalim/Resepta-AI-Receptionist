@@ -17,6 +17,10 @@ import {
   footprintValidator,
 } from "./customerDeletion";
 
+// The languages a person may set on a customer: the ones Resepta writes
+// customer messages in (lib/textLanguage learns only these too).
+const CUSTOMER_LANGUAGES = new Set(["tr", "en", "de"]);
+
 // The row as stored. Built from a plain field map so the list validator can
 // extend it by one key without a second copy of nineteen columns drifting from
 // this one.
@@ -29,6 +33,8 @@ const customerFields = {
   phone: v.string(),
   email: v.optional(v.string()),
   language: v.optional(v.string()),
+  // Learned from the customer's own reply or call (schema customers.languageLearnedAt).
+  languageLearnedAt: v.optional(v.number()),
   notes: v.optional(v.string()),
   consentAt: v.optional(v.number()),
   lastInboundAt: v.optional(v.number()),
@@ -339,6 +345,9 @@ export const update = mutation({
     email: v.optional(v.string()),
     notes: v.optional(v.string()),
     consent: v.optional(v.boolean()),
+    // "" goes back to the business's language; otherwise one of the three
+    // languages Resepta writes to customers in.
+    language: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -368,6 +377,14 @@ export const update = mutation({
     if (args.consent !== undefined) {
       // Re-consenting refreshes the stamp; revoking clears it and blocks sends.
       patch.consentAt = args.consent ? (customer.consentAt ?? Date.now()) : undefined;
+    }
+    if (args.language !== undefined) {
+      const language = args.language.trim();
+      if (language && !CUSTOMER_LANGUAGES.has(language)) throw new Error("invalid-language");
+      // A person's choice, so no longer learned (lib/customerLanguage): a
+      // later reply never replaces it. Back to "" makes it a guess again.
+      patch.language = language || undefined;
+      patch.languageLearnedAt = undefined;
     }
     await ctx.db.patch(args.customerId, patch);
     await syncCustomerSearch(ctx, args.customerId);

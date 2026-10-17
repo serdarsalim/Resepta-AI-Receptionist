@@ -6,6 +6,8 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { applyWamidStatus, logInboundRow } from "./messages";
 import { REPEAT_WINDOW_MS, withChange } from "./lib/agentChange";
 import { channelOfMessage, noteMessageById } from "./lib/thread";
+import { learnCustomerLanguage } from "./lib/customerLanguage";
+import { detectTextLanguage } from "./lib/textLanguage";
 import { scheduleLifecycleMessages } from "./appointments";
 import { queueOrgAlert } from "./lib/alerts";
 import { hasBusinessHours, isWithinActiveWindow } from "./lib/businessHours";
@@ -573,6 +575,12 @@ export async function processInboundMessage(
     lastInboundAt: Date.now(),
     lastInboundLane: args.lane ?? "cloud",
   });
+  // Words the customer TYPED say which language they write in, and replace
+  // the business's language as their guess (lib/customerLanguage, P30). A
+  // tapped button is the template's words, not theirs, so it never counts.
+  if (!payload) {
+    await learnCustomerLanguage(ctx, contactId, detectTextLanguage(text || media?.caption));
+  }
 
   // Tell the staff who opted in. Scheduled, never inline: a broken
   // alert must not cost the salon the customer's actual message. The

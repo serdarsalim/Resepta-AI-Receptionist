@@ -57,6 +57,7 @@ import { recordActivity } from "./lib/activity";
 import { MAX_UPCOMING_PER_PHONE } from "./lib/bookingLimits";
 import { insideNotice, minNoticeHoursOf, noticeSpan } from "./lib/minNotice";
 import { callErased, isDeleting } from "./lib/customerDeletion";
+import { learnCustomerLanguage } from "./lib/customerLanguage";
 import { isDemo } from "./demo";
 import { freeStarts, goodsLeadMs } from "./booking";
 import { durationOf } from "./agentAppointments";
@@ -3601,6 +3602,41 @@ export const markNoAiCallsFromCall = internalMutation({
       system: true,
     });
     return true;
+  },
+});
+
+// The language the customer spoke on an answered call (P30, Nudge 9670941f),
+// read by the event processor from their own turns of the transcript. The
+// same guards as the flag above: the agent proves the org, the leg is the
+// customer's, an erased call writes nothing back. Whether it replaces
+// anything is lib/customerLanguage's call.
+export const learnLanguageFromCall = internalMutation({
+  args: {
+    retellAgentId: v.string(),
+    phone: v.string(),
+    retellCallId: v.string(),
+    language: v.union(v.literal("tr"), v.literal("en"), v.literal("de")),
+  },
+  // Whether the customer's language was set by this call.
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", args.retellAgentId))
+      .unique();
+    if (!agent) return false;
+    const org = await ctx.db.get(agent.orgId);
+    if (!org || isDemo(org)) return false;
+    if (await callErased(ctx, agent.orgId, args.retellCallId)) return false;
+    const phone = toE164(args.phone, dialCodeForTimezone(org.timezone));
+    if (!phone) return false;
+    if ((await orgOwnNumbers(ctx, agent.orgId)).has(phone)) return false;
+    const customer = await ctx.db
+      .query("customers")
+      .withIndex("by_org_phone", (q) => q.eq("orgId", agent.orgId).eq("phone", phone))
+      .first();
+    if (!customer || isDeleting(customer)) return false;
+    return (await learnCustomerLanguage(ctx, customer._id, args.language)) !== null;
   },
 });
 

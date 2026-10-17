@@ -350,7 +350,12 @@ export const updateCustomer = internalMutation({
     if (changed.length === 0) {
       throw new Error("Nothing to change — those are the values it already has.");
     }
-    await ctx.db.patch(customer._id, after as Partial<Doc<"customers">>);
+    await ctx.db.patch(customer._id, {
+      ...(after as Partial<Doc<"customers">>),
+      // A language a person asked for is theirs, no longer learned from a
+      // reply (lib/customerLanguage).
+      ...("language" in after ? { languageLearnedAt: undefined } : {}),
+    });
     const actionId = await journal(ctx, {
       orgId,
       connectionId,
@@ -472,7 +477,11 @@ export const createCustomers = internalMutation({
         const language = row.language?.trim();
         if (language && language !== existing.language) patch.language = language;
         if (Object.keys(patch).length > 0) {
-          await ctx.db.patch(existing._id, patch as Partial<Doc<"customers">>);
+          await ctx.db.patch(existing._id, {
+            ...(patch as Partial<Doc<"customers">>),
+            // The import's language is the business's word, not a guess.
+            ...(patch.language ? { languageLearnedAt: undefined } : {}),
+          });
           await syncCustomerSearch(ctx, existing._id);
         }
         updated.push({ id: existing._id, name: fullName({ ...existing, ...patch }) });

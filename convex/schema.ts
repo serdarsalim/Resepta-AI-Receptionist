@@ -1282,7 +1282,14 @@ export default defineSchema({
     // E.164 with dial code, or the row doesn't exist (assertE164 gates writes).
     phone: v.string(),
     email: v.optional(v.string()),
+    // The language messages to this customer go out in. Unset = the
+    // business's (orgs.language), which is a guess; see languageLearnedAt.
     language: v.optional(v.string()),
+    // Set when `language` was LEARNED from the customer's own typed WhatsApp
+    // reply or what they said on an answered call (lib/customerLanguage, P30),
+    // rather than set by a person. Display only: the record says where the
+    // value came from. A person setting the language clears it.
+    languageLearnedAt: v.optional(v.number()),
     notes: v.optional(v.string()),
     // KVKK: when the customer consented to WhatsApp messages. Unset = no
     // consent recorded; sends are blocked until it's stamped.
