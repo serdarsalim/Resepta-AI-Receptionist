@@ -85,9 +85,17 @@ lock and stop. That should take a few minutes.
      blocks); personal WhatsApp (Baileys/Evolution/wa-pair); knowledge bases
      in Retell; call reviews; the demo tenant; fleet tooling, n8n, dev
      tooling. Section A's SKIP list in the plan has the reasoning; it stands.
-   - **needs Serdar:** a real product choice for Resepta (a new surface, a
-     change to how businesses are billed, anything that contradicts a rule in
-     Resepta's `AGENTS.md` or `docs/wwsd.md`). Don't build it; list it.
+   - **needs Serdar:** almost nothing. Serdar wants this to run on its own
+     until everything Resepta needs is ported (2026-10-17: "run until it's
+     done porting all the features it deems necessary"). Make product calls
+     yourself, judged by `docs/wwsd.md`, Resepta's `AGENTS.md` and what a
+     salon owner would want; where a Nudge change contradicts a Resepta
+     rule and the Nudge way is the newer, better-reasoned one, port it and
+     rewrite the rule (he approved exactly that for toolbars and type on
+     2026-10-17). Write your reasoning in the triage row. Park ONLY: a
+     change to what businesses pay or how they are billed; legal or privacy
+     claims; removing a feature businesses use today; anything needing a
+     credential or a provider dashboard. A parked item never stops the run.
    When in doubt between port and skip, port only if a salon would notice the
    difference.
 4. Write `docs/nudge-sync/triage-YYYY-MM-DD.md`: one row per feature (what it
@@ -129,16 +137,19 @@ What is different in the cloud, and overrides the brief where they disagree:
   the screen, prod backfills, provider config. Add a dated entry to
   `docs/journal/<month>.md`. Edit any `AGENTS.md` rule you make stale in the
   same commit.
-- If a phase turns out to need a product decision, stop that phase, commit
-  what is safe, mark it "needs Serdar" with the question in one sentence, and
-  move to the next.
+- If a phase turns out to need a product decision, make it (see Triage) and
+  say what you chose in the journal. Only a parkable item (see Triage)
+  stops a phase: commit what is safe, mark it "needs Serdar" with the
+  question in one sentence, and move to the next.
 
 ## Reporting
 
 `docs/nudge-sync/STATUS.md` is written for Serdar, who reads it in full and
 does not open code. Keep the whole file under one screen:
 
-- **Needs you** first: each open question in one sentence, or "Nothing".
+- **Needs you** first: each parked item in one sentence, or "Nothing". When
+  the plan has no pending phase left, the file's first line is
+  "**All ported up to Nudge <sha>. Ready to review.**"
 - **New since last time:** what a business owner will now see or get, a line
   each. No file names, no function names.
 - **Ready to look at:** what to click once he runs the app, per phase.
