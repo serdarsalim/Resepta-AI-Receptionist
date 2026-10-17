@@ -515,6 +515,7 @@ export const icsContext = internalQuery({
       summary: v.string(),
       staffName: v.optional(v.string()),
       orgName: v.string(),
+      address: v.optional(v.string()),
       sequence: v.optional(v.number()),
     }),
   ),
@@ -542,6 +543,7 @@ export const icsContext = internalQuery({
       summary: itemNames ? `${customerName} — ${itemNames}` : customerName,
       staffName: staff?.name,
       orgName: org?.name ?? "Resepta",
+      address: org?.address,
       sequence: appointment.icsSequence,
     };
   },
@@ -692,6 +694,7 @@ export const deliverOrgAlert = internalAction({
                   durationMinutes: event.durationMinutes,
                   summary: event.summary,
                   ...(event.staffName ? { description: event.staffName } : {}),
+                  ...(event.address ? { location: event.address } : {}),
                   organizerName: event.orgName,
                   organizerEmail: `noreply@${mailConfig.domain}`,
                   attendeeName: to,

@@ -238,6 +238,7 @@ export const sendSession = action({
       phone: org?.publicPhone,
       email: customer.email,
       bookingLink: org?.bookingUrl,
+      address: org?.address,
       custom: sessionCustom,
     });
     if (!body && !args.mediaStorageId) return { ok: false, reason: "empty" };
@@ -1067,6 +1068,7 @@ export const sendAppointmentMessage = internalAction({
       phone: org.publicPhone,
       email: customer.email,
       bookingLink: org.bookingUrl,
+      address: org.address,
       // The appointment's own reschedule/cancel page. SITE_URL is deployment
       // config; without it the token renders as nothing rather than a
       // localhost link in a customer's inbox.
@@ -1418,6 +1420,7 @@ export const sendAppointmentMessage = internalAction({
                       .join(", ")}`
                   : org.name,
                 ...(staffRow?.name ? { description: staffRow.name } : {}),
+                ...(org.address ? { location: org.address } : {}),
                 organizerName: org.name,
                 organizerEmail: sender,
                 attendeeName:

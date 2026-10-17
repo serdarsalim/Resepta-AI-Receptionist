@@ -58,6 +58,7 @@ function useVariableGroups() {
     // "book here" and "call us" in any template.
     { key: "booking_link", label: t("vars.bookingLink") },
     { key: "phone", label: t("vars.phone") },
+    { key: "address", label: t("vars.address") },
     // This appointment's own reschedule/cancel page. Resolves only in
     // appointment-lifecycle messages; empty elsewhere.
     { key: "manage_link", label: t("vars.manageLink") },

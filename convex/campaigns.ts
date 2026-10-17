@@ -361,6 +361,7 @@ export const fanOut = internalMutation({
         phone: publicPhone,
         email: customer.email,
         bookingLink: org.bookingUrl,
+        address: org.address,
         custom: customValues,
       };
       const line = renderTokens(campaign.body, tokenValues);

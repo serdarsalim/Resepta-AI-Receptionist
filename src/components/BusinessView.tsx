@@ -84,6 +84,7 @@ import { MAX_MIN_NOTICE_HOURS, type NoticeUnit } from "../../convex/lib/minNotic
 const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
   { card: "general", key: "settings.general" },
   { card: "general", key: "settings.businessName" },
+  { card: "general", key: "settings.address" },
   { card: "general", key: "settings.logo" },
   { card: "general", key: "settings.inboundAddress" },
   { card: "general", key: "settings.emailFrom" },
@@ -530,6 +531,18 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               <p className="text-sm text-red-600 dark:text-red-400">{nameError}</p>
             </>
           )}
+
+          <RowLabel label={t("settings.address")} hint={t("settings.addressHint")} />
+          <input
+            key={`address-${settings.org.address ?? ""}`}
+            className={FIELD}
+            defaultValue={settings.org.address ?? ""}
+            onBlur={(e) => {
+              const next = e.target.value.trim();
+              if (next === (settings.org.address ?? "")) return;
+              void update({ address: next });
+            }}
+          />
 
           <RowLabel label={t("settings.logo")} hint={t("settings.logoHint")} />
           <div className="flex items-center gap-3">

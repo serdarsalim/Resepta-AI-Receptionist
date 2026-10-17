@@ -514,6 +514,10 @@ export default defineSchema({
     // native /book page exists for this org it auto-fills from there; until
     // then it is whatever external page the org pasted (historically cal.com).
     bookingUrl: v.optional(v.string()),
+    // Where the business is, as the owner writes it (P16, Nudge e88fe333's
+    // in-person location). Rides the [address] token and the LOCATION of every
+    // calendar invite. Unset = no address said anywhere.
+    address: v.optional(v.string()),
     // LEGACY (2026-08-19). The [phone] token resolves at send time from the
     // enabled voice agent's inbound line (lib/publicPhone) — the settings
     // field that wrote this duplicated that picker and went. Kept because a

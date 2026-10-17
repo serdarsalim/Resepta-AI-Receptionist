@@ -45,7 +45,7 @@ export type OutOfHoursTemplate = Pick<
 export function outOfHoursMessage(args: {
   templates: OutOfHoursTemplate[];
   ruleId: Id<"messageRules">;
-  org: { name: string; bookingUrl?: string; publicPhone?: string };
+  org: { name: string; bookingUrl?: string; publicPhone?: string; address?: string };
   // customers.language ?? orgs.language — the customer's, not the salon's.
   language?: string;
   // Absent for a customer we know nothing about beyond an address or number;
@@ -81,6 +81,7 @@ export function outOfHoursMessage(args: {
     businessName: args.org.name,
     phone,
     bookingLink,
+    address: args.org.address,
     custom: args.custom,
   };
   // Only the AUTHORED text carries defaults; the stock copy is ours and has

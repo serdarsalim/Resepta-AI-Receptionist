@@ -136,6 +136,7 @@ export const current = query({
       autoReplyText: v.optional(v.string()),
       bookingUrl: v.optional(v.string()),
       publicPhone: v.optional(v.string()),
+      address: v.optional(v.string()),
     }),
     me: v.object({
       name: v.optional(v.string()),
@@ -277,6 +278,7 @@ export const current = query({
         autoReplyEnabled: org.autoReplyEnabled ?? false,
         autoReplyText: org.autoReplyText,
         bookingUrl: org.bookingUrl,
+        address: org.address,
         // Resolved, not stored: the enabled voice agent's inbound line, so the
         // reminder preview shows the same [phone] the send paths print.
         publicPhone: await resolvePublicPhone(ctx, org),
@@ -367,6 +369,7 @@ export const update = mutation({
     autoReplyEnabled: v.optional(v.boolean()),
     autoReplyText: v.optional(v.string()),
     bookingUrl: v.optional(v.string()),
+    address: v.optional(v.string()),
     priceDecimals: v.optional(v.boolean()),
     pickupEnabled: v.optional(v.boolean()),
     deliveryEnabled: v.optional(v.boolean()),
@@ -577,6 +580,10 @@ export const update = mutation({
     }
     if (args.autoReplyText !== undefined) {
       patch.autoReplyText = args.autoReplyText.trim() || undefined;
+    }
+    if (args.address !== undefined) {
+      // One line on an invite and in a message: newlines folded, capped.
+      patch.address = args.address.replace(/\s+/g, " ").trim().slice(0, 200) || undefined;
     }
     if (args.bookingUrl !== undefined) {
       const url = args.bookingUrl.trim();

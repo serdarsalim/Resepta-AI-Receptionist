@@ -2344,6 +2344,13 @@ const dictionary = {
   "settings.statOpens": { tr: "Açılma", en: "Opens", de: "Öffnungen" },
   "settings.statReplies": { tr: "Yanıt", en: "Replies", de: "Antworten" },
   "vars.staff": { tr: "Personel", en: "Staff", de: "Mitarbeiter" },
+  "vars.address": { tr: "İşletme adresi", en: "Business address", de: "Adresse des Betriebs" },
+  "settings.address": { tr: "Adres", en: "Address", de: "Adresse" },
+  "settings.addressHint": {
+    tr: "Takvim davetlerinde konum olarak görünür ve mesajlarda [address] ile kullanılır.",
+    en: "Shown as the location on calendar invites, and in messages through [address].",
+    de: "Erscheint als Ort in Kalendereinladungen und in Nachrichten über [address].",
+  },
   "vars.bookingLink": {
     tr: "Randevu linki",
     en: "Booking link",

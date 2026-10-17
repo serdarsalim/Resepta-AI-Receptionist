@@ -48,6 +48,9 @@ export function appointmentIcs(args: {
   // "Bella Hair Salon — Erkek saç kesimi". Already in the org's language.
   summary: string;
   description?: string;
+  // Where it happens: the business's address (orgs.address), so the entry
+  // offers directions. Absent = no LOCATION line rather than an empty one.
+  location?: string;
   // The salon, so the entry shows who it is with and replies thread sensibly.
   organizerName: string;
   organizerEmail: string;
@@ -72,6 +75,7 @@ export function appointmentIcs(args: {
     `DTEND:${utcStamp(args.startAtMs + args.durationMinutes * 60_000)}`,
     `SUMMARY:${escapeText(args.summary)}`,
     ...(args.description ? [`DESCRIPTION:${escapeText(args.description)}`] : []),
+    ...(args.location ? [`LOCATION:${escapeText(args.location)}`] : []),
     `ORGANIZER;CN=${escapeText(args.organizerName)}:mailto:${args.organizerEmail}`,
     `ATTENDEE;CN=${escapeText(args.attendeeName)};ROLE=REQ-PARTICIPANT;PARTSTAT=` +
       `${args.method === "CANCEL" ? "DECLINED" : "NEEDS-ACTION"};RSVP=TRUE:mailto:${args.attendeeEmail}`,

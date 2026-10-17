@@ -44,6 +44,8 @@ export type TokenValues = {
   // message TO someone has no reason to tell them their number.
   phone?: string;
   email?: string;
+  // orgs.address — where the business is, one line as the owner wrote it.
+  address?: string;
   // orgs.bookingUrl — the org's public booking page. In every template so the
   // 2h reminder, the closed-hours reply and the winback can all say "book
   // here" without the owner pasting a URL into each one.
@@ -102,6 +104,10 @@ export const TOKEN_ALIASES: Record<string, Exclude<keyof TokenValues, "custom">>
   email: "email",
   eposta: "email",
   "e-posta": "email",
+  // Where the business is (P16).
+  address: "address",
+  adres: "address",
+  adresse: "address",
   // Booking page. One canonical name; the second spelling is defensive, since
   // the underscore is the exact kind of detail an owner retypes wrong.
   booking_link: "bookingLink",
