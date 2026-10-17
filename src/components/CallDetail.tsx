@@ -19,18 +19,33 @@ import type { TranslationKey } from "@/lib/i18n";
 // Retell's disconnect codes. Anything not listed falls back to de-underscored
 // raw text rather than disappearing — a code we haven't met yet still explains
 // more than a blank row does.
+//
+// The codes a bulk run reads as refused or failed (lib/callOutcome) are here
+// too since 2026-10-17, so the run detail's hover and the call card say the
+// same sentence; every provider fault ("error_…") reads as a call error.
 const END_REASON_KEYS: Record<string, TranslationKey> = {
   agent_hangup: "calls.end.agent_hangup",
   user_hangup: "calls.end.user_hangup",
   dial_no_answer: "calls.end.dial_no_answer",
   dial_busy: "calls.end.dial_busy",
   dial_failed: "calls.end.dial_failed",
+  sip_routing_error: "calls.end.dial_failed",
+  no_valid_payment: "calls.end.dial_failed",
   voicemail_reached: "calls.end.voicemail_reached",
   call_transfer: "calls.end.call_transfer",
+  transfer_bridged: "calls.end.call_transfer",
+  transfer_cancelled: "calls.end.call_transfer",
   inactivity: "calls.end.inactivity",
   machine_detected: "calls.end.machine_detected",
+  ivr_reached: "calls.end.machine_detected",
   max_duration_reached: "calls.end.max_duration_reached",
   concurrency_limit_reached: "calls.end.concurrency_limit_reached",
+  user_declined: "calls.end.user_declined",
+  telephony_provider_permission_denied: "calls.end.refused",
+  invalid_destination: "calls.end.refused",
+  marked_as_spam: "calls.end.refused",
+  scam_detected: "calls.end.refused",
+  telephony_provider_unavailable: "calls.end.network_unavailable",
   error: "calls.end.error",
 };
 
@@ -39,7 +54,8 @@ export function humanizeCallEnd(
   t: (key: TranslationKey) => string,
 ): string | null {
   if (!code) return null;
-  const key = END_REASON_KEYS[code];
+  const key =
+    END_REASON_KEYS[code] ?? (code.startsWith("error") ? "calls.end.error" : undefined);
   return key ? t(key) : code.replace(/_/g, " ");
 }
 

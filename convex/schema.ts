@@ -2280,8 +2280,10 @@ export default defineSchema({
   //   queued     a messages row exists; delivery.ts owns it from here
   //   dialing    THE CALL IN FLIGHT, and the concurrency token — see
   //              bulkRuns.claimNextCall. Exactly one per run may hold this.
-  //   done       finished, whatever the outcome was on the wire
-  //   failed     we could not place it / the provider refused it
+  //   done       the call reached the phone, whatever happened next (answered,
+  //              voicemail, busy, declined, no answer: lib/callOutcome)
+  //   failed     we could not place it, or the network or the provider
+  //              refused it and nothing rang
   //   skipped    never attempted, and WHY is in reason: no email address, no
   //              consent, an unusable number. A bulk sender that quietly
   //              drops rows is how "I sent it to everyone" becomes false.
@@ -2316,7 +2318,9 @@ export default defineSchema({
     dialedAt: v.optional(v.number()),
     durationSec: v.optional(v.number()),
     // Retell's disconnect code, copied off the calls row when the call ends.
-    // The run detail's "no answer" comes from here.
+    // What the run detail says happened (answered, voicemail, busy, no
+    // answer, refused) is read from it by lib/callOutcome, and a call that
+    // never reached the phone makes the item "failed" rather than "done".
     disconnectionReason: v.optional(v.string()),
     attempts: v.optional(v.number()),
     // Why this was skipped, or how placing it failed. Shown verbatim in the

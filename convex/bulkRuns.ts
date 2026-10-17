@@ -70,6 +70,7 @@ import {
 } from "./lib/businessHours";
 import { DEFAULT_QUIET_HOURS } from "./orgs";
 import { bulkRunHoldReason } from "./schema";
+import { callOutcome, reachedPhone } from "./lib/callOutcome";
 
 // A run is capped, for campaigns' reason word for word: a salon with more
 // customers than this wants a filter, not a bigger blast, and a send nobody
@@ -1144,14 +1145,28 @@ export const finishByCallId = internalMutation({
       .withIndex("by_retell_call", (q) => q.eq("retellCallId", args.retellCallId))
       .unique();
 
+    // What the call came to, from the provider's disconnect code
+    // (lib/callOutcome). One that never reached the phone (the network
+    // refused it, it broke on the way) is not a call this customer got, so
+    // it counts as failed with the code as its reason; anything that rang
+    // counts as done, whatever happened next. A row with no code and no
+    // duration is counted done, as every call was before.
+    const outcome = callOutcome(call?.disconnectionReason, call?.durationSec);
+    const reached = outcome === undefined || reachedPhone(outcome);
     await ctx.db.patch(item._id, {
-      status: "done",
+      status: reached ? "done" : "failed",
       durationSec: call?.durationSec,
       disconnectionReason: call?.disconnectionReason,
+      ...(reached ? {} : { reason: call?.disconnectionReason ?? "call-failed" }),
     });
     const run = await ctx.db.get(item.runId);
     if (!run) return null;
-    await ctx.db.patch(run._id, { doneCount: run.doneCount + 1 });
+    await ctx.db.patch(
+      run._id,
+      reached
+        ? { doneCount: run.doneCount + 1 }
+        : { failedCount: run.failedCount + 1 },
+    );
 
     if (run.status === "running") {
       await ctx.scheduler.runAfter(0, internal.bulkRuns.dialNext, { runId: item.runId });

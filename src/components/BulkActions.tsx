@@ -20,6 +20,8 @@ import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import { useLanguage, useT } from "@/lib/LanguageProvider";
 import { formatAge, formatDateTimeWithWeekday } from "@/lib/datetime";
+import { callOutcome } from "../../convex/lib/callOutcome";
+import { humanizeCallEnd } from "./CallDetail";
 import { useConfirm } from "./ConfirmDialog";
 import { EmojiPicker } from "./EmojiPicker";
 import { RowLabel } from "./RowLabel";
@@ -594,7 +596,7 @@ function RunDetail({
               onClick={() => onOpenContact(item.customerId)}
             >
               <span className="min-w-0 flex-1 truncate">{item.name}</span>
-              <ItemOutcome item={item} />
+              <ItemOutcome item={item} channel={run.channel} />
             </li>
           ))}
         </ul>
@@ -624,7 +626,7 @@ type RunItem = {
 // A skipped row says WHY, verbatim. That is the whole point of skipping rather
 // than dropping: a run that quietly lost eleven people is how "I sent it to
 // everyone" becomes false.
-function ItemOutcome({ item }: { item: RunItem }) {
+function ItemOutcome({ item, channel }: { item: RunItem; channel: BulkChannel }) {
   const t = useT();
   const muted = "shrink-0 text-xs text-[var(--muted)]";
 
@@ -648,6 +650,14 @@ function ItemOutcome({ item }: { item: RunItem }) {
     );
   }
   if (item.status === "cancelled") return <span className={muted}>{t("bulk.itemCancelled")}</span>;
+  // A finished call says what it came to, from the provider's disconnect code
+  // (lib/callOutcome), never "Sent": before this an unanswered call, which
+  // ends with no duration, fell through to the message channels' last line.
+  if (channel === "call" && (item.status === "done" || item.status === "failed")) {
+    const ended = callOutcome(item.disconnectionReason, item.durationSec);
+    if (ended) return <CallOutcomeText item={item} outcome={ended} />;
+    if (item.status === "done") return <span className={muted}>{t("bulk.itemCalled")}</span>;
+  }
   if (item.status === "failed") {
     return (
       <span
@@ -676,20 +686,50 @@ function ItemOutcome({ item }: { item: RunItem }) {
     );
   }
   if (item.openedAt) return <span className={muted}>{t("bulk.itemOpened")}</span>;
-  if (item.durationSec !== undefined) {
-    // A call that connected reports how long; one that did not reports why,
-    // and Retell's own disconnect code is the only thing that explains a call
-    // with no summary.
-    return (
-      <span className={muted}>
-        {item.durationSec > 0
-          ? t("bulk.itemAnswered", { s: item.durationSec })
-          : t("bulk.itemNoAnswer")}
-      </span>
-    );
-  }
   if (item.status === "queued" && item.messageStatus === "queued") {
     return <span className={muted}>{t("bulk.itemQueued")}</span>;
   }
   return <span className={muted}>{t("bulk.itemSent")}</span>;
+}
+
+// One call's outcome in a word or two. The two that never reached the phone
+// are red, like any failure on this screen, and carry the call card's own
+// sentence for the code on hover; the rest are facts about a call that rang.
+function CallOutcomeText({
+  item,
+  outcome,
+}: {
+  item: RunItem;
+  outcome: NonNullable<ReturnType<typeof callOutcome>>;
+}) {
+  const t = useT();
+  const muted = "shrink-0 text-xs text-[var(--muted)]";
+  switch (outcome) {
+    case "answered":
+      return (
+        <span className={muted}>
+          {item.durationSec && item.durationSec > 0
+            ? t("bulk.itemAnswered", { s: item.durationSec })
+            : t("bulk.outcomeAnswered")}
+        </span>
+      );
+    case "voicemail":
+      return <span className={muted}>{t("bulk.outcomeVoicemail")}</span>;
+    case "busy":
+      return <span className={muted}>{t("bulk.outcomeBusy")}</span>;
+    case "declined":
+      return <span className={muted}>{t("bulk.outcomeDeclined")}</span>;
+    case "no-answer":
+      return <span className={muted}>{t("bulk.itemNoAnswer")}</span>;
+    case "refused":
+    case "failed":
+      return (
+        <span
+          className="shrink-0 truncate text-xs text-red-600 dark:text-red-400"
+          title={humanizeCallEnd(item.disconnectionReason, t) ?? item.reason}
+        >
+          {t(outcome === "refused" ? "bulk.outcomeRefused" : "bulk.itemFailed")}
+        </span>
+      );
+  }
 }

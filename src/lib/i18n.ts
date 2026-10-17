@@ -1040,6 +1040,20 @@ const dictionary = {
   "bulk.itemReplied": { tr: "Yanıtladı", en: "Replied", de: "Geantwortet" },
   "bulk.itemAnswered": { tr: "{s} sn görüştü", en: "Talked {s}s", de: "{s} s gesprochen" },
   "bulk.itemNoAnswer": { tr: "Açmadı", en: "No answer", de: "Nicht abgenommen" },
+  // What a finished call came to (lib/callOutcome), beside "No answer" and
+  // "Talked {s}s". Refused is the network's no: nothing rang, so it is told
+  // apart from Declined, which is the customer's.
+  "bulk.outcomeAnswered": { tr: "Açtı", en: "Answered", de: "Angenommen" },
+  "bulk.outcomeVoicemail": { tr: "Telesekreter", en: "Voicemail", de: "Mailbox" },
+  "bulk.outcomeBusy": { tr: "Meşgul", en: "Busy", de: "Besetzt" },
+  "bulk.outcomeDeclined": { tr: "Reddetti", en: "Declined", de: "Abgelehnt" },
+  "bulk.outcomeRefused": {
+    tr: "Şebeke reddetti",
+    en: "Refused by the network",
+    de: "Vom Netz abgewiesen",
+  },
+  // A call that ended with nothing on record to say how (no code, no length).
+  "bulk.itemCalled": { tr: "Arandı", en: "Called", de: "Angerufen" },
   "bulk.itemFailed": { tr: "Başarısız", en: "Failed", de: "Fehlgeschlagen" },
   "bulk.itemCancelled": { tr: "İptal", en: "Cancelled", de: "Abgebrochen" },
   "customers.new": {
@@ -3013,6 +3027,23 @@ const dictionary = {
     de: "Limit gleichzeitiger Anrufe erreicht",
   },
   "calls.end.error": { tr: "Arama hatası", en: "Call error", de: "Anruffehler" },
+  "calls.end.user_declined": {
+    tr: "Aranan kişi aramayı reddetti",
+    en: "They declined the call",
+    de: "Der Anruf wurde abgelehnt",
+  },
+  // The carrier rejected the number before it rang: not the customer
+  // ignoring the call.
+  "calls.end.refused": {
+    tr: "Telefon şebekesi aramayı reddetti, telefon çalmadı",
+    en: "The phone network refused the call; the phone never rang",
+    de: "Das Telefonnetz hat den Anruf abgewiesen; es hat nicht geklingelt",
+  },
+  "calls.end.network_unavailable": {
+    tr: "Telefon şebekesine ulaşılamadı",
+    en: "The phone network was unavailable",
+    de: "Das Telefonnetz war nicht erreichbar",
+  },
   // The sidebar destination. Was "Sesli asistan / Voice agent"; the qualifier
   // came off (Serdar, 2026-08-26) when the chat lane started composing over
   // the same Talimat — one agent, two channels, and a door named after one
