@@ -12,6 +12,9 @@ import { useConfirm } from "./ConfirmDialog";
 import { buttonClass, fieldClass } from "./Control";
 import { EditorSaveBar } from "./EditorSaveBar";
 import { AgentVersionHistory } from "./AgentVersionHistory";
+import { AgentBrowserTest } from "./AgentBrowserTest";
+import { AgentTestsLog } from "./AgentTestsLog";
+import { SegmentedControl } from "./SegmentedControl";
 import { PromptEditor } from "./PromptEditor";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
@@ -240,6 +243,9 @@ export function VoiceAgentPage({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
+  // In the browser (a web call, nothing real) or ringing a real phone.
+  const [testMode, setTestMode] = useState<"browser" | "phone">("browser");
+  const [testLive, setTestLive] = useState(false);
   const [testTo, setTestTo] = useState("");
   const [testError, setTestError] = useState<string | null>(null);
   // The line dropdown writes straight to the provider — no Save, because it
@@ -345,6 +351,30 @@ export function VoiceAgentPage({
     setBusy(false);
   };
 
+  // The edit set the provider takes, shared by Publish and the browser
+  // test's stage, so a test hears exactly what Publish would put live.
+  const editArgs = () => ({
+    agentId,
+    ...(detail?.version !== null && detail?.version !== undefined
+      ? { baseVersion: detail.version }
+      : {}),
+    ...(instructionsDirty ? { generalPrompt: draft } : {}),
+    ...(openingDirty ? { beginMessage: begin } : {}),
+    // Only when it changed: an unchanged voice sent every time would ride
+    // a restore back over a voice somebody picked since.
+    ...(voiceDirty ? { voiceId: voice } : {}),
+    ...(voicemailDirty ? { voicemail } : {}),
+    ...(varsState?.dirty
+      ? {
+          variables: varsState.rows.map((row) => ({
+            ...row,
+            beforeFieldId: row.beforeFieldId as Id<"contactFields"> | undefined,
+            contactFieldId: row.contactFieldId as Id<"contactFields"> | undefined,
+          })),
+        }
+      : {}),
+  });
+
   // Everything the provider holds, as ONE version. The note names what
   // changed, in the business's language, so the history reads as a changelog.
   const savePrompt = () => {
@@ -364,25 +394,7 @@ export function VoiceAgentPage({
     if (changed.length === 0) return;
     void run(t("voiceDetail.publishing"), async () => {
       const res = await publishAgent({
-        agentId,
-        ...(detail?.version !== null && detail?.version !== undefined
-          ? { baseVersion: detail.version }
-          : {}),
-        ...(instructionsDirty ? { generalPrompt: draft } : {}),
-        ...(openingDirty ? { beginMessage: begin } : {}),
-        // Only when it changed: an unchanged voice sent every time would ride
-        // a restore back over a voice somebody picked since.
-        ...(voiceDirty ? { voiceId: voice } : {}),
-        ...(voicemailDirty ? { voicemail } : {}),
-        ...(varsDirty && varsState
-          ? {
-              variables: varsState.rows.map((row) => ({
-                ...row,
-                beforeFieldId: row.beforeFieldId as Id<"contactFields"> | undefined,
-                contactFieldId: row.contactFieldId as Id<"contactFields"> | undefined,
-              })),
-            }
-          : {}),
+        ...editArgs(),
         versionNote: { title: changed.join(", ") },
       });
       setSeed(null);
@@ -462,6 +474,21 @@ export function VoiceAgentPage({
     });
 
   const loadVersions = useCallback(() => listVersions({ agentId }), [listVersions, agentId]);
+
+  // The browser test hears what is on screen: the page's edits go onto the
+  // provider's draft (nothing goes live) and the test dials that version. A
+  // draft already waiting there is dialled as it stands.
+  const stageForTest = async (): Promise<number | null> => {
+    if (providerChanges) {
+      const res = await publishAgent({ ...editArgs(), stage: true });
+      // The page now reads the draft back, so its edits stop reading as
+      // unsaved and the save bar says a draft is waiting.
+      load();
+      return res.version;
+    }
+    return providerDraft ? (detail?.version ?? null) : null;
+  };
+  const onTestLive = useCallback((value: boolean) => setTestLive(value), []);
 
   // Binding a line is immediate and unrelated to the draft: it changes which
   // phone rings this agent, not what the agent says. Riding Save would mean an
@@ -955,6 +982,8 @@ export function VoiceAgentPage({
               />
             </div>
 
+            <AgentTestsLog agentId={agentId} />
+
             {/* The editor's foot, mirroring Nudge's bottom Publish: after a
                 long scroll through prompt and variables, the way out should
                 not be back at the top. Delete sits left, apart from the pair
@@ -1014,9 +1043,30 @@ export function VoiceAgentPage({
       {testOpen && detail && (
         <Sheet
           title={t("voiceDetail.test")}
-          hint={t("voiceDetail.testHint")}
+          dirty={testLive}
           onClose={() => setTestOpen(false)}
         >
+          <div className="mb-4">
+            <SegmentedControl
+              value={testMode}
+              disabled={testLive}
+              ariaLabel={t("voiceDetail.test")}
+              semantics="tabs"
+              onChange={setTestMode}
+              segments={[
+                { id: "browser", label: t("agentTest.modeBrowser") },
+                { id: "phone", label: t("agentTest.modePhone"), hint: t("voiceDetail.testHint") },
+              ]}
+            />
+          </div>
+          {testMode === "browser" ? (
+            <AgentBrowserTest
+              agentId={agentId}
+              hasEdits={providerChanges || providerDraft}
+              stage={stageForTest}
+              onLiveChange={onTestLive}
+            />
+          ) : (
           <div className="space-y-3">
             <p className="text-sm text-[var(--muted)]">
               {t("voiceDetail.confirmCall", { to: testTo.trim() || "…", name: detail.name })}
@@ -1058,6 +1108,7 @@ export function VoiceAgentPage({
               </button>
             </div>
           </div>
+          )}
         </Sheet>
       )}
 

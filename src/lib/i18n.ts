@@ -4179,6 +4179,202 @@ const dictionary = {
     en: "Places a real call to the number you enter, using this agent. The phone genuinely rings and the minutes are billed.",
     de: "Ruft die eingegebene Nummer mit diesem Assistenten wirklich an. Das Telefon klingelt tatsächlich, und die Minuten werden berechnet.",
   },
+  // The browser test (P9): a web call from the agent page.
+  "agentTest.modeBrowser": {
+    tr: "Tarayıcıda",
+    en: "In the browser",
+    de: "Im Browser",
+  },
+  "agentTest.modePhone": {
+    tr: "Telefonu çaldır",
+    en: "Ring a phone",
+    de: "Telefon anrufen",
+  },
+  "agentTest.browserHint": {
+    tr: "Asistanla mikrofonunuzdan konuşun. Hiçbir şey kaydedilmez, randevu alınmaz, mesaj gitmez; dakikalar normal arama gibi ücretlendirilir.",
+    en: "Talk to the agent through your microphone. Nothing is booked, saved or sent; the minutes are billed like a call.",
+    de: "Sprechen Sie über Ihr Mikrofon mit dem Agenten. Nichts wird gebucht, gespeichert oder verschickt; die Minuten werden wie ein Anruf berechnet.",
+  },
+  "agentTest.callAs": {
+    tr: "Kim olarak",
+    en: "Call as",
+    de: "Anrufen als",
+  },
+  "agentTest.stranger": {
+    tr: "Yeni bir arayan",
+    en: "A new caller",
+    de: "Neuer Anrufer",
+  },
+  "agentTest.searchCustomer": {
+    tr: "Müşteri ara",
+    en: "Search customers",
+    de: "Kunden suchen",
+  },
+  "agentTest.direction": {
+    tr: "Arama yönü",
+    en: "Direction",
+    de: "Richtung",
+  },
+  "agentTest.outbound": {
+    tr: "Biz arıyoruz",
+    en: "We call them",
+    de: "Wir rufen an",
+  },
+  "agentTest.inbound": {
+    tr: "Onlar arıyor",
+    en: "They call us",
+    de: "Sie rufen an",
+  },
+  "agentTest.variables": {
+    tr: "Asistanın bildikleri",
+    en: "What the agent knows",
+    de: "Was der Agent weiß",
+  },
+  "agentTest.variablesHint": {
+    tr: "Seçtiğiniz kişi gerçekten arasaydı asistana verilecek bilgiler. Bir değeri değiştirmek yalnızca bu denemeyi etkiler; boş bırakılan alan gönderilmez.",
+    en: "What the agent would be handed if this person really rang. Changing a value affects this test only; an empty box is not sent.",
+    de: "Was der Agent bekäme, wenn diese Person wirklich anriefe. Eine Änderung gilt nur für diesen Test; ein leeres Feld wird nicht gesendet.",
+  },
+  "agentTest.emptyCount.one": {
+    tr: "{n} boş",
+    en: "{n} empty",
+    de: "{n} leer",
+  },
+  "agentTest.emptyCount.other": {
+    tr: "{n} boş",
+    en: "{n} empty",
+    de: "{n} leer",
+  },
+  "agentTest.unavailable": {
+    tr: "Asistan şu an arama alamıyor: kapalı, işletme askıda ya da bakiye boş.",
+    en: "The agent cannot take calls right now: it is switched off, the business is suspended or the balance is empty.",
+    de: "Der Agent kann gerade keine Anrufe annehmen: Er ist ausgeschaltet, das Geschäft ist gesperrt oder das Guthaben ist leer.",
+  },
+  "agentTest.draftIncluded": {
+    tr: "Yayınlanmamış değişiklikleriniz bu denemede geçerli.",
+    en: "Your unpublished edits are part of this test.",
+    de: "Ihre unveröffentlichten Änderungen gelten in diesem Test.",
+  },
+  "agentTest.start": {
+    tr: "Denemeyi başlat",
+    en: "Start test",
+    de: "Test starten",
+  },
+  "agentTest.connecting": {
+    tr: "Bağlanıyor…",
+    en: "Connecting…",
+    de: "Verbindung wird aufgebaut…",
+  },
+  "agentTest.live": {
+    tr: "Görüşmede",
+    en: "On the call",
+    de: "Im Gespräch",
+  },
+  "agentTest.agentTalking": {
+    tr: "Asistan konuşuyor",
+    en: "The agent is talking",
+    de: "Der Agent spricht",
+  },
+  "agentTest.hangUp": {
+    tr: "Kapat",
+    en: "Hang up",
+    de: "Auflegen",
+  },
+  "agentTest.waiting": {
+    tr: "Görüşme özetleniyor…",
+    en: "Writing up the call…",
+    de: "Das Gespräch wird ausgewertet…",
+  },
+  "agentTest.summary": {
+    tr: "Özet",
+    en: "Summary",
+    de: "Zusammenfassung",
+  },
+  "agentTest.wouldDo": {
+    tr: "Neler yapardı",
+    en: "What it would have done",
+    de: "Was er getan hätte",
+  },
+  "agentTest.wouldDoNone": {
+    tr: "Hiçbir şey değişmezdi.",
+    en: "Nothing would have changed.",
+    de: "Nichts hätte sich geändert.",
+  },
+  "agentTest.collected": {
+    tr: "Öğrendikleri",
+    en: "What it heard",
+    de: "Was er erfahren hat",
+  },
+  "agentTest.transcript": {
+    tr: "Konuşma metni",
+    en: "Transcript",
+    de: "Gesprächsverlauf",
+  },
+  "agentTest.agentRole": {
+    tr: "Asistan",
+    en: "Agent",
+    de: "Agent",
+  },
+  "agentTest.callerRole": {
+    tr: "Siz",
+    en: "You",
+    de: "Sie",
+  },
+  "agentTest.failed": {
+    tr: "Deneme başlatılamadı.",
+    en: "The test could not start.",
+    de: "Der Test konnte nicht starten.",
+  },
+  "agentTest.micDenied": {
+    tr: "Mikrofona izin verilmedi. Tarayıcının adres çubuğundan izin verip yeniden deneyin.",
+    en: "The microphone was not allowed. Allow it from the browser's address bar and try again.",
+    de: "Das Mikrofon wurde nicht erlaubt. Erlauben Sie es in der Adressleiste und versuchen Sie es erneut.",
+  },
+  "agentTest.again": {
+    tr: "Yeniden dene",
+    en: "Test again",
+    de: "Erneut testen",
+  },
+  "agentTest.refused": {
+    tr: "reddedildi",
+    en: "refused",
+    de: "abgelehnt",
+  },
+  "agentTest.toolBook": {
+    tr: "Randevu",
+    en: "Booking",
+    de: "Buchung",
+  },
+  "agentTest.toolCancel": {
+    tr: "İptal",
+    en: "Cancellation",
+    de: "Stornierung",
+  },
+  "agentTest.toolMove": {
+    tr: "Taşıma",
+    en: "Move",
+    de: "Verschiebung",
+  },
+  "agentTest.toolSave": {
+    tr: "Kaydedilen bilgiler",
+    en: "Details saved",
+    de: "Gespeicherte Daten",
+  },
+  "agentTest.history": {
+    tr: "Denemeler",
+    en: "Tests",
+    de: "Tests",
+  },
+  "agentTest.historyHint": {
+    tr: "Bu asistanla yapılan son tarayıcı denemeleri. Bir satıra tıklayınca konuşma metni gelir.",
+    en: "The latest browser tests of this agent. Click a row for its transcript.",
+    de: "Die letzten Browser-Tests dieses Agenten. Ein Klick auf eine Zeile zeigt den Gesprächsverlauf.",
+  },
+  "agentTest.noSummary": {
+    tr: "Özet yok",
+    en: "No summary",
+    de: "Keine Zusammenfassung",
+  },
   "voiceDetail.callMe": {
     tr: "Beni ara",
     en: "Call me",

@@ -1369,6 +1369,20 @@ before the browser joins and is fatal if it fails.
   debit as a call, plus `usageMonthly.voiceTestCalls/Seconds/BilledMicroUsd`.
 - Deletion: `agentTests` is in `ORG_TABLES` and in the customer `FOOTPRINT`
   (rows run as a customer go with them).
+- The page (P9): the header's Test opens a sheet with two modes, In the
+  browser (default, `AgentBrowserTest`) and Ring a phone (the old
+  `testCall`). The browser mode picks a customer to call as (or a new
+  caller), a direction, and shows `browserTestVariables` with every value
+  editable; Start stages the page's edits (`publishAgent` with `stage`) and
+  dials that draft, or a draft already waiting, else the published version.
+  `retell-client-js-sdk` 3.x is imported inside the click. The sheet will
+  not close on Escape while a call is up; closing it hangs up. Past tests
+  list under the variables (`AgentTestsLog`), each opening its result.
+- Staged variables: a stage keeps its validated rows on
+  `retellAgents.stagedVariables` with the draft's `stagedVersion`, because
+  `voiceAgentVariables` describes what callers hear; `publishDraft` (or the
+  next publish of that same draft) writes them to the registry, and
+  `discardDraft` or any publish clears them.
 
 ## The calendar and booking sheet after 2026-08-19 (the Google pass — read this before the 2026-07-29 entry in `journal/2026-07.md`)
 

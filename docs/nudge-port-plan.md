@@ -67,7 +67,8 @@ means "read that commit".
 | P6b | (+) Bulk-call guardrails + honest outcomes + requeue/optional platform cap | E.1, E.flip.1, E.flip.2 |
 | P7 | 6. Voice-agent drafts, versions, dial pinning (6f02acca) + (+) voicemail message + prompt in sans font | E.10. **Done 2026-10-17** (7555f53..932012b); screen checks owed |
 | P8 | 7a. Browser-test backend | **Done 2026-10-17** (7ab4099); first real test owed |
-| P9 | 7b. Browser-test UI (test card, preview card) + (+) chat simulator | E.flip.4 |
+| P9 | 7b. Browser-test UI (test card, preview card) | **Done 2026-10-17** (b4d10b3 and the UI commit after it); screen checks and a first real test owed |
+| P9b | (split from P9) (+) Chat simulator: the owner chats with the WhatsApp assistant in the app, sees the reply and what it would book; nothing is sent. Test turns stay out of the disclosure check, the rate limit and the inbox; refuse the demo org; meter to the org (N 3951e57c; R chatAgent.ts, RemindersView) | E.flip.4 |
 | P10 | 4. WhatsApp thread + formatter (+ 0772ac98) + (+) failed sends say why + Meta template category/rejection webhooks (a720be3b) + (triage 10-17) narrow chat spacing and joined tails (92ae96d2), Roboto inside the chat only (3298a228, d55ab896) | E.3, E.found |
 | P11 | 5a. Call cards + (+) who placed a call | |
 | P12 | 5b. Notes, property editors, tab title + read-only cards for members show plain values with a ViewOnlyPill instead of dimmed controls (Serdar chose this 2026-10-14, Nudge's way) + + (+) channel pills not greyed, copy phone, customer deep link + cmd-click | |
