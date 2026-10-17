@@ -178,8 +178,18 @@ export default defineSchema({
     userId: v.id("users"),
     customerId: v.id("customers"),
     readAt: v.number(),
+    // "Mark as unread" (P21, Nudge 2a94bb92): set = this conversation reads
+    // as unread for this person whatever readAt and the read floor say.
+    // Checked AHEAD of the floor, cleared by every read path (opening it,
+    // Mark as read, Mark all as read). A deleted stamp could not do this: an
+    // inbound older than the floor counts as read with no stamp at all.
+    unreadAt: v.optional(v.number()),
   })
     .index("by_org_user_customer", ["orgId", "userId", "customerId"])
+    // This person's marked-unread conversations, a handful of rows read
+    // whole, so every unread reader can union them in without a lookup per
+    // row.
+    .index("by_org_user_unread", ["orgId", "userId", "unreadAt"])
     // Everyone's read marks on one customer, for deleting that customer. The
     // inboxPins reason: the people holding them are not only the team.
     .index("by_org_customer", ["orgId", "customerId"]),

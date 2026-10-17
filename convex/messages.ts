@@ -833,14 +833,25 @@ export const inboxUnseenCount = query({
         q.eq("orgId", orgId).gt("thread.lastInboundAt", floor),
       )
       .take(UNSEEN_CAP);
+    const forced = await forcedUnreadCustomers(ctx, orgId, user._id);
     let count = 0;
     for (const customer of candidates) {
       const lastInboundAt = customer.thread?.lastInboundAt ?? 0;
       // A muted customer is not in the inbox at all, so counting them here
       // would leave a badge pointing at rows that aren't there.
       if (customer.mutedAt) continue;
+      if (forced.has(customer._id)) {
+        count += 1;
+        continue;
+      }
       const readAt = await inboxReadAt(ctx, orgId, user._id, customer._id);
       if (lastInboundAt > readAt) count += 1;
+    }
+    // Marked unread by hand below the floor: the Unread view lists them, so
+    // the dot counts them too.
+    for (const customerId of forced) {
+      const customer = await ctx.db.get(customerId);
+      if (listable(customer, orgId) && belowFloor(customer, floor)) count += 1;
     }
     return count;
   },
@@ -933,6 +944,69 @@ async function inboxReadAt(
   return row?.readAt ?? 0;
 }
 
+// The conversations this person marked unread by hand (markConversationUnread).
+// A handful of rows on their own index, read whole: every unread reader unions
+// them in, because they read as unread even below the read floor, where the
+// range scans never look (P21, Nudge 2a94bb92).
+async function forcedUnreadCustomers(
+  ctx: QueryCtx | MutationCtx,
+  orgId: Id<"orgs">,
+  userId: Id<"users">,
+): Promise<Set<Id<"customers">>> {
+  const rows = await ctx.db
+    .query("inboxReads")
+    .withIndex("by_org_user_unread", (q) =>
+      q.eq("orgId", orgId).eq("userId", userId).gt("unreadAt", 0),
+    )
+    .collect();
+  return new Set(rows.map((r) => r.customerId));
+}
+
+// A marked-unread customer the range scans cannot reach: their newest inbound
+// sits at or below the floor (or they never wrote). Still in the Inbox, so
+// still unread, and every count has to add them by hand.
+function belowFloor(customer: Doc<"customers">, readFloor: number): boolean {
+  return (customer.thread?.lastInboundAt ?? 0) <= readFloor;
+}
+
+// Is this customer a row the Inbox can show at all, for this org?
+function listable(customer: Doc<"customers"> | null, orgId: Id<"orgs">): customer is Doc<"customers"> {
+  return (
+    !!customer &&
+    customer.orgId === orgId &&
+    !!customer.thread &&
+    !customer.mutedAt &&
+    !isDeleting(customer)
+  );
+}
+
+// "I read this conversation": readAt moves to now and any "marked unread"
+// goes. The ONE writer every read path goes through, so none of them can
+// leave the mark lit. Monotonic, so a re-render storm costs no writes.
+async function stampConversationRead(
+  ctx: MutationCtx,
+  orgId: Id<"orgs">,
+  userId: Id<"users">,
+  customerId: Id<"customers">,
+  now: number,
+) {
+  const existing = await ctx.db
+    .query("inboxReads")
+    .withIndex("by_org_user_customer", (q) =>
+      q.eq("orgId", orgId).eq("userId", userId).eq("customerId", customerId),
+    )
+    .unique();
+  if (existing) {
+    if (existing.readAt >= now && existing.unreadAt === undefined) return;
+    await ctx.db.patch(existing._id, {
+      readAt: Math.max(existing.readAt, now),
+      unreadAt: undefined,
+    });
+  } else {
+    await ctx.db.insert("inboxReads", { orgId, userId, customerId, readAt: now });
+  }
+}
+
 // Stamp "I opened this conversation". Called when the user CLICKS a row, and
 // again if a reply lands while they are sitting in that conversation — a
 // message read in front of somebody must not re-light behind their back.
@@ -951,7 +1025,25 @@ export const markConversationRead = mutation({
     // No read mark for a customer being deleted: the sweep removes theirs,
     // and one written after it passed would outlive the customer.
     if (!customer || customer.orgId !== orgId || isDeleting(customer)) return null;
-    const now = Date.now();
+    await stampConversationRead(ctx, orgId, user._id, args.customerId, Date.now());
+    return null;
+  },
+});
+
+// "Mark as unread" on ONE conversation, the Inbox row menu (P21, Nudge
+// 2a94bb92). Sets inboxReads.unreadAt, which every unread reader checks AHEAD
+// of the read floor; readAt is left alone, and any read path clears the mark.
+// Per person, like the read stamp: marking a conversation unread for myself
+// changes nobody else's Inbox.
+export const markConversationUnread = mutation({
+  args: { customerId: v.id("customers") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { user, orgId } = await requireOrg(ctx);
+    const customer = await ctx.db.get(args.customerId);
+    // The markConversationRead reason: nothing written for a customer being
+    // deleted would outlive the sweep.
+    if (!customer || customer.orgId !== orgId || isDeleting(customer)) return null;
     const existing = await ctx.db
       .query("inboxReads")
       .withIndex("by_org_user_customer", (q) =>
@@ -962,14 +1054,16 @@ export const markConversationRead = mutation({
       )
       .unique();
     if (existing) {
-      if (existing.readAt >= now) return null;
-      await ctx.db.patch(existing._id, { readAt: now });
+      if (existing.unreadAt === undefined) {
+        await ctx.db.patch(existing._id, { unreadAt: Date.now() });
+      }
     } else {
       await ctx.db.insert("inboxReads", {
         orgId,
         userId: user._id,
         customerId: args.customerId,
-        readAt: now,
+        readAt: 0,
+        unreadAt: Date.now(),
       });
     }
     return null;
@@ -997,30 +1091,25 @@ export const markAllConversationsRead = mutation({
         q.eq("orgId", orgId).gt("thread.lastInboundAt", readFloor),
       )
       .take(UNSEEN_CAP);
+    const forced = await forcedUnreadCustomers(ctx, orgId, user._id);
     for (const customer of candidates) {
       if (customer.mutedAt) continue;
-      const summary = { lastInboundAt: customer.thread?.lastInboundAt ?? 0 };
-      const existing = await ctx.db
-        .query("inboxReads")
-        .withIndex("by_org_user_customer", (q) =>
-          q
-            .eq("orgId", orgId)
-            .eq("userId", user._id)
-            .eq("customerId", customer._id),
-        )
-        .unique();
-      if (existing) {
-        // Already read (and so not in the unseen set): leave the stamp alone.
-        if (existing.readAt >= summary.lastInboundAt) continue;
-        await ctx.db.patch(existing._id, { readAt: now });
-      } else {
-        await ctx.db.insert("inboxReads", {
-          orgId,
-          userId: user._id,
-          customerId: customer._id,
-          readAt: now,
-        });
+      const lastInboundAt = customer.thread?.lastInboundAt ?? 0;
+      // Already read (and so not in the unseen set) and not marked unread:
+      // leave the stamp alone.
+      if (
+        !forced.has(customer._id) &&
+        (await inboxReadAt(ctx, orgId, user._id, customer._id)) >= lastInboundAt
+      ) {
+        continue;
       }
+      forced.delete(customer._id);
+      await stampConversationRead(ctx, orgId, user._id, customer._id, now);
+    }
+    // Marked-unread conversations the range above never reaches (below the
+    // floor): cleared too, or "all" would leave them lit.
+    for (const customerId of forced) {
+      await stampConversationRead(ctx, orgId, user._id, customerId, now);
     }
     return null;
   },
@@ -1152,7 +1241,8 @@ async function inboxReader(ctx: QueryCtx) {
     .withIndex("by_org_user", (q) => q.eq("orgId", orgId).eq("userId", user._id))
     .collect();
   const pinned = new Set(pins.map((p) => p.customerId as string));
-  return { user, orgId, readFloor, pinned, pins };
+  const forcedUnread = await forcedUnreadCustomers(ctx, orgId, user._id);
+  return { user, orgId, readFloor, pinned, pins, forcedUnread };
 }
 
 // A customer's Inbox row, or null when they have no conversation, are muted
@@ -1171,10 +1261,12 @@ async function conversationRowOf(
   // conversation nobody ever opened is only new if it moved after the
   // baseline. The floor test is free and short-circuits the point lookup,
   // so only rows that clear it cost a read.
+  // Marked unread by hand wins over the floor and the stamp alike.
   const unseen =
-    thread.lastInboundAt > reader.readFloor &&
-    thread.lastInboundAt >
-      (await inboxReadAt(ctx, reader.orgId, reader.user._id, customer._id));
+    reader.forcedUnread.has(customer._id) ||
+    (thread.lastInboundAt > reader.readFloor &&
+      thread.lastInboundAt >
+        (await inboxReadAt(ctx, reader.orgId, reader.user._id, customer._id)));
   return {
     customerId: customer._id,
     name: `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
@@ -1248,6 +1340,21 @@ export const inboxPage = query({
       if (view === "unread" && !row.unseen) continue;
       page.push(row);
     }
+    // Conversations marked unread by hand whose newest inbound sits at or
+    // below the floor: the range above ends at the floor and never reaches
+    // them. Below the floor is below every row the range returns, so they
+    // join the LAST page and the order holds.
+    if (view === "unread" && result.isDone) {
+      const below: ConversationRow[] = [];
+      for (const customerId of reader.forcedUnread) {
+        const customer = await ctx.db.get(customerId);
+        if (!customer || !belowFloor(customer, reader.readFloor)) continue;
+        const row = await conversationRowOf(ctx, reader, customer);
+        if (row) below.push(row);
+      }
+      below.sort((x, y) => y.lastInboundAt - x.lastInboundAt || y.lastAt - x.lastAt);
+      page.push(...below);
+    }
     return { ...result, page };
   },
 });
@@ -1269,8 +1376,19 @@ export const inboxCounts = query({
     let unread = 0;
     for (const customer of candidates.slice(0, UNSEEN_CAP)) {
       if (customer.mutedAt || isDeleting(customer)) continue;
+      if (reader.forcedUnread.has(customer._id)) {
+        unread += 1;
+        continue;
+      }
       const lastInboundAt = customer.thread?.lastInboundAt ?? 0;
       if (lastInboundAt > (await inboxReadAt(ctx, reader.orgId, reader.user._id, customer._id))) {
+        unread += 1;
+      }
+    }
+    // Marked unread below the floor: in the Unread view, so in its count.
+    for (const customerId of reader.forcedUnread) {
+      const customer = await ctx.db.get(customerId);
+      if (listable(customer, reader.orgId) && belowFloor(customer, reader.readFloor)) {
         unread += 1;
       }
     }

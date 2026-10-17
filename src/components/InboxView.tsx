@@ -6,7 +6,13 @@
 // not a separate tab (ported from Nudge's InboxView).
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
+import {
+  optimisticallyUpdateValueInPaginatedQuery,
+  useMutation,
+  usePaginatedQuery,
+  useQuery,
+} from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
@@ -20,6 +26,7 @@ import { FeedIcon, type FeedIconType } from "./FeedIcon";
 import { RowMenu } from "./RowMenu";
 import { HoverTip } from "./HoverTip";
 import { filterPillClass } from "./filterPill";
+import { ContextMenu, MenuIcon, useContextMenu, type ContextMenuItem } from "./ContextMenu";
 
 // Which slice of the list the chips are showing. Persisted per browser under
 // this key; the .v1 suffix is the escape hatch if the shape ever changes.
@@ -27,6 +34,8 @@ type InboxFilter = "all" | "unread" | "pinned";
 const VIEW_STORAGE_KEY = "randevu.inbox.view.v1";
 // How many conversations a page of the Inbox asks for (P13, Nudge's 50).
 const INBOX_PAGE = 50;
+// One Inbox row as the server sends it (messages.conversationRow).
+type ConversationRow = FunctionReturnType<typeof api.messages.inboxSearch>[number];
 
 // A line at the foot of the list that asks for the next page when it scrolls
 // into view (300px early, so the next rows are there before the reader is).
@@ -147,9 +156,9 @@ export function InboxView({
   ) => void;
 }) {
   const { t } = useLanguage();
-  const setInboxPin = useMutation(api.messages.setInboxPin);
   const markConversationRead = useMutation(api.messages.markConversationRead);
   const markAllRead = useMutation(api.messages.markAllConversationsRead);
+  const setMuted = useMutation(api.customers.setMuted);
   // The header box also finds any customer (P13): the Inbox lists only
   // people with a conversation, and the one you want may have none.
   const jumpToCustomer = useCallback(
@@ -180,6 +189,28 @@ export function InboxView({
     api.messages.inboxPage,
     search.active ? "skip" : { view },
     { initialNumItems: INBOX_PAGE },
+  );
+  // Optimistic, the pin and the unread mark both: the dot should change on
+  // the click, not a round trip later. Only the list as it is showing now is
+  // patched; the server's answer replaces it a moment after.
+  const patchRow = (
+    localStore: Parameters<typeof optimisticallyUpdateValueInPaginatedQuery>[0],
+    customerId: Id<"customers">,
+    change: { pinned?: boolean; unseen?: boolean },
+  ) =>
+    optimisticallyUpdateValueInPaginatedQuery(
+      localStore,
+      api.messages.inboxPage,
+      { view },
+      (row) => (row.customerId === customerId ? { ...row, ...change } : row),
+    );
+  const setInboxPin = useMutation(api.messages.setInboxPin).withOptimisticUpdate(
+    (localStore, args) => patchRow(localStore, args.customerId, { pinned: args.pinned }),
+  );
+  const markConversationUnread = useMutation(
+    api.messages.markConversationUnread,
+  ).withOptimisticUpdate((localStore, args) =>
+    patchRow(localStore, args.customerId, { unseen: true }),
   );
   const searched = useQuery(
     api.messages.inboxSearch,
@@ -242,6 +273,84 @@ export function InboxView({
     selected && !inList ? { customerId: selected } : "skip",
   );
   const active = inList ?? openedRow ?? undefined;
+
+  // A row opens the customer's record (the 2026-08-22 trial, below), read on
+  // the way out: nothing is left mounted here to stamp it afterwards. The
+  // record opens on the channel the row was showing, and ON the mail or call
+  // it was quoting, so a click lands where the preview pointed.
+  const openRow = (c: ConversationRow) => {
+    void markConversationRead({ customerId: c.customerId }).catch(() => {});
+    onOpenContact(c.customerId, c.lastChannel, c.lastId);
+  };
+
+  // The row menu, WhatsApp Web's chat-row menu cut to what a salon needs
+  // (P21, Nudge 2a94bb92): right-click a row (opens at the cursor) or its
+  // chevron (opens under it). ONE menu for the list, aimed at whichever row
+  // asked. Left out with Nudge's reasons: archive, block, clear and delete
+  // (destructive or meaningless here), favourites (the pin is that),
+  // add to contacts (everyone here is one).
+  const rowMenu = useContextMenu<Id<"customers">>(4);
+  // The menu acts on the row as it is NOW (a reply may have landed, or the
+  // pin flipped, since it opened).
+  const menuRow = rowMenu.target
+    ? (shown.find((c) => c.customerId === rowMenu.target) ?? null)
+    : null;
+  const markRowUnread = (c: ConversationRow) => {
+    // WhatsApp closes the chat you mark unread, and an open pane re-stamps
+    // what it shows, which would undo this a moment later.
+    if (selected === c.customerId) setSelected(null);
+    void markConversationUnread({ customerId: c.customerId }).catch(() => {});
+  };
+  const menuItems: ContextMenuItem[] = menuRow
+    ? [
+        {
+          key: "open",
+          icon: <MenuIcon name="contact" />,
+          label: t("inbox.openContact"),
+          onSelect: () => openRow(menuRow),
+        },
+        {
+          key: "pin",
+          icon: <MenuIcon name={menuRow.pinned ? "unpin" : "pin"} />,
+          label: menuRow.pinned ? t("inbox.menuUnpin") : t("inbox.menuPin"),
+          onSelect: () =>
+            void setInboxPin({
+              customerId: menuRow.customerId,
+              pinned: !menuRow.pinned,
+            }).catch(() => {}),
+        },
+        menuRow.unseen
+          ? {
+              key: "read",
+              icon: <MenuIcon name="read" />,
+              label: t("inbox.markRead"),
+              onSelect: () =>
+                void markConversationRead({ customerId: menuRow.customerId }).catch(
+                  () => {},
+                ),
+            }
+          : {
+              key: "unread",
+              icon: <MenuIcon name="unread" />,
+              label: t("inbox.markUnread"),
+              onSelect: () => markRowUnread(menuRow),
+            },
+        // Mute only, never Unmute: a muted customer leaves the Inbox, so no
+        // row here can be muted already. The record's switch brings them back.
+        {
+          key: "mute",
+          icon: <MenuIcon name="mute" />,
+          label: t("inbox.menuMute"),
+          onSelect: () =>
+            void setMuted({ customerId: menuRow.customerId, muted: true }).catch(
+              () => {},
+            ),
+        },
+      ]
+    : [];
+  // The row that wears the lit fill: the one open beside the list, else the
+  // one whose menu is open, so the reader can see what the menu is about.
+  const litId = selected ?? rowMenu.target;
 
   return (
     // h-full, not flex-1: `main` in the shell is a block, so there's no flex
@@ -377,10 +486,11 @@ export function InboxView({
               // edge and read as a double rule.
               <ul className="[&>li:last-child>div]:after:hidden">
                 {shown.map((c, i) => {
-                  const isActive = c.customerId === selected;
+                  const isActive = c.customerId === litId;
+                  const menuOpenHere = rowMenu.target === c.customerId;
                   // The row ABOVE the lit one drops its divider too, so the
                   // fill has no rule on either side (Nudge efc036f1).
-                  const beforeActive = shown[i + 1]?.customerId === selected;
+                  const beforeActive = !!litId && shown[i + 1]?.customerId === litId;
                   // TRIAL (2026-08-22): a row opens the CONTACT PAGE instead
                   // of filling the pane beside it. The inbox and the contact
                   // page were two master-detail screens sharing a right half,
@@ -391,25 +501,7 @@ export function InboxView({
                   // The right pane is left standing on purpose. If this reads
                   // worse than it sounds, putting the split back is restoring
                   // three lines, not rebuilding a screen.
-                  const open = () => {
-                    // Read before we leave: nothing is left mounted here to
-                    // stamp it afterwards.
-                    void markConversationRead({ customerId: c.customerId }).catch(
-                      () => {},
-                    );
-                    // The record opens on the channel this row was showing.
-                    // The old split pane did the same thing to its own filter
-                    // (`setFilter(next ?? c.lastChannel)`); losing it when the
-                    // row started navigating meant clicking a WhatsApp row
-                    // landed on the mixed feed, where you had to find that
-                    // same thread again by hand.
-                    // ...and ON the mail or call the row was previewing. The
-                    // channel alone lands on an index for email and calls, so
-                    // a row quoting one line of six put the reader back in
-                    // front of the recognition problem their click was meant
-                    // to solve.
-                    onOpenContact(c.customerId, c.lastChannel, c.lastId);
-                  };
+                  const open = () => openRow(c);
                   return (
                     <li key={c.customerId}>
                       {/* A div, not a button: it holds the pin toggle, and a
@@ -423,6 +515,12 @@ export function InboxView({
                             e.preventDefault();
                             open();
                           }
+                        }}
+                        // Right-click: the row menu at the cursor instead of
+                        // the browser's. It never opens the conversation.
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          rowMenu.openAt(c.customerId, e.clientX, e.clientY);
                         }}
                         // The lit row is a NEUTRAL inset, rounded fill, not
                         // a left bar (P21, Nudge b6fcaa09): WhatsApp Web's
@@ -657,6 +755,29 @@ export function InboxView({
                           >
                             {previewOf(c, t)}
                           </span>
+                          {/* The row menu's chevron, where WhatsApp Web puts
+                              it: the end of the preview line, in on hover,
+                              kept while its own menu is open, always shown on
+                              touch (no hover, no right-click there). A slot of
+                              fixed width, so the preview never reflows when it
+                              appears. */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (menuOpenHere) rowMenu.close();
+                              else rowMenu.openUnder(c.customerId, e.currentTarget);
+                            }}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            aria-haspopup="menu"
+                            aria-expanded={menuOpenHere}
+                            aria-label={t("inbox.rowMenu", { name: c.name || c.phone })}
+                            className={`-my-0.5 flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded text-[var(--muted-strong)] outline-none transition-opacity hover:text-[var(--foreground)] focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--accent)] [@media(hover:none)]:opacity-100 ${
+                              menuOpenHere ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                            }`}
+                          >
+                            <MenuIcon name="chevron" />
+                          </button>
                         </div>
                         </div>
                       </div>
@@ -664,6 +785,16 @@ export function InboxView({
                   );
                 })}
               </ul>
+            )}
+            {menuRow && (
+              <ContextMenu
+                panelRef={rowMenu.panelRef}
+                pos={rowMenu.pos}
+                open={rowMenu.target !== null}
+                onClose={rowMenu.close}
+                label={t("inbox.rowMenu", { name: menuRow.name || menuRow.phone })}
+                items={menuItems}
+              />
             )}
             {/* The next page, asked for as the end of the list comes into
                 view. A search returns its matches whole and has no pages. */}
