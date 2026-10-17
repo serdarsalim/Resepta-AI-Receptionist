@@ -534,6 +534,11 @@ export default defineSchema({
     // in-person location). Rides the [address] token and the LOCATION of every
     // calendar invite. Unset = no address said anywhere.
     address: v.optional(v.string()),
+    // The business's OWN terms and privacy policy pages (P29, Nudge
+    // 3afd3e60). The booking page names them above its Book button, with
+    // links; unset = no such line. http(s) only (orgs.update).
+    termsUrl: v.optional(v.string()),
+    privacyUrl: v.optional(v.string()),
     // LEGACY (2026-08-19). The [phone] token resolves at send time from the
     // enabled voice agent's inbound line (lib/publicPhone) — the settings
     // field that wrote this duplicated that picker and went. Kept because a

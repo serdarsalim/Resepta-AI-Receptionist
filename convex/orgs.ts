@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { requireOrg, requireOwner } from "./lib/orgAuth";
@@ -137,6 +137,8 @@ export const current = query({
       bookingUrl: v.optional(v.string()),
       publicPhone: v.optional(v.string()),
       address: v.optional(v.string()),
+      termsUrl: v.optional(v.string()),
+      privacyUrl: v.optional(v.string()),
     }),
     me: v.object({
       name: v.optional(v.string()),
@@ -279,6 +281,8 @@ export const current = query({
         autoReplyText: org.autoReplyText,
         bookingUrl: org.bookingUrl,
         address: org.address,
+        termsUrl: org.termsUrl,
+        privacyUrl: org.privacyUrl,
         // Resolved, not stored: the enabled voice agent's inbound line, so the
         // reminder preview shows the same [phone] the send paths print.
         publicPhone: await resolvePublicPhone(ctx, org),
@@ -370,6 +374,11 @@ export const update = mutation({
     autoReplyText: v.optional(v.string()),
     bookingUrl: v.optional(v.string()),
     address: v.optional(v.string()),
+    // The business's own terms / privacy pages for the booking page's line
+    // above Book (P29). "" clears; anything else must be an http(s) address,
+    // refused as `invalid-url` so the field can say so.
+    termsUrl: v.optional(v.string()),
+    privacyUrl: v.optional(v.string()),
     priceDecimals: v.optional(v.boolean()),
     pickupEnabled: v.optional(v.boolean()),
     deliveryEnabled: v.optional(v.boolean()),
@@ -585,6 +594,8 @@ export const update = mutation({
       // One line on an invite and in a message: newlines folded, capped.
       patch.address = args.address.replace(/\s+/g, " ").trim().slice(0, 200) || undefined;
     }
+    if (args.termsUrl !== undefined) patch.termsUrl = cleanLegalUrl(args.termsUrl);
+    if (args.privacyUrl !== undefined) patch.privacyUrl = cleanLegalUrl(args.privacyUrl);
     if (args.bookingUrl !== undefined) {
       const url = args.bookingUrl.trim();
       // Stored only if it is a URL a customer could actually tap. A malformed
@@ -1070,3 +1081,21 @@ export const updateTemplate = mutation({
     return null;
   },
 });
+
+// A terms or privacy page address as the booking page will link it: empty
+// clears, an http(s) URL is kept as the URL parser writes it, anything else
+// is refused rather than stored as a link a customer taps into nothing.
+function cleanLegalUrl(raw: string): string | undefined {
+  const text = raw.trim();
+  if (!text) return undefined;
+  let url: URL;
+  try {
+    url = new URL(text);
+  } catch {
+    throw new ConvexError("invalid-url");
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new ConvexError("invalid-url");
+  }
+  return url.toString().slice(0, 500);
+}

@@ -26,6 +26,7 @@ import {
   createTranslator,
   isLanguage,
   type Language,
+  type Translator,
 } from "@/lib/i18n";
 import { PhoneInput } from "@/components/PhoneField";
 import { formatMoney } from "@/lib/money";
@@ -1110,6 +1111,14 @@ export default function BookingPage({
               className="resize-none"
             />
           </div>
+          {/* The business's own terms, as cal.com names its own above
+              Confirm (Nudge 3afd3e60). Only when the business set a link. */}
+          <ConsentLine
+            t={t}
+            name={page.orgName}
+            termsUrl={page.termsUrl}
+            privacyUrl={page.privacyUrl}
+          />
           {error && error !== "slot-taken" && (
             <p className="text-sm text-red-600 dark:text-red-400">
               {error === "bad-phone"
@@ -1130,6 +1139,54 @@ export default function BookingPage({
       )}
 
     </Shell>
+  );
+}
+
+// "By continuing you agree to Bella's Terms and acknowledge their Privacy
+// Policy", the two names as links. The sentence comes whole from the
+// dictionary so each language keeps its own word order; the link words are
+// cut in where {terms} and {privacy} sit.
+function ConsentLine({
+  t,
+  name,
+  termsUrl,
+  privacyUrl,
+}: {
+  t: Translator;
+  name: string;
+  termsUrl?: string;
+  privacyUrl?: string;
+}) {
+  if (!termsUrl && !privacyUrl) return null;
+  const TERMS = "\u0000terms\u0000";
+  const PRIVACY = "\u0000privacy\u0000";
+  const sentence =
+    termsUrl && privacyUrl
+      ? t("booking.consentBoth", { name, terms: TERMS, privacy: PRIVACY })
+      : termsUrl
+        ? t("booking.consentTerms", { name, terms: TERMS })
+        : t("booking.consentPrivacy", { name, privacy: PRIVACY });
+  const link = (href: string, label: string) => (
+    <a
+      key={label}
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-[var(--foreground)] underline underline-offset-2"
+    >
+      {label}
+    </a>
+  );
+  return (
+    <p className="text-xs text-[var(--muted)]">
+      {sentence.split(/(\u0000terms\u0000|\u0000privacy\u0000)/).map((part, i) =>
+        part === TERMS && termsUrl
+          ? link(termsUrl, t("booking.termsLink"))
+          : part === PRIVACY && privacyUrl
+            ? link(privacyUrl, t("booking.privacyLink"))
+            : <span key={i}>{part}</span>,
+      )}
+    </p>
   );
 }
 

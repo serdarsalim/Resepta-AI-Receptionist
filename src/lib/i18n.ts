@@ -1711,6 +1711,30 @@ const dictionary = {
     de: "Dazu passt nichts.",
   },
   "booking.note": { tr: "Not", en: "Note", de: "Notiz" },
+  // The line above Book when the business set its own terms or privacy
+  // page (P29, cal.com's line). {terms} and {privacy} become links; "by
+  // continuing" so it reads right for an order as well as a booking.
+  "booking.consentBoth": {
+    tr: "Devam ederek {name} işletmesinin {terms} metnini kabul etmiş ve {privacy} metnini okumuş olursunuz.",
+    en: "By continuing you agree to {name}'s {terms} and acknowledge their {privacy}.",
+    de: "Mit dem Absenden stimmen Sie den {terms} von {name} zu und bestätigen, die {privacy} gelesen zu haben.",
+  },
+  "booking.consentTerms": {
+    tr: "Devam ederek {name} işletmesinin {terms} metnini kabul etmiş olursunuz.",
+    en: "By continuing you agree to {name}'s {terms}.",
+    de: "Mit dem Absenden stimmen Sie den {terms} von {name} zu.",
+  },
+  "booking.consentPrivacy": {
+    tr: "Devam ederek {name} işletmesinin {privacy} metnini okumuş olursunuz.",
+    en: "By continuing you acknowledge {name}'s {privacy}.",
+    de: "Mit dem Absenden bestätigen Sie, die {privacy} von {name} gelesen zu haben.",
+  },
+  "booking.termsLink": { tr: "Kullanım Koşulları", en: "Terms", de: "AGB" },
+  "booking.privacyLink": {
+    tr: "Gizlilik Politikası",
+    en: "Privacy Policy",
+    de: "Datenschutzerklärung",
+  },
   "booking.notePlaceholder": {
     tr: "Bilmemiz gereken bir şey var mı?",
     en: "Anything we should know?",
@@ -2488,10 +2512,37 @@ const dictionary = {
   "vars.staff": { tr: "Personel", en: "Staff", de: "Mitarbeiter" },
   "vars.address": { tr: "İşletme adresi", en: "Business address", de: "Adresse des Betriebs" },
   "settings.address": { tr: "Adres", en: "Address", de: "Adresse" },
+  // The business's own terms and privacy pages, linked above the booking
+  // page's Book button (P29). Two fields on one row: they answer one question.
+  "settings.legalLinks": {
+    tr: "Koşullar ve gizlilik",
+    en: "Terms and privacy",
+    de: "AGB und Datenschutz",
+  },
+  "settings.legalLinksHint": {
+    tr: "Kendi kullanım koşulları ve gizlilik politikası sayfalarınızın bağlantıları. Randevu sayfası, onay düğmesinin üstünde randevu alan kişinin bunları kabul ettiğini bağlantılarıyla yazar. Boş bırakırsanız böyle bir satır çıkmaz.",
+    en: "Links to your own terms and privacy policy pages. The booking page says, above its Book button, that booking agrees to them, with the links. Leave both empty and no such line shows.",
+    de: "Links zu Ihren eigenen AGB und Ihrer Datenschutzerklärung. Die Buchungsseite nennt sie über dem Buchen-Knopf, mit Links. Leer gelassen erscheint keine solche Zeile.",
+  },
+  "settings.termsUrl": {
+    tr: "Koşullar sayfası bağlantısı",
+    en: "Terms page link",
+    de: "Link zu den AGB",
+  },
+  "settings.privacyUrl": {
+    tr: "Gizlilik sayfası bağlantısı",
+    en: "Privacy page link",
+    de: "Link zum Datenschutz",
+  },
+  "settings.invalidUrl": {
+    tr: "Bu bir web adresine benzemiyor (https:// ile başlamalı).",
+    en: "That doesn't look like a web address (it should start with https://).",
+    de: "Das sieht nicht nach einer Webadresse aus (sie sollte mit https:// beginnen).",
+  },
   "settings.addressHint": {
-    tr: "Takvim davetlerinde konum olarak görünür ve mesajlarda [address] ile kullanılır.",
-    en: "Shown as the location on calendar invites, and in messages through [address].",
-    de: "Erscheint als Ort in Kalendereinladungen und in Nachrichten über [address].",
+    tr: "Takvim davetlerinde konum olarak, randevu sayfanızda ve mesajlarda [address] ile görünür.",
+    en: "Shown as the location on calendar invites, on your booking page, and in messages through [address].",
+    de: "Erscheint als Ort in Kalendereinladungen, auf Ihrer Buchungsseite und in Nachrichten über [address].",
   },
   "vars.bookingLink": {
     tr: "Randevu linki",

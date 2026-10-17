@@ -342,6 +342,10 @@ export const page = query({
       // orgs.address (P16), published because it is where the customer is
       // going: the booking page names it beside the time (P29).
       address: v.optional(v.string()),
+      // The business's own terms and privacy pages (P29): the line above Book
+      // links them when set.
+      termsUrl: v.optional(v.string()),
+      privacyUrl: v.optional(v.string()),
     }),
     v.null(),
   ),
@@ -386,6 +390,8 @@ export const page = query({
       },
       minNoticeHours: minNoticeHoursOf(org),
       ...(org.address ? { address: org.address } : {}),
+      ...(org.termsUrl ? { termsUrl: org.termsUrl } : {}),
+      ...(org.privacyUrl ? { privacyUrl: org.privacyUrl } : {}),
     };
   },
 });

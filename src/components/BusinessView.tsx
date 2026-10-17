@@ -92,6 +92,7 @@ const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
   { card: "general", key: "settings.language" },
   { card: "general", key: "settings.industry" },
   { card: "general", key: "settings.bookingPage" },
+  { card: "general", key: "settings.legalLinks" },
   { card: "general", key: "settings.minNotice" },
   { card: "general", key: "settings.currency" },
   { card: "general", key: "settings.priceDecimals" },
@@ -345,6 +346,63 @@ function BookingRow() {
             </>
           )}
         </div>
+    </>
+  );
+}
+
+// The business's own terms and privacy pages, named with links above the
+// booking page's Book button (P29, Nudge 3afd3e60). Only while the page is on:
+// it is a fact about that page and nothing else reads it. Two fields BESIDE
+// each other on one row, since they answer one question; each saves on blur,
+// and a refusal (not an http(s) address) says so on the line under them and
+// puts the stored value back.
+function LegalLinksRow() {
+  const { t } = useLanguage();
+  const settings = useQuery(api.orgs.current, {});
+  const update = useMutation(api.orgs.update);
+  const [error, setError] = useState(false);
+  const [tick, setTick] = useState(0);
+  if (!settings?.org.bookingEnabled) return null;
+  const save = (field: "termsUrl" | "privacyUrl", raw: string) => {
+    const next = raw.trim();
+    if (next === (settings.org[field] ?? "")) return;
+    setError(false);
+    void update({ [field]: next }).catch((err: unknown) => {
+      if (String(err).includes("invalid-url")) setError(true);
+      setTick((n) => n + 1);
+    });
+  };
+  return (
+    <>
+      <RowLabel label={t("settings.legalLinks")} hint={t("settings.legalLinksHint")} />
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <input
+          key={`terms-${tick}-${settings.org.termsUrl ?? ""}`}
+          type="url"
+          inputMode="url"
+          className={FIELD}
+          defaultValue={settings.org.termsUrl ?? ""}
+          placeholder={t("settings.termsUrl")}
+          aria-label={t("settings.termsUrl")}
+          onBlur={(e) => save("termsUrl", e.target.value)}
+        />
+        <input
+          key={`privacy-${tick}-${settings.org.privacyUrl ?? ""}`}
+          type="url"
+          inputMode="url"
+          className={FIELD}
+          defaultValue={settings.org.privacyUrl ?? ""}
+          placeholder={t("settings.privacyUrl")}
+          aria-label={t("settings.privacyUrl")}
+          onBlur={(e) => save("privacyUrl", e.target.value)}
+        />
+      </div>
+      {error && (
+        <>
+          <span />
+          <p className="text-sm text-red-600 dark:text-red-400">{t("settings.invalidUrl")}</p>
+        </>
+      )}
     </>
   );
 }
@@ -848,6 +906,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
             hint={t("settings.bookingPageHint")}
           />
           <BookingRow />
+          <LegalLinksRow />
           {/* The minimum notice (lib/minNotice), under the booking page
               because that is the door most customers meet it at. Shown with
               the page off too: the phone agent and the WhatsApp assistant obey
