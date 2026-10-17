@@ -67,6 +67,7 @@ import { buttonClass } from "./Control";
 import { EditorSaveBar } from "./EditorSaveBar";
 import { ViewOnlyPill } from "./ViewOnlyPill";
 import { Sheet } from "./Sheet";
+import { useHeaderTrail } from "@/lib/headerTrail";
 
 // Nudge settings conventions: label-left/input-right on the shared RowLabel
 // grid (ROW_GRID, defined next to RowLabel itself), autosave on blur/change,
@@ -1470,8 +1471,8 @@ function RulesCard({
     const url = new URL(window.location.href);
     if (next) url.searchParams.set("rule", next);
     else url.searchParams.delete("rule");
-    // replaceState, not push: a drill-in is not history. The back button in
-    // the header is the way out, and filling the browser stack with every
+    // replaceState, not push: a drill-in is not history. The title bar's
+    // breadcrumb is the way out, and filling the browser stack with every
     // rule glanced at makes Back stop meaning "the page before this one".
     window.history.replaceState(null, "", url);
   };
@@ -1600,6 +1601,11 @@ function RulesCard({
   useEffect(() => {
     if (openId && rules.length > 0 && !opened) openRule(null);
   }, [openId, opened, rules.length]);
+  // An opened rule names itself in the title bar, "Messages › Reminder", and
+  // the breadcrumb is the way back to the list (P25).
+  useHeaderTrail(
+    opened ? { title: ruleName(opened.trigger), back: () => openRule(null) } : null,
+  );
   // Re-runs ensureTemplate for a rule restored from the URL, which never went
   // through open() — a refresh inside a rule that had no wording row yet
   // would otherwise land on an editor with nothing to bind to.
@@ -1871,45 +1877,13 @@ function RulesCard({
 
     return (
       <Card disabled={!isOwner}>
-        {/* Back left, title centred. The button PRINTS its label rather than
-            hiding it in a tooltip: a bare glyph is only obvious to someone who
-            already knows the way out, and this page is reached by drilling in
-            from a list you need to get back to. */}
-        {/* From sm, three columns with equal outer tracks, so the title is
-            centred on the ROW rather than on whatever is left over beside the
-            button — which matters now that the button's width follows a
-            translated word ("Back" / "Geri" / "Zurück"). Below sm the title
-            takes what Back and the save bar leave (auto | 1fr | auto),
-            centred in that: equal outer tracks holding Discard and Save in
-            Turkish or German pushed the row past a phone's width. */}
-        <div className="mb-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[1fr_auto_1fr]">
-          <button
-            type="button"
-            onClick={() => openRule(null)}
-            title={t("settings.rulesBack")}
-            // The scale's sm, the height of the save bar across the row.
-            className={`${buttonClass("ghost", "sm")} w-fit`}
-          >
-            {/* A chevron, not "←". The long-shafted arrow read as a stray
-                line of punctuation at the size the row needs, and it was
-                drawn in muted grey — the way back should be the most
-                findable thing on a page you opened by drilling in. */}
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d="M15 5l-7 7 7 7" />
-            </svg>
-            {t("common.back")}
-          </button>
-          <h2 className="min-w-0 truncate text-center text-lg font-semibold">
+        {/* The card's own title line: the rule's name left, the save bar right.
+            The way back is the title bar's breadcrumb (P25), which also names
+            the rule; this line keeps the name because it is the card's title,
+            and holds its height (min-h-8) so the save bar arriving on the
+            first keystroke moves nothing. */}
+        <div className="mb-3 flex min-h-8 items-center justify-between gap-2">
+          <h2 className="min-w-0 truncate text-sm font-semibold">
             {ruleName(opened.trigger)}
           </h2>
           {/* Save and Discard live in the header rather than under the body:

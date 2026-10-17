@@ -177,7 +177,7 @@ export function VoiceView() {
 
   // replaceState, not push: opening an agent from the list is a drill-in, and
   // filling the back stack with every agent glanced at makes Back stop meaning
-  // "the page before this one". The header's own back arrow is the way out.
+  // "the page before this one". The title bar's breadcrumb is the way out.
   const openAgent = (next: string | null) => {
     setAgentId(next);
     const url = new URL(window.location.href);

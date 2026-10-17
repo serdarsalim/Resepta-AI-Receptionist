@@ -982,7 +982,6 @@ const dictionary = {
     en: "No bulk actions yet.",
     de: "Noch keine Sammelaktionen.",
   },
-  "bulk.backToRuns": { tr: "Geri", en: "Back", de: "Zurück" },
   "bulk.statusRunning": { tr: "Sürüyor", en: "Running", de: "Läuft" },
   "bulk.statusPaused": { tr: "Duraklatıldı", en: "Paused", de: "Pausiert" },
   "bulk.statusCancelled": { tr: "Durduruldu", en: "Stopped", de: "Gestoppt" },
@@ -2392,11 +2391,6 @@ const dictionary = {
   // comes from one customer's record and is blank for anyone who never
   // answered it. One flat list hid that difference.
   "settings.ruleOff": { tr: "Kapalı", en: "Off", de: "Aus" },
-  "settings.rulesBack": {
-    tr: "Tüm kurallar",
-    en: "All rules",
-    de: "Alle Regeln",
-  },
   "editor.varDefaults": {
     tr: "Boş kalırsa ne yazsın",
     en: "When empty, print…",

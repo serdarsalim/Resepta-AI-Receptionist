@@ -18,6 +18,7 @@ import { SegmentedControl } from "./SegmentedControl";
 import { PromptEditor } from "./PromptEditor";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
+import { useHeaderTrail } from "@/lib/headerTrail";
 import {
   VoiceVariablesEditor,
   builtinVoiceVariables,
@@ -227,6 +228,9 @@ export function VoiceAgentPage({
   const [confirmDelete, confirmDeleteDialog] = useConfirm();
 
   const [detail, setDetail] = useState<Detail | null>(null);
+  // The title bar names the agent and leads back to the list (P25): this page
+  // draws no back button of its own.
+  useHeaderTrail({ title: detail?.name ?? t("settings.voiceAgent"), back: onBack });
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [begin, setBegin] = useState("");
@@ -576,41 +580,21 @@ export function VoiceAgentPage({
           six columns and the prompt is prose. At the list's width the grid
           horizontally scrolled on every visit. */}
       <div className="mx-auto max-w-4xl space-y-4 page-stack">
-        {/* The header carries the way back, the agent's name, and every action
-            that applies to the whole agent. It stays put while the prompt
+        {/* The header carries the agent's name, which is where it is renamed,
+            and every action that applies to the whole agent. The way back is
+            the title bar's breadcrumb (P25). It stays put while the prompt
             scrolls under it. */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <button
-            type="button"
-            onClick={onBack}
-            className="inline-flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-[var(--foreground)]"
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d="M19 12H5" />
-              <path d="m12 19-7-7 7-7" />
-            </svg>
-            {t("common.back")}
-          </button>
-          {/* Centred, not left-aligned: butted up against Back it read as the
-              button's second line rather than the name of the thing. */}
-          <h2 className="min-w-0 flex-1 text-center text-lg font-semibold">
+          {/* Left-aligned since Back moved to the title bar: centring was only
+              there to stop the name reading as Back's second line. */}
+          <h2 className="min-w-0 flex-1 text-lg font-semibold">
             {nameDraft === null ? (
               <button
                 type="button"
                 disabled={!detail || saving}
                 onClick={() => detail && setNameDraft(detail.name)}
                 title={t("voiceDetail.renameHint")}
-                className="max-w-full truncate rounded-lg px-2 py-0.5 hover:bg-[var(--muted-bg)] disabled:hover:bg-transparent"
+                className="-ml-2 max-w-full truncate rounded-lg px-2 py-0.5 hover:bg-[var(--muted-bg)] disabled:hover:bg-transparent"
               >
                 {detail?.name ?? t("settings.voiceAgent")}
               </button>
@@ -634,7 +618,7 @@ export function VoiceAgentPage({
                     load();
                   });
                 }}
-                className="w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-center text-lg font-semibold"
+                className="-ml-2 w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-lg font-semibold"
               />
             )}
           </h2>

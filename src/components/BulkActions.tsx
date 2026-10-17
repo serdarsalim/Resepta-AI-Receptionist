@@ -33,6 +33,7 @@ import { RowLabel } from "./RowLabel";
 import { Sheet } from "./Sheet";
 import { useMessageVariables, VariableInsertDropdown } from "./VariableInsertDropdown";
 import { TokenTextField, type TokenTextFieldHandle } from "./TokenTextField";
+import { useHeaderTrail } from "@/lib/headerTrail";
 
 export type BulkChannel = "email" | "whatsapp" | "call";
 
@@ -464,6 +465,13 @@ function RunDetail({
 }) {
   const { t, language } = useLanguage();
   const detail = useQuery(api.bulkRuns.detail, { runId });
+  // "Bulk › <run>" in the title bar, and the breadcrumb is the way back to
+  // the runs (P25). Customers is the tab, so the list's own name is given.
+  useHeaderTrail({
+    title: detail?.run.label ?? t("bulk.title"),
+    back: onBack,
+    backLabel: t("bulk.title"),
+  });
   // Which answers the list shows; empty is everyone. Several at once, the
   // way every filter here works (Nudge 2eeef0a7).
   const [answers, setAnswers] = useState<ReadonlySet<RunAnswer>>(new Set());
@@ -549,13 +557,6 @@ function RunDetail({
     <div className="space-y-3">
       {confirmDialog}
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={onBack}
-          className="h-8 px-1 text-sm text-[var(--muted-strong)] transition-colors hover:text-[var(--foreground)]"
-        >
-          ← {t("bulk.backToRuns")}
-        </button>
         <StatusPill status={run.status} held={run.heldUntil !== undefined} />
         {live && (
           <span className="ml-auto flex items-center gap-2">
