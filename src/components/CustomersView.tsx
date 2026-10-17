@@ -1,5 +1,6 @@
 "use client";
 
+import { customerHref, wantsNewTab } from "@/lib/customerLink";
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FunctionReturnType } from "convex/server";
@@ -254,6 +255,21 @@ export function CustomersView({
       void setAttention({ customerId: customer._id, cleared: true });
     }
     onOpenContact(customer._id);
+  };
+
+  // The new-tab half of a row click (lib/customerLink). A middle click
+  // arrives as auxclick only; a plain left click falls through to here too.
+  const openOrNewTab = (
+    event: { metaKey: boolean; ctrlKey: boolean; button?: number; preventDefault: () => void },
+    customer: Customer,
+  ) => {
+    if (wantsNewTab(event)) {
+      event.preventDefault();
+      if (me) window.open(customerHref(customer._id, me.org._id), "_blank", "noopener");
+      return;
+    }
+    if (event.button !== undefined && event.button !== 0) return;
+    openContact(customer);
   };
 
   const table = useTableState<string>(
@@ -680,7 +696,8 @@ export function CustomersView({
             <li
               key={customer._id}
               className="flex cursor-pointer items-center gap-3 px-4 py-3 text-sm transition-colors hover:bg-[var(--row-hover-bg)]"
-              onClick={() => openContact(customer)}
+              onClick={(event) => openOrNewTab(event, customer)}
+              onAuxClick={(event) => openOrNewTab(event, customer)}
             >
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5">
@@ -851,9 +868,12 @@ export function CustomersView({
                   <tr
                     key={customer._id}
                     tabIndex={0}
-                    onClick={() => openContact(customer)}
+                    // Cmd/ctrl-click or the middle button opens the record in a
+                    // new tab, like a link (P12); a plain click opens it here.
+                    onClick={(event) => openOrNewTab(event, customer)}
+                    onAuxClick={(event) => openOrNewTab(event, customer)}
                     onKeyDown={(event) => {
-                      if (event.key === "Enter") openContact(customer);
+                      if (event.key === "Enter") openOrNewTab(event, customer);
                     }}
                     className="cursor-pointer outline-none transition-colors hover:bg-[var(--row-hover-bg)] focus-visible:bg-[var(--row-hover-bg)]"
                   >

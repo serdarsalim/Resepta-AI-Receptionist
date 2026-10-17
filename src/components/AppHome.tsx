@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { AppShell, type TabId } from "@/components/AppShell";
@@ -81,6 +81,15 @@ export function AppHome() {
   // queries arrive in one consistent snapshot, so an effect fires a beat too
   // late and ContactView renders once against the wrong business first.
   const activeOrgId = useQuery(api.orgs.current, {})?.org._id;
+  const setActiveOrg = useMutation(api.users.setActiveOrg);
+  // A customer link opened in a fresh tab (P12; customerHref below): the
+  // customer to open once the right business is active. The link carries the
+  // business, because one person can work for several and a bare customer id
+  // asks whichever business is active about somebody it has never heard of.
+  const [pendingLink, setPendingLink] = useState<{
+    customerId: Id<"customers">;
+    orgId: string | null;
+  } | null>(null);
   const [selectionOrgId, setSelectionOrgId] = useState<Id<"orgs"> | null>(null);
   if (activeOrgId && activeOrgId !== selectionOrgId) {
     setSelectionOrgId(activeOrgId);
@@ -113,6 +122,45 @@ export function AppHome() {
   // rather than resetting to the calendar. Read after mount rather than
   // during the first render: initialising state from window during render is
   // a hydration mismatch.
+  // The customer half of a link, read once after mount like the tab.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const customer = params.get("customer");
+    if (customer) {
+      setPendingLink({ customerId: customer as Id<"customers">, orgId: params.get("org") });
+    }
+  }, []);
+  // Opened once its business is the active one; switched to first when the
+  // link names another business this person belongs to (setActiveOrg refuses
+  // one they do not, and the link then simply does not open).
+  useEffect(() => {
+    if (!pendingLink || !activeOrgId) return;
+    if (pendingLink.orgId && pendingLink.orgId !== activeOrgId) {
+      void setActiveOrg({ orgId: pendingLink.orgId as Id<"orgs"> }).catch(() =>
+        setPendingLink(null),
+      );
+      return;
+    }
+    setContactId(pendingLink.customerId);
+    setContactTab(tab);
+    setPendingLink(null);
+  }, [pendingLink, activeOrgId, setActiveOrg, tab]);
+  // The open record in the URL, so a refresh keeps it and the address bar is
+  // a link to it. replaceState, like the tab: opening a record is not history.
+  useEffect(() => {
+    if (pendingLink) return;
+    const url = new URL(window.location.href);
+    const open = contactId && tab === contactTab;
+    if (open && activeOrgId) {
+      url.searchParams.set("customer", contactId);
+      url.searchParams.set("org", activeOrgId);
+    } else {
+      url.searchParams.delete("customer");
+      url.searchParams.delete("org");
+    }
+    window.history.replaceState(null, "", url);
+  }, [contactId, contactTab, tab, activeOrgId, pendingLink]);
+
   useEffect(() => {
     const wanted = new URLSearchParams(window.location.search).get("tab");
     const stored = window.localStorage.getItem(TAB_STORAGE_KEY);

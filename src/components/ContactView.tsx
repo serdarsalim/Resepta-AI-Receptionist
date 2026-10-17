@@ -1,5 +1,6 @@
 "use client";
 
+import { CopyButton } from "./CopyButton";
 import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
@@ -366,11 +367,19 @@ export function ContactView({
                 />
               </FieldRow>
               <FieldRow label={t("customers.phone")}>
-                <PhoneField
-                  dense
-                  value={customer.phone}
-                  onSave={(next) => updateCustomer({ customerId, phone: next })}
-                />
+                {/* Copy beside the number (P12): it is the value people paste
+                    into their own phone or another app most often, and
+                    selecting text inside an inline editor opens the editor. */}
+                <div className="flex min-w-0 items-center gap-1">
+                  <div className="min-w-0 flex-1">
+                    <PhoneField
+                      dense
+                      value={customer.phone}
+                      onSave={(next) => updateCustomer({ customerId, phone: next })}
+                    />
+                  </div>
+                  <CopyButton value={customer.phone} />
+                </div>
               </FieldRow>
               <FieldRow label={t("customers.email")}>
                 <InlineEditValue

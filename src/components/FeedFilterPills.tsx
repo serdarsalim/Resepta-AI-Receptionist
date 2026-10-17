@@ -109,8 +109,8 @@ export function FeedFilterPills({
         // Geometry and the three states are Nudge's, read off its live DOM
         // rather than eyeballed: no explicit height (the text sets it), no
         // background on the resting pill, and ink that carries the weight —
-        // an empty tab drops to half-strength muted, one with rows in it sits
-        // at 75% foreground, the open one goes accent and semibold.
+        // a resting tab sits at 75% foreground whether or not it has rows yet
+        // (P12), the open one goes accent and semibold.
         // text-sm and the glyph at 15: the pills sit beside the conversation's
         // name and were reading a size below everything around them. py-1 is
         // unchanged — the row lives in a fixed h-9 track that the empty track
@@ -123,9 +123,11 @@ export function FeedFilterPills({
         className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm transition-colors ${
           active
             ? "border-[var(--accent)] bg-[var(--accent)]/10 font-semibold text-[var(--accent)]"
-            : count > 0
-              ? "border-[var(--border)] bg-[var(--card)] font-medium text-[var(--foreground)]/75 hover:text-[var(--foreground)]"
-              : "border-[var(--border)] bg-[var(--card)] text-[var(--muted)]/50"
+            : // A channel with nothing in it yet is still a live control (it
+              // opens the composer for that channel), so it is not greyed
+              // out (P12, Nudge 1a1b00dd: "no dimmed pills"). The count
+              // already says there is nothing there.
+              "border-[var(--border)] bg-[var(--card)] font-medium text-[var(--foreground)]/75 hover:text-[var(--foreground)]"
         }`}
       >
         {/* Every pill with a mark is its mark and its count, nothing else

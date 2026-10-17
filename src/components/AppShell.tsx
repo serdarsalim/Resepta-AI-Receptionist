@@ -1548,14 +1548,21 @@ export function AppShell({
   // Restored on unmount because signing out unmounts this shell without a
   // document load, and the sign-in page would otherwise keep wearing the name
   // of the salon somebody just left.
+  //
+  // A customer record open over a tab leads with the customer's name (P12,
+  // Nudge's TenantTitle): with several records open, the tab is the only way
+  // to tell them apart, and it truncates from the right.
   const workspaceName = settings?.org.name;
+  const recordName = overrideTitle?.trim();
   useEffect(() => {
     if (!workspaceName) return;
-    document.title = workspaceTitle(workspaceName);
+    document.title = recordName
+      ? `${recordName} · ${workspaceTitle(workspaceName)}`
+      : workspaceTitle(workspaceName);
     return () => {
       document.title = DEFAULT_TITLE;
     };
-  }, [workspaceName]);
+  }, [workspaceName, recordName]);
 
   // "account" has no sidebar entry to borrow a label from, so its title is
   // resolved directly; billing lives outside the tab arrays (pinned above the
