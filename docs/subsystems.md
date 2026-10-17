@@ -2588,3 +2588,12 @@ Every one lands in the library and attaches to the message.
 - **Most recently used first**: `lastUsedAt`, set on upload and on pick
   (`media.touch`).
 - Delete (hover × on a tile) is refused while a sent message shows the file.
+
+## Staying signed in (2026-10-17, P18)
+
+The auth cookies live 30 days (`cookieConfig.maxAge` on
+`convexAuthNextjsMiddleware` in `src/proxy.ts`), matching Convex Auth's
+refresh-token inactivity window. Without it they were session cookies and a
+browser restart signed the owner out although the session was still valid.
+Sign-out and a revoked session still end access at once. The demo
+subdomain's walk-in session gets the same lifetime on its own host.

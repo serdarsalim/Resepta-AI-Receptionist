@@ -129,6 +129,13 @@ export const proxy = convexAuthNextjsMiddleware(async (request, { convexAuth }) 
   if (!isSignInPage(request) && !isAuthed) {
     return nextjsMiddlewareRedirect(request, "/signin");
   }
+}, {
+  // Stay signed in across a browser restart (P18, Nudge ee5537f0). Without a
+  // maxAge the auth cookies are session cookies, gone when the browser
+  // closes although the session behind them is still valid; 30 days matches
+  // Convex Auth's own refresh-token inactivity window. Signing out still
+  // ends it at once.
+  cookieConfig: { maxAge: 30 * 24 * 60 * 60 },
 });
 
 // Public assets sit here for the same reason favicon.ico always did. If the auth
