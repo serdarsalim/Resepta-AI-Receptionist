@@ -23,6 +23,7 @@ import { Avatar } from "./Avatar";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { SearchInput } from "./DataTable";
 import { CustomerJump } from "./CustomerJump";
+import { HeaderTrailProvider, type HeaderTrail } from "@/lib/headerTrail";
 
 // Shell composition ported from Nudge (src/app/page.tsx + AppHeader there):
 // a fixed-height window holding two FLUSH panes, the sidebar rail and the
@@ -562,13 +563,15 @@ const PANE_LABEL = {
   note: "notes.title",
 } as const satisfies Record<string, TranslationKey>;
 
+// One step of the title bar's breadcrumb: a label and the close it runs.
+type Crumb = { label: string; onClick: () => void };
+
 function ShellHeader({
   titleKey,
   overrideTitle,
-  onOverrideBack,
+  crumbs,
   overrideContactId,
   onOpenMenu,
-  flush,
 }: {
   titleKey: TranslationKey;
   // A record opened ON TOP of a tab, naming itself here instead of letting the
@@ -581,17 +584,20 @@ function ShellHeader({
   // handing React elements back UP through state is how a render loop starts.
   // Anything richer than a name belongs on the record itself.
   overrideTitle?: string;
-  onOverrideBack?: () => void;
+  // The path you came by, drawn before the title as clickable steps
+  // ("Inbox › Ayşe Yılmaz", "Messages › Reminder 24h before"). Replaces the
+  // back arrow (P25, Nudge cba4af4c): "← Name" read as "go to Name" rather
+  // than "you are on Name, this goes back". Same size and weight as the
+  // title; only the colour steps down, to --muted. Below sm only the nearest
+  // step shows, as "‹ Inbox", so the name keeps its room. Labels are strings
+  // for the same reason the title is.
+  crumbs?: Crumb[];
   // The record the override title names, so the pin beside it can read and
   // write its own state. An ID, not a rendered control or a pair of callbacks
   // — same reason overrideTitle is a string: nothing about this header should
   // depend on a child under it handing elements or closures back up.
   overrideContactId?: Id<"customers">;
   onOpenMenu: () => void;
-  // True on the views whose cards run the 8px frame (data-bleeds-right):
-  // the header's padding follows them via .gutter-flush (globals), so the
-  // title row and the cards under it agree on where the edges are.
-  flush?: boolean;
 }) {
   const { t } = useLanguage();
   const { query, setQuery, placeholder, jumpToCustomer } = useHeaderSearchSlot();
@@ -624,9 +630,11 @@ function ShellHeader({
     // from Customers to Reminders jumped the card and its Add button 13px up
     // the screen. The floor is the search box's own height plus this padding,
     // so tabs that have one are unchanged and the rest stop shifting.
-    <header
-      className={`gutter-align ${flush ? "gutter-flush" : ""} flex min-h-13 items-center justify-between gap-3 px-4 pb-1 pt-3`}
-    >
+    // ONE inset on every tab, so the title never moves as you switch (P25,
+    // Nudge ca95e0f8). It used to follow the Inbox's and the record's cards
+    // to their 8px frame; there the title now lines up with the text inside
+    // the card rather than the card's rim.
+    <header className="gutter-align flex min-h-13 items-center justify-between gap-3 px-4 pb-1 pt-3">
       <div
         className={`group/title flex min-w-0 items-center gap-1.5 ${
           expanded ? "hidden sm:flex" : "flex"
@@ -641,23 +649,36 @@ function ShellHeader({
         >
           <MenuIcon size={18} />
         </button>
-        {overrideTitle !== undefined && onOverrideBack && (
-          // Same drawn arrow the contact page used to carry. A "←" glyph is
-          // whatever the reader's font decides it is.
-          <HoverTip text={t("common.back")} className="inline-flex shrink-0">
-          <button
-            type="button"
-            onClick={onOverrideBack}
-            aria-label={t("common.back")}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M19 12H5" />
-              <path d="m12 19-7-7 7-7" />
-            </svg>
-          </button>
-          </HoverTip>
-        )}
+        {crumbs?.length ? (
+          <nav aria-label={t("nav.breadcrumb")} className="flex min-w-0 shrink items-center gap-1.5">
+            {crumbs.map((crumb, i) => {
+              const nearest = i === crumbs.length - 1;
+              return (
+                <span
+                  key={i}
+                  className={`min-w-0 shrink items-center gap-1.5 ${nearest ? "flex" : "hidden sm:flex"}`}
+                >
+                  <button
+                    type="button"
+                    onClick={crumb.onClick}
+                    className="page-title flex min-w-0 items-center gap-0.5 rounded-md text-sm font-semibold text-[var(--muted)] transition-colors hover:text-[var(--foreground)] hover:underline hover:underline-offset-4 md:text-base"
+                  >
+                    {/* The phone's one step is a way back, so it says so. */}
+                    {nearest && (
+                      <svg className="shrink-0 sm:hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="m15 18-6-6 6-6" />
+                      </svg>
+                    )}
+                    <span className="max-w-[12rem] truncate">{crumb.label}</span>
+                  </button>
+                  <span aria-hidden className="hidden text-sm text-[var(--muted)] sm:inline md:text-base">
+                    ›
+                  </span>
+                </span>
+              );
+            })}
+          </nav>
+        ) : null}
         <h1 className="page-title truncate text-sm font-semibold md:text-base">
           {overrideTitle ?? t(titleKey)}
         </h1>
@@ -1478,6 +1499,11 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const { t, language, setLanguage } = useLanguage();
+  // The record open inside the current tab, reported by its view through
+  // useHeaderTrail (src/lib/headerTrail.tsx) and drawn as the title bar's
+  // breadcrumb. setViewTrail is a state setter, so the context value is
+  // referentially stable and no consumer's effect re-runs on its account.
+  const [viewTrail, setViewTrail] = useState<HeaderTrail | null>(null);
   const settings = useQuery(api.orgs.current, {});
   // Two tabs are conditional, so the nav is built from the org rather than
   // being a constant. Filtered rather than conditionally rendered so the
@@ -1615,6 +1641,20 @@ export function AppShell({
       : ([...NAV_TABS, ...FOOT_TABS, BILLING_TAB].find(
           (entry) => entry.id === tab,
         )?.key ?? "app.name");
+
+  // The title bar's breadcrumb (P25). A customer record open over the tab
+  // reads "<tab> › <name>"; a record open inside the tab's own view reads
+  // "<list> › <record>". The two never stack: the customer record replaces
+  // the tab's view, which clears its trail. Undefined title falls back to the
+  // tab's own.
+  const tabLabel = t(titleKey);
+  const recordOpen = overrideTitle !== undefined && onOverrideBack !== undefined;
+  const headerTitle = recordOpen ? overrideTitle : viewTrail?.title;
+  const crumbs: Crumb[] | undefined = recordOpen
+    ? [{ label: tabLabel, onClick: onOverrideBack }]
+    : viewTrail
+      ? [{ label: viewTrail.backLabel ?? tabLabel, onClick: viewTrail.back }]
+      : undefined;
 
   if (settings && settings.org.name === "") return <OnboardingWizard />;
 
@@ -1871,13 +1911,10 @@ export function AppShell({
             already a way out, which is all the ✕ ever did. */}
           <ShellHeader
             titleKey={titleKey}
-            overrideTitle={overrideTitle}
-            onOverrideBack={onOverrideBack}
+            overrideTitle={headerTitle}
+            crumbs={crumbs}
             overrideContactId={overrideContactId}
             onOpenMenu={() => setMobileOpen(true)}
-            // The same condition that puts data-bleeds-right on the views:
-            // a contact record showing (any tab), or the inbox.
-            flush={Boolean(overrideContactId) || tab === "inbox"}
           />
           {/* Nudge's rule for the bottom edge, ported: a view whose cards scroll
             INSIDE themselves has no content end to breathe after, so padding
@@ -1928,7 +1965,7 @@ export function AppShell({
                 {t("demo.banner")}
               </p>
             )}
-            {children}
+            <HeaderTrailProvider value={setViewTrail}>{children}</HeaderTrailProvider>
           </main>
           {/* Phone nav. Not every sidebar row earns a slot here — see drawerOnly
             on NAV_TABS — and the ones that do may answer to a shorter name.

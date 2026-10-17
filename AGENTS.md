@@ -1211,7 +1211,7 @@ row stacking fields, this is a message preview, which is the content.
   `ConversationPanel` already calls it. A row must agree with the thread it
   opens; naming the channel there produced "Siz: WhatsApp".
 
-## A page title names the page, in the bar that names pages (2026-08-22)
+## A page title names the page, in the bar that names pages (2026-08-22, breadcrumb 2026-10-17)
 
 Opening a contact left the shell header reading "Inbox" while the page was a
 person, so the contact drew its own name and back arrow in a second title row
@@ -1220,6 +1220,24 @@ underneath — two headings, the higher one wrong, ~60px between them.
 - **`AppShell` takes `overrideTitle` (a STRING) + `onOverrideBack`.** A string,
   never a node: the view supplying it renders UNDER the header, and handing
   React elements back up through state is how a render loop starts.
+- **The way back is the path you came by, not an arrow** (P25, Nudge
+  cba4af4c). The title bar draws a breadcrumb before the title, every step
+  clickable: `Inbox › Ayşe Yılmaz` for a customer opened over a tab. "← Name"
+  read as "go to Name". Steps take the title's size and weight and only step
+  down in colour, to `--muted`; below `sm` only the nearest step shows, as
+  `‹ Inbox`. Crumb labels are strings for the same reason the title is.
+- **A record open INSIDE a tab names itself the same way**: a voice agent, an
+  opened message rule, a bulk run call `useHeaderTrail`
+  (`src/lib/headerTrail.tsx`) with their name, their close handler and, when
+  the tab's title is not the list's name, a `backLabel` (`Bulk › <run>`
+  inside Customers). They draw NO back control of their own. A new drill-in
+  uses the hook, never an arrow. The slot holds one trail; a customer record
+  replaces the tab's view (`AppHome`), so a trail and a customer never stack.
+  Exceptions: the Inbox's phone back from a thread to the list, and a sheet's
+  own step back (the booking sheet).
+- **One title inset on every tab** (Nudge ca95e0f8). The header no longer
+  follows the Inbox's and the record's 8px card frame (`.gutter-flush` is
+  gone), so switching tabs never moves the title.
 - **`AppHome` holds the name; `ContactView` reports it** via `onTitle`. That
   view is the only thing querying the customer — filling the heading anywhere
   else would be a second read of the same row on every contact opened.
@@ -1229,10 +1247,10 @@ underneath — two headings, the higher one wrong, ~60px between them.
 - **`overrideContactId` is an ID**, same discipline: the shell renders the pin
   itself (`PinDot`) and runs its own query rather than taking a control or a
   pair of callbacks from below.
-- **The name carries a `›`** — the app's own "open this" mark, borrowed from
-  the feed rows. A hover-underline is only found by people who already
-  suspected, and clicking the name is the only route from a conversation to
-  the record behind it.
+- **The Inbox conversation's name carries a `›`** — the app's own "open this"
+  mark, borrowed from the feed rows. The breadcrumb does not replace it: the
+  crumb leads back to where you came from, the name leads on to the record,
+  and a hover-underline is only found by people who already suspected.
 
 ## The pin, and reading it the same way twice (2026-08-22)
 

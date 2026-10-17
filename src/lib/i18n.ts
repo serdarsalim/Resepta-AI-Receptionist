@@ -92,6 +92,7 @@ const dictionary = {
   "nav.business": { tr: "İşletme", en: "Business", de: "Betrieb" },
   "nav.settings": { tr: "Ayarlar", en: "Settings", de: "Einstellungen" },
   "nav.menu": { tr: "Menü", en: "Menu", de: "Menü" },
+  "nav.breadcrumb": { tr: "Bulunduğunuz yer", en: "You are here", de: "Sie sind hier" },
   "nav.closeMenu": {
     tr: "Menüyü kapat",
     en: "Close menu",

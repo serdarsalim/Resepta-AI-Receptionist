@@ -525,17 +525,9 @@ thead {
     margin-right: 0.5rem;
   }
 
-  /* The shell header follows the cards to the 8px frame on those views
-     (Serdar, 2026-08-31, same pass as Nudge): back arrow over the card's
-     left rim, search over its right — or the title row reads a different
-     width than the surface under it. Two classes so it outranks
-     .gutter-align's own right-padding; ShellHeader adds gutter-flush from
-     the same state that sets data-bleeds-right. The 9px gutter comp is
-     dropped on purpose — these views release main's scrollbar track. */
-  .gutter-align.gutter-flush {
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
-  }
+  /* The shell header used to follow the cards to that 8px frame
+     (.gutter-flush, 2026-08-31). Gone with P25 (Nudge ca95e0f8): the title
+     sits at ONE inset on every tab, so switching tabs never moves it. */
 }
 
 /* The bottom edge joins the frame from sm up: 8px under the cards instead
