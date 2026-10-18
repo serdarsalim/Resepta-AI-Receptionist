@@ -8,7 +8,7 @@ import { formatDateTime } from "@/lib/datetime";
 import { resolveSiteUrl } from "@/lib/siteUrl";
 import { useQuery } from "convex/react";
 import { CallDetail, CallOutcomePill } from "./CallDetail";
-import { VoiceAgentPage } from "./VoiceAgentPage";
+import { AGENT_TAB_PARAM, VoiceAgentPage } from "./VoiceAgentPage";
 import { VoiceCard } from "./VoiceCard";
 import { NumberRequestCard } from "./NumberRequestCard";
 
@@ -183,6 +183,8 @@ export function VoiceView() {
     const url = new URL(window.location.href);
     if (next) url.searchParams.set("agent", next);
     else url.searchParams.delete("agent");
+    // The agent page's tab belongs to the agent that was open, not the next.
+    url.searchParams.delete(AGENT_TAB_PARAM);
     window.history.replaceState(null, "", url);
   };
 

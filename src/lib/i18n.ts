@@ -4388,6 +4388,19 @@ const dictionary = {
     en: "The fields the agent may fill on this call.",
     de: "Die Felder, die die Assistentin in diesem Anruf ausfüllen darf.",
   },
+  // The Knowledge tab's text as the agent receives it on every call (P35:
+  // it was sent and had no row, so the table under the prompt said less than
+  // the agent knew).
+  "voiceVariables.knowledge": {
+    tr: "İşletme bilgisi",
+    en: "Business knowledge",
+    de: "Betriebswissen",
+  },
+  "voiceVariables.descKnowledge": {
+    tr: "İşletme bilgisi sekmesinde yazdıklarınız, düz metin olarak. Bir değişiklik bir sonraki aramaya ulaşır.",
+    en: "What you wrote under Business knowledge, as plain text. A change reaches the next call.",
+    de: "Was Sie unter Betriebswissen geschrieben haben, als reiner Text. Eine Änderung gilt ab dem nächsten Anruf.",
+  },
   "voiceVariables.opener": {
     tr: "Açılış",
     en: "Opener",
@@ -4606,6 +4619,19 @@ const dictionary = {
     tr: "Deneme araması",
     en: "Test call",
     de: "Testanruf",
+  },
+  // The agent page's two tabs (P35, Nudge 71c43cf): what the agent is, and
+  // trying it out. Both stay mounted, so a running test survives a look at the
+  // prompt.
+  "voiceDetail.tabSetup": {
+    tr: "Kurulum",
+    en: "Setup",
+    de: "Einrichtung",
+  },
+  "voiceDetail.tabTesting": {
+    tr: "Deneme",
+    en: "Testing",
+    de: "Testen",
   },
   // The empty option in the agent page's line picker. Not the list's "— None —":
   // that one sits under an "Inbound number" column header, and this one stands

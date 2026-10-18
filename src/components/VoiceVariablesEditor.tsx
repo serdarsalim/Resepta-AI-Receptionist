@@ -260,6 +260,13 @@ export function injectedVoiceContext(t: ProvidedT): ProvidedVariable[] {
       description: t("voiceVariables.descInformation"),
       kind: "list",
     },
+    // lib/agentVariables' `knowledge`: sent on every call, so it has a row.
+    {
+      key: "knowledge",
+      label: t("voiceVariables.knowledge"),
+      description: t("voiceVariables.descKnowledge"),
+      kind: "text",
+    },
     // The first sentence and the two call clocks behind it (P34,
     // lib/opener), mirroring what retell.beforeCallContext adds last.
     {

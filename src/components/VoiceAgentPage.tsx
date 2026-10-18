@@ -16,7 +16,6 @@ import { AgentBrowserTest } from "./AgentBrowserTest";
 import { AgentTestsLog } from "./AgentTestsLog";
 import { SegmentedControl } from "./SegmentedControl";
 import { PromptEditor } from "./PromptEditor";
-import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
 import { useHeaderTrail } from "@/lib/headerTrail";
 import { usesOpener, type AgentOpeners } from "../../convex/lib/opener";
@@ -164,6 +163,15 @@ const openersOf = (stored: AgentOpeners | null | undefined): Openers => ({
 const sameOpeners = (a: Openers, b: Openers) =>
   OPENER_FIELDS.every((key) => a[key].trim() === b[key].trim());
 
+// The page's two tabs (P35). The parameter is exported so the list clears it
+// when it closes an agent.
+type AgentTab = "setup" | "testing";
+export const AGENT_TAB_PARAM = "agentTab";
+const AGENT_TABS: { id: AgentTab; label: TranslationKey }[] = [
+  { id: "setup", label: "voiceDetail.tabSetup" },
+  { id: "testing", label: "voiceDetail.tabTesting" },
+];
+
 const draftKey = (agentId: string) => `randevu.agentDraft.${agentId}`;
 
 function readDraft(agentId: string): StoredDraft | null {
@@ -273,7 +281,24 @@ export function VoiceAgentPage({
   // because "Published v5" beside Unsaved would be stale.
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [testOpen, setTestOpen] = useState(false);
+  // Setup or Testing (P35, Nudge 71c43cf). Both panes stay MOUNTED and the
+  // idle one is only hidden: the editor holds the edits a test stages, and a
+  // call in progress must survive a look at the prompt. The tab rides the URL
+  // beside ?agent= (Nudge d56fd95), so a reload comes back to it; read after
+  // mount for the same hydration reason VoiceView reads ?agent=.
+  const [tab, setTab] = useState<AgentTab>("setup");
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get(AGENT_TAB_PARAM) === "testing") {
+      setTab("testing");
+    }
+  }, []);
+  const chooseTab = (next: AgentTab) => {
+    setTab(next);
+    const url = new URL(window.location.href);
+    if (next === "testing") url.searchParams.set(AGENT_TAB_PARAM, "testing");
+    else url.searchParams.delete(AGENT_TAB_PARAM);
+    window.history.replaceState(null, "", url);
+  };
   // In the browser (a web call, nothing real) or ringing a real phone.
   const [testMode, setTestMode] = useState<"browser" | "phone">("browser");
   const [testLive, setTestLive] = useState(false);
@@ -568,7 +593,6 @@ export function VoiceAgentPage({
       setTestError(t("voiceDetail.badNumber"));
       return;
     }
-    setTestOpen(false);
     setTestError(null);
     void run(t("voiceDetail.calling"), async () => {
       let res: { from: string; to: string };
@@ -740,22 +764,30 @@ export function VoiceAgentPage({
               ))}
             </select>
           )}
-          {/* Hear the agent live, from the page where you just edited it.
-              Quiet next to Save: it costs real minutes but changes nothing. */}
-          <button
-            type="button"
-            disabled={saving || !detail}
-            onClick={() => {
-              setTestError(null);
-              setTestOpen(true);
-            }}
-            // Ghost, so no border: AGENTS.md, "Borders belong to CONTAINERS
-            // (cards, inputs, dropdown panels) — never to buttons." The
-            // scale's quiet sm, one height with the save bar on its row.
-            className={buttonClass("quiet", "sm")}
-          >
-            {t("voiceDetail.test")}
-          </button>
+          {/* No Test call button here any more: the Testing tab below is where
+              an agent is tried (P35), and the header keeps only what applies
+              to the whole agent on either tab. */}
+        </div>
+
+        {/* Underlined tabs, VoiceView's (AGENTS.md "Tabs are underlined"):
+            darker plus an underline, never bolder, so switching reflows
+            nothing. */}
+        <div className="flex items-center gap-5 border-b border-[var(--border)]">
+          {AGENT_TABS.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              onClick={() => chooseTab(entry.id)}
+              aria-current={tab === entry.id ? "page" : undefined}
+              className={`-mb-px border-b-2 px-0.5 py-2.5 text-sm transition-colors ${
+                tab === entry.id
+                  ? "border-[var(--foreground)] text-[var(--foreground)]"
+                  : "border-transparent text-[var(--muted-strong)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              {t(entry.label)}
+            </button>
+          ))}
         </div>
 
         {error && <p className="text-sm text-amber-700 dark:text-amber-400">{error}</p>}
@@ -764,7 +796,10 @@ export function VoiceAgentPage({
         )}
 
         {detail && (
-          <div className="space-y-5 rounded-xl border border-[var(--border)] bg-[var(--card)] p-5">
+          <div
+            hidden={tab !== "setup"}
+            className="space-y-5 rounded-xl border border-[var(--border)] bg-[var(--card)] p-5"
+          >
             {/* One quiet line, not a slab. It only appears when the plumbing is
                 actually broken, and a boxed amber warning the height of a
                 paragraph made a fixable config detail the loudest thing on a
@@ -1060,8 +1095,6 @@ export function VoiceAgentPage({
               />
             </div>
 
-            <AgentTestsLog agentId={agentId} />
-
             {/* The editor's foot, mirroring Nudge's bottom Publish: after a
                 long scroll through prompt and variables, the way out should
                 not be back at the top. Delete sits left, apart from the pair
@@ -1115,20 +1148,21 @@ export function VoiceAgentPage({
             </div>
           </div>
         )}
-      </div>
-      {confirmDeleteDialog}
 
-      {testOpen && detail && (
-        <Sheet
-          title={t("voiceDetail.test")}
-          dirty={testLive}
-          onClose={() => setTestOpen(false)}
-        >
-          <div className="mb-4">
+        {/* Testing (P35): the browser test with what the agent knows and the
+            first sentence, or the real-phone test, and every past test
+            with its playback underneath. Mounted from the first render and
+            only hidden on Setup, so a call in progress keeps talking while
+            the prompt is open. */}
+        {detail && (
+          <div
+            hidden={tab !== "testing"}
+            className="space-y-5 rounded-xl border border-[var(--border)] bg-[var(--card)] p-5"
+          >
             <SegmentedControl
               value={testMode}
               disabled={testLive}
-              ariaLabel={t("voiceDetail.test")}
+              ariaLabel={t("voiceDetail.tabTesting")}
               semantics="tabs"
               onChange={setTestMode}
               segments={[
@@ -1136,61 +1170,56 @@ export function VoiceAgentPage({
                 { id: "phone", label: t("agentTest.modePhone"), hint: t("voiceDetail.testHint") },
               ]}
             />
-          </div>
-          {testMode === "browser" ? (
-            <AgentBrowserTest
-              agentId={agentId}
-              hasEdits={providerChanges || providerDraft}
-              stage={stageForTest}
-              onLiveChange={onTestLive}
-              beginMessage={begin}
-              openers={openers}
-            />
-          ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-[var(--muted)]">
-              {t("voiceDetail.confirmCall", { to: testTo.trim() || "…", name: detail.name })}
-            </p>
-            {/* Unsaved edits are not part of the call — Retell runs the saved
-                config. Saying so here beats hearing the old prompt and
-                assuming the editor is broken. */}
-            {dirty && (
-              <p className="text-xs text-amber-700 dark:text-amber-400">
-                {t("voiceDetail.testUnsaved")}
-              </p>
+            {testMode === "browser" ? (
+              <AgentBrowserTest
+                agentId={agentId}
+                hasEdits={providerChanges || providerDraft}
+                stage={stageForTest}
+                onLiveChange={onTestLive}
+                beginMessage={begin}
+                openers={openers}
+              />
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-[var(--muted)]">
+                  {t("voiceDetail.confirmCall", { to: testTo.trim() || "…", name: detail.name })}
+                </p>
+                {/* Unsaved edits are not part of the call — Retell runs the saved
+                    config. Saying so here beats hearing the old prompt and
+                    assuming the editor is broken. */}
+                {dirty && (
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    {t("voiceDetail.testUnsaved")}
+                  </p>
+                )}
+                <input
+                  value={testTo}
+                  onChange={(e) => setTestTo(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && placeTestCall()}
+                  placeholder="+905321234567"
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm"
+                />
+                {testError && (
+                  <p className="text-xs text-amber-700 dark:text-amber-400">{testError}</p>
+                )}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    disabled={!testTo.trim()}
+                    onClick={placeTestCall}
+                    className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)] disabled:opacity-40"
+                  >
+                    {t("voiceDetail.callMe")}
+                  </button>
+                </div>
+              </div>
             )}
-            <input
-              value={testTo}
-              onChange={(e) => setTestTo(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && placeTestCall()}
-              placeholder="+905321234567"
-              autoFocus
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm"
-            />
-            {testError && (
-              <p className="text-xs text-amber-700 dark:text-amber-400">{testError}</p>
-            )}
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setTestOpen(false)}
-                className="rounded-lg px-3 py-1.5 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)]"
-              >
-                {t("common.cancel")}
-              </button>
-              <button
-                type="button"
-                disabled={!testTo.trim()}
-                onClick={placeTestCall}
-                className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)] disabled:opacity-40"
-              >
-                {t("voiceDetail.callMe")}
-              </button>
-            </div>
+
+            <AgentTestsLog agentId={agentId} />
           </div>
-          )}
-        </Sheet>
-      )}
+        )}
+      </div>
+      {confirmDeleteDialog}
 
     </>
   );
