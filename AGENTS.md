@@ -1012,6 +1012,22 @@ that user is a member of the call's org. Bulk calls are named by their run
 (`bulkRunItems.by_retell_call`). A new dial path a person triggers carries the
 marker too.
 
+**The first sentence is Resepta's, and there are two clocks** (2026-10-18,
+P34; Nudge 3ae8dcd). `retell.beforeCallContext` always sets `{{opener}}`
+(`lib/opener.chooseOpener`): a call we place opens with the agent's follow-up
+sentence after a real conversation, its missed sentence after attempts only,
+a call in with its inbound sentence, else the cold one, else the template's
+greeting tail, never empty. `customers.lastConversationAt` is stamped only
+from the provider's `call_successful`, never a connected line (a hang-up on
+hello is not "we spoke"); `lastCallAttemptAt` only from a call we placed that
+reached the phone. Both are written by `recordCall` alone, forward only,
+never for a test or the demo. The sentences are `retellAgents.openers`,
+Resepta's like `personaName` (no publish), heard only where the opening line
+says `{{opener}}`; the provider's default for it is a fallback the publish
+keeps in step (`openerFallback`), never a variables row. A new dial path
+passes `direction` to `beforeCallContext`, and a new ring-time key joins the
+read-only rows in `VoiceVariablesEditor`.
+
 **Recogniser hints are derived, and only ours are replaced** (2026-10-13). An
 agent's `boosted_keywords` are this org's name, active team and active
 services (`lib/boostedKeywords`), read by org after the agent is proven to be
