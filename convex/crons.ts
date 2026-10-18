@@ -59,6 +59,11 @@ crons.interval("reap-stuck-sends", { minutes: 10 }, internal.delivery.reapStuck,
 // deployment with no live runs.
 crons.interval("reap-stuck-bulk-calls", { minutes: 5 }, internal.bulkRuns.reapStuckCalls, {});
 
+// Requested callbacks' safety net (P36). Each queued callback has its own
+// wake-up at its time; this catches one a deploy lost, and a call whose
+// call_ended never came. Two index ranges, both empty on a healthy deployment.
+crons.interval("sweep-callbacks", { minutes: 5 }, internal.callbacks.sweep, {});
+
 // The showroom is a shared surface: whatever the last visitor did is what the
 // next one sees. Rebuilt from a fixed dataset overnight rather than asking
 // anyone to be careful with it. 02:00 UTC is the quiet hour for a Türkiye-first

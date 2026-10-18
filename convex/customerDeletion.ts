@@ -45,6 +45,7 @@ import {
   erasedPhone,
   isDeleting,
 } from "./lib/customerDeletion";
+import { cancelQueuedCallbacks } from "./callbacks";
 
 // ── The footprint ────────────────────────────────────────────────────────────
 //
@@ -83,6 +84,7 @@ export const FOOTPRINT_KINDS = [
   "messages",
   "calls",
   "agentTests",
+  "callbacks",
   "chatTurns",
   "notes",
   "bulkRunItems",
@@ -102,6 +104,7 @@ export const footprintValidator = v.object({
     messages: v.number(),
     calls: v.number(),
     agentTests: v.number(),
+    callbacks: v.number(),
     chatTurns: v.number(),
     notes: v.number(),
     bulkRunItems: v.number(),
@@ -351,6 +354,20 @@ const FOOTPRINT: Source[] = [
       await ctx.db.delete(row._id);
     },
   }),
+  // A callback they asked for (P36): when and on which call. The first
+  // transaction has already cancelled any still queued.
+  source({
+    kind: "callbacks",
+    rows: (ctx, customer) =>
+      ctx.db
+        .query("callbacks")
+        .withIndex("by_org_customer_status", (q) =>
+          q.eq("orgId", customer.orgId).eq("customerId", customer._id),
+        ),
+    clear: async (ctx, row) => {
+      await ctx.db.delete(row._id);
+    },
+  }),
   source({
     kind: "notes",
     rows: (ctx, customer) =>
@@ -537,6 +554,14 @@ export async function beginCustomerDeletion(
     if (row.mediaStorageId) await releaseMedia(ctx, row.mediaStorageId, row._id);
     await ctx.db.delete(row._id);
   }
+
+  // A callback they asked for will not ring (P36). Its claim refuses a
+  // deleting customer anyway; cancelling here means no wake-up even looks.
+  await cancelQueuedCallbacks(ctx, {
+    orgId,
+    customerId: customer._id,
+    reason: "customer-deleted",
+  });
 
   // Off the calendar now, which is also what ends their reminders: the cron
   // only ever reads appointments. Nothing is sent about them, no

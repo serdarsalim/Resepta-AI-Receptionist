@@ -852,7 +852,7 @@ export async function bulkRunGate(
 // come while there is a colleague. A business that never set its hours rings
 // inside its message send window instead (Reminders), the one clock it has
 // given us about when its customers may be contacted.
-function callHoursFor(org: Doc<"orgs">): ActiveWindow {
+export function callHoursFor(org: Doc<"orgs">): ActiveWindow {
   const hours = org.businessHours;
   // hasClockBounds too: a legacy row naming days but no times reads as open
   // around the clock, and 03:00 on an open day is no time to ring anybody.
@@ -869,14 +869,14 @@ function callHoursFor(org: Doc<"orgs">): ActiveWindow {
   return { days: [day, day, day, day, day, day, day] };
 }
 
-type CallWindow =
+export type CallWindow =
   | { open: true }
   | { open: false; until: number; reason: "closed" | "no-opening" };
 
 // Open now, or closed until when. One computation for both (nextOpenAt), so
 // the moment a run is told it may resume is the moment the same rules call
 // open.
-async function callWindowAt(
+export async function callWindowAt(
   ctx: MutationCtx,
   org: Doc<"orgs">,
   now: number,
@@ -965,6 +965,14 @@ async function turnSkipReason(
   if (items.some((other) => other._id !== item._id && other.status === "dialing")) {
     return "called-today";
   }
+  // Or the callback they asked for, ringing right now (P36).
+  const callback = await ctx.db
+    .query("callbacks")
+    .withIndex("by_org_customer_status", (q) =>
+      q.eq("orgId", run.orgId).eq("customerId", customer._id).eq("status", "dialing"),
+    )
+    .first();
+  if (callback) return "called-today";
   return null;
 }
 
@@ -1097,13 +1105,23 @@ export const claimNextCall = internalMutation({
     // keeps its one call at a time. Counted in the transaction that claims,
     // so two runs claiming at once conflict and the second sees the first's
     // call; only the count of live calls is read, nothing about whose.
+    // Requested callbacks ringing count too (P36, callbacks.liveAutomatedCalls
+    // counts the same two): the operator's one number is every automated
+    // call at once.
     const limit = await bulkCallLimit(ctx);
     if (limit !== null) {
-      const live = await ctx.db
+      const bulkLive = await ctx.db
         .query("bulkRunItems")
         .withIndex("by_status", (q) => q.eq("status", "dialing"))
         .take(limit);
-      if (live.length >= limit) {
+      const callbacksLive =
+        bulkLive.length >= limit
+          ? []
+          : await ctx.db
+              .query("callbacks")
+              .withIndex("by_status_due", (q) => q.eq("status", "dialing"))
+              .take(limit - bulkLive.length);
+      if (bulkLive.length + callbacksLive.length >= limit) {
         const until = now + PLATFORM_LIMIT_WAIT_MS;
         await ctx.db.patch(args.runId, { heldUntil: until, heldReason: "busy" });
         await ctx.scheduler.runAfter(PLATFORM_LIMIT_WAIT_MS, internal.bulkRuns.dialNext, {

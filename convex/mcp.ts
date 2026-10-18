@@ -544,6 +544,7 @@ const TOOLS: ToolDef[] = [
           appointments: counts.appointments,
           messages: counts.messages,
           calls: counts.calls,
+          requestedCallbacks: counts.callbacks,
           notes: counts.notes,
           assistantReplies: counts.chatTurns,
           bulkSendEntries: counts.bulkRunItems,

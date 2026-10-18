@@ -59,6 +59,7 @@ import { recordActivity } from "./lib/activity";
 import { MAX_UPCOMING_PER_PHONE } from "./lib/bookingLimits";
 import { insideNotice, minNoticeHoursOf, noticeSpan } from "./lib/minNotice";
 import { callErased, isDeleting } from "./lib/customerDeletion";
+import { cancelQueuedCallbacks } from "./callbacks";
 import { learnCustomerLanguage } from "./lib/customerLanguage";
 import { isDemo } from "./demo";
 import { freeStarts, goodsLeadMs } from "./booking";
@@ -3954,6 +3955,19 @@ async function stampCallClocks(
     patch.lastCallAttemptAt = args.startedAt;
   }
   if (Object.keys(patch).length > 0) await ctx.db.patch(customer._id, patch);
+  // A real conversation with them since they asked to be called back, in
+  // either direction, settles it (P36; Nudge's supersedeQueuedCallsAfterCall):
+  // whatever the callback was for has been said. Only a callback asked for
+  // BEFORE this call began, so the conversation it was asked on never
+  // cancels its own request.
+  if (patch.lastConversationAt !== undefined) {
+    await cancelQueuedCallbacks(ctx, {
+      orgId: args.orgId,
+      customerId: customer._id,
+      reason: "spoke",
+      before: args.startedAt,
+    });
+  }
 }
 
 export const recordCall = internalMutation({

@@ -2802,6 +2802,15 @@ export const testCall = action({
       })
     ).json()) as { call_id?: string };
 
+    // A person rang them: a callback they asked for is a colleague's now
+    // (P36), and a machine ringing at four after that would not know it.
+    if (res.call_id) {
+      await ctx.runMutation(internal.callbacks.cancelForPersonDial, {
+        orgId: context.orgId,
+        phone: to,
+      });
+    }
+
     return { ok: true, callId: res.call_id ?? null, from, to };
   },
 });

@@ -1150,6 +1150,53 @@ export default defineSchema({
   // writes nothing to a customer, a thread, the inbox or the calendar, and a
   // calls row would carry it into all of them. The transcript is fetched from
   // the provider on demand, never stored.
+  // A call the customer asked for: "call me back tomorrow at four" (P36 of the
+  // Nudge port, its call_back_time). Written from the post-call analysis of
+  // an ANSWERED call (callbacks.requestFromCall), dialled once at dueAt by
+  // callbacks.dial through the bulk-call guards, and cancelled by a real
+  // conversation with the customer after it was asked for, a person's own
+  // dial to them, the record's Cancel or their deletion. One queued per
+  // customer: a newer request replaces the older.
+  callbacks: defineTable({
+    orgId: v.id("orgs"),
+    customerId: v.id("customers"),
+    // The agent that took the call it was asked on, and the one that rings.
+    retellAgentId: v.string(),
+    // The call it was asked on (its start, and its provider id, which also
+    // makes a retried webhook answer the same row rather than a second).
+    requestedAt: v.number(),
+    sourceRetellCallId: v.string(),
+    // The time the caller named, and when it rings: the same, or the next
+    // open minute after it (moved), never sooner than a few minutes on.
+    askedFor: v.number(),
+    dueAt: v.number(),
+    moved: v.optional(v.boolean()),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("dialing"),
+      v.literal("done"),
+      v.literal("cancelled"),
+      v.literal("failed"),
+    ),
+    // Why it was cancelled or failed, or the last refusal a retry carried.
+    // A code the card turns into words (callbackReason in the UI).
+    reason: v.optional(v.string()),
+    retellCallId: v.optional(v.string()),
+    dialedAt: v.optional(v.number()),
+    attempts: v.optional(v.number()),
+    // Who cancelled it by hand, for the record's line.
+    cancelledBy: v.optional(v.id("users")),
+  })
+    // The record's card ((org, customer, "queued")) and every cancel path.
+    .index("by_org_customer_status", ["orgId", "customerId", "status"])
+    // The backstop sweep (queued and due) and the platform-wide count of
+    // automated calls ringing (status "dialing"). Fleet-wide by status, the
+    // bulkRunItems.by_status reasoning: a cron has no org, and live rows are
+    // a handful while finished ones accumulate.
+    .index("by_status_due", ["status", "dueAt"])
+    .index("by_retell_call", ["retellCallId"])
+    .index("by_source_call", ["sourceRetellCallId"]),
+
   agentTests: defineTable({
     orgId: v.id("orgs"),
     retellAgentId: v.string(),
@@ -1231,6 +1278,14 @@ export default defineSchema({
     // org (P11). Absent for inbound, bulk (the run says so) and old rows.
     placedByUserId: v.optional(v.id("users")),
     disconnectionReason: v.optional(v.string()),
+    // Requested callbacks (P36, convex/callbacks.ts). On the call where the
+    // caller asked to be rung back: when that call will ring (the time they
+    // named, or the next open minute after it). On the call that kept the
+    // promise: true. Both read by the call card, so it can say "callback
+    // requested for 16:00" and "the callback they asked for" without a second
+    // table read per card.
+    callbackRequestedFor: v.optional(v.number()),
+    requestedCallback: v.optional(v.boolean()),
     // Call metering — stamped ONCE each, in recordCall, idempotent on the
     // field being unset so the call_ended/call_analyzed double-fire (and any
     // webhook retry) can never double-bill. billedMicroUsd is FROZEN at the

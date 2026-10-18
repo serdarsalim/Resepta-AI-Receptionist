@@ -31,7 +31,7 @@ type Kind = keyof Preview["footprint"]["counts"];
 const DELETED_ROWS: { label: TranslationKey; kinds: Kind[] }[] = [
   { label: "appointments.title", kinds: ["appointments"] },
   { label: "customers.deleteKindMessages", kinds: ["messages"] },
-  { label: "customers.deleteKindCalls", kinds: ["calls", "agentTests"] },
+  { label: "customers.deleteKindCalls", kinds: ["calls", "agentTests", "callbacks"] },
   { label: "notes.title", kinds: ["notes"] },
   { label: "customers.deleteKindChatTurns", kinds: ["chatTurns"] },
   { label: "customers.deleteKindBulk", kinds: ["bulkRunItems"] },

@@ -11,7 +11,11 @@ import { connectionField } from "./lib/connections";
 import { requireOrg } from "./lib/orgAuth";
 import { coerceVoiceValues } from "./lib/voicePayload";
 import { withoutNonAnswers } from "./lib/nonAnswer";
-import { NO_AI_CALLS_FIELD, VOICE_SUMMARY_FIELD } from "./lib/voiceAgentTemplate";
+import {
+  CALLBACK_TIME_FIELD,
+  NO_AI_CALLS_FIELD,
+  VOICE_SUMMARY_FIELD,
+} from "./lib/voiceAgentTemplate";
 import { callErased, erasedCallMarker } from "./lib/customerDeletion";
 import { placedByOf } from "./lib/browserTest";
 import { callOutcome } from "./lib/callOutcome";
@@ -268,6 +272,11 @@ export const process = internalAction({
       // contact field, and written below only when it is a yes.
       const askedNoAiCalls = isYes(afterValues[NO_AI_CALLS_FIELD]);
       delete afterValues[NO_AI_CALLS_FIELD];
+      // The time they asked to be called back at (template v16), ours as well:
+      // a request, not something to file on the record. callbacks.requestFromCall
+      // decides below whether it becomes a call.
+      const callbackTime = String(afterValues[CALLBACK_TIME_FIELD] ?? "").trim();
+      delete afterValues[CALLBACK_TIME_FIELD];
       // Confirmed live values win over transcript inference.
       //
       // beforeValues is deliberately NOT merged in. It is Retell's whole
@@ -360,6 +369,17 @@ export const process = internalAction({
         });
       }
 
+      // "Call me back tomorrow at four": one queued call, if the call was
+      // answered, the customer may be rung and the time can be placed
+      // (convex/callbacks.ts). After recordCall, which it reads.
+      if (callbackTime) {
+        await ctx.runMutation(internal.callbacks.requestFromCall, {
+          retellAgentId: row.retellAgentId,
+          retellCallId: row.retellCallId,
+          raw: callbackTime,
+        });
+      }
+
       // The language they spoke replaces the business's as their guess
       // (P30). Only on an event that SAYS the call was answered: the
       // analysis event carries no disconnect code, and its duration alone
@@ -400,6 +420,10 @@ export const process = internalAction({
         // (call, eventType) and finishByCallId only ever moves a "dialing"
         // row.
         await ctx.runMutation(internal.bulkRuns.finishByCallId, {
+          retellCallId: row.retellCallId,
+        });
+        // A requested callback's call, finished the same way (P36).
+        await ctx.runMutation(internal.callbacks.finishByCallId, {
           retellCallId: row.retellCallId,
         });
         await ctx.scheduler.runAfter(ANALYSIS_BACKOFF[0], internal.voiceEvents.recoverAnalysis, {

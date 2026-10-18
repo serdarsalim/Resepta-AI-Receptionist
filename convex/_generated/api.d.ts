@@ -19,6 +19,7 @@ import type * as billing from "../billing.js";
 import type * as booking from "../booking.js";
 import type * as bulkRuns from "../bulkRuns.js";
 import type * as calcom from "../calcom.js";
+import type * as callbacks from "../callbacks.js";
 import type * as calls from "../calls.js";
 import type * as campaigns from "../campaigns.js";
 import type * as chatAgent from "../chatAgent.js";
@@ -165,6 +166,7 @@ declare const fullApi: ApiFromModules<{
   booking: typeof booking;
   bulkRuns: typeof bulkRuns;
   calcom: typeof calcom;
+  callbacks: typeof callbacks;
   calls: typeof calls;
   campaigns: typeof campaigns;
   chatAgent: typeof chatAgent;
