@@ -3898,6 +3898,56 @@ const dictionary = {
     en: "What it says first. Leave empty to have the agent open on its own.",
     de: "Der erste Satz. Leer lassen, damit der Assistent selbst eröffnet.",
   },
+  "voiceDetail.openerCold": {
+    tr: "Daha önce konuşmadıysak",
+    en: "When we haven't spoken before",
+    de: "Wenn wir noch nicht gesprochen haben",
+  },
+  "voiceDetail.openerColdHint": {
+    tr: "Açılış cümlesindeki Açılış yerine söylenir: ilk aramada ve aşağıdakilerden hiçbiri uymadığında. Değişkenler eklemek için @ yazın. [[ ]] içine alınan bir bölüm, içindeki bir değer boşsa hiç söylenmez. Boş bırakırsanız asistan şablonun selamını söyler.",
+    en: "Said where the opening line has Opener: on a first call, and whenever none of the ones below fits. Type @ for variables. A part wrapped in [[ ]] is left out when a value inside it is blank. Leave it empty and the agent says the template's greeting.",
+    de: "Wird dort gesagt, wo im Begrüßungssatz Eröffnung steht: beim ersten Anruf und immer, wenn keiner der folgenden passt. Mit @ fügen Sie Variablen ein. Ein Teil in [[ ]] entfällt, wenn ein Wert darin leer ist. Leer lassen, dann sagt der Assistent die Begrüßung der Vorlage.",
+  },
+  "voiceDetail.openerFollowUp": {
+    tr: "Daha önce konuştuysak",
+    en: "When we've spoken before",
+    de: "Wenn wir schon gesprochen haben",
+  },
+  "voiceDetail.openerFollowUpHint": {
+    tr: "Bizim aradığımız ve kişiyle daha önce gerçekten konuşulmuş bir aramada söylenir. Ne zaman (dün, Salı günü, geçen hafta) son konuşmadan sayılır.",
+    en: "Said on a call we place when we have had a real conversation with this person before. When (yesterday, on Tuesday, last week) counts from that conversation.",
+    de: "Wird bei einem Anruf von uns gesagt, wenn wir mit dieser Person schon wirklich gesprochen haben. Wann (gestern, am Dienstag, letzte Woche) zählt ab diesem Gespräch.",
+  },
+  "voiceDetail.openerMissed": {
+    tr: "Aradık ama konuşamadıysak",
+    en: "When we've tried but not spoken",
+    de: "Wenn wir es versucht, aber nicht gesprochen haben",
+  },
+  "voiceDetail.openerMissedHint": {
+    tr: "Kişiyi daha önce aradığımız ama hiç konuşamadığımız bir aramada söylenir: açılmadı, sesli mesaja düştü, alo deyip kapattı. Ne zaman son denemeden sayılır.",
+    en: "Said on a call we place when we have rung this person before but never spoken: no answer, voicemail, a hang-up on hello. When counts from the last attempt.",
+    de: "Wird bei einem Anruf von uns gesagt, wenn wir es schon versucht, aber nie gesprochen haben: nicht abgenommen, Mailbox, nach dem Hallo aufgelegt. Wann zählt ab dem letzten Versuch.",
+  },
+  "voiceDetail.openerInbound": {
+    tr: "Bizi aradıklarında",
+    en: "When they call us",
+    de: "Wenn sie uns anrufen",
+  },
+  "voiceDetail.openerInboundHint": {
+    tr: "Müşteri sizi aradığında söylenir, tanıdık olsun ya da olmasın. Boş bırakırsanız ilk alan söylenir.",
+    en: "Said when the customer rings you, known or not. Leave it empty to say the first field instead.",
+    de: "Wird gesagt, wenn der Kunde Sie anruft, ob bekannt oder nicht. Leer lassen, dann wird das erste Feld gesagt.",
+  },
+  "voiceDetail.openerUnused": {
+    tr: "Açılış cümlesinde Açılış yok, bu cümleler hiç söylenmez.",
+    en: "The opening line has no Opener, so these are never said.",
+    de: "Im Begrüßungssatz steht keine Eröffnung, daher werden diese nie gesagt.",
+  },
+  "voiceDetail.openerUse": {
+    tr: "Açılış cümlesine ekle",
+    en: "Add it to the opening line",
+    de: "Zum Begrüßungssatz hinzufügen",
+  },
   "voiceDetail.publish": {
     tr: "Yayınla",
     en: "Publish",
@@ -4338,6 +4388,86 @@ const dictionary = {
     en: "The fields the agent may fill on this call.",
     de: "Die Felder, die die Assistentin in diesem Anruf ausfüllen darf.",
   },
+  "voiceVariables.opener": {
+    tr: "Açılış",
+    en: "Opener",
+    de: "Eröffnung",
+  },
+  "voiceVariables.descOpener": {
+    tr: "Bu arama için seçilen ilk cümle: daha önce konuşulduysa, yalnızca denendiyse, arayan sizi aradıysa ya da hiçbiri değilse.",
+    en: "The first sentence chosen for this call: spoken before, only tried, they rang you, or none of these.",
+    de: "Der für diesen Anruf gewählte erste Satz: schon gesprochen, nur versucht, sie rufen an oder nichts davon.",
+  },
+  "voiceVariables.when": {
+    tr: "Ne zaman",
+    en: "When",
+    de: "Wann",
+  },
+  "voiceVariables.descWhen": {
+    tr: "Açılış cümlelerinde: son konuşmanın ya da son denemenin ne kadar önce olduğu, kelimelerle.",
+    en: "In the openers: how long ago the last conversation or the last attempt was, in words.",
+    de: "In den Eröffnungen: wie lange das letzte Gespräch oder der letzte Versuch her ist, in Worten.",
+  },
+  "voiceVariables.whenWeSpoke": {
+    tr: "Son konuşma (kelimelerle)",
+    en: "Last conversation (words)",
+    de: "Letztes Gespräch (Worte)",
+  },
+  "voiceVariables.descWhenWeSpoke": {
+    tr: "Son gerçek konuşmanın ne kadar önce olduğu: dün, Salı günü, geçen hafta. Hiç konuşulmadıysa boş.",
+    en: "How long ago we last really spoke: yesterday, on Tuesday, last week. Empty if never.",
+    de: "Wie lange das letzte echte Gespräch her ist: gestern, am Dienstag, letzte Woche. Leer, wenn nie.",
+  },
+  "voiceVariables.whenWeTried": {
+    tr: "Son deneme (kelimelerle)",
+    en: "Last attempt (words)",
+    de: "Letzter Versuch (Worte)",
+  },
+  "voiceVariables.descWhenWeTried": {
+    tr: "Bizim son aramamızın ne kadar önce olduğu, açılsın ya da açılmasın. Hiç aranmadıysa boş.",
+    en: "How long ago we last rang them, answered or not. Empty if never.",
+    de: "Wie lange unser letzter Anruf her ist, ob abgenommen oder nicht. Leer, wenn nie.",
+  },
+  "voiceVariables.daysSinceCall": {
+    tr: "Son konuşmadan beri gün",
+    en: "Days since we spoke",
+    de: "Tage seit dem Gespräch",
+  },
+  "voiceVariables.descDaysSinceCall": {
+    tr: "Son gerçek konuşmadan bu yana geçen tam gün sayısı.",
+    en: "Whole days since the last real conversation.",
+    de: "Volle Tage seit dem letzten echten Gespräch.",
+  },
+  "voiceVariables.minutesSinceCall": {
+    tr: "Son konuşmadan beri dakika",
+    en: "Minutes since we spoke",
+    de: "Minuten seit dem Gespräch",
+  },
+  "voiceVariables.descMinutesSinceCall": {
+    tr: "Son gerçek konuşmadan bu yana geçen dakika: birkaç dakika önce konuşup geri arayan biri için.",
+    en: "Minutes since the last real conversation: for someone ringing back moments later.",
+    de: "Minuten seit dem letzten echten Gespräch: für jemanden, der kurz danach zurückruft.",
+  },
+  "voiceVariables.daysSinceAttempt": {
+    tr: "Son denemeden beri gün",
+    en: "Days since we tried",
+    de: "Tage seit dem Versuch",
+  },
+  "voiceVariables.descDaysSinceAttempt": {
+    tr: "Bizim son aramamızdan bu yana geçen tam gün sayısı.",
+    en: "Whole days since we last rang them.",
+    de: "Volle Tage seit unserem letzten Anruf.",
+  },
+  "voiceVariables.minutesSinceAttempt": {
+    tr: "Son denemeden beri dakika",
+    en: "Minutes since we tried",
+    de: "Minuten seit dem Versuch",
+  },
+  "voiceVariables.descMinutesSinceAttempt": {
+    tr: "Bizim son aramamızdan bu yana geçen dakika: az önce aradığımız birinin geri araması için.",
+    en: "Minutes since we last rang them: for someone returning a call we just made.",
+    de: "Minuten seit unserem letzten Anruf: für jemanden, der unseren Anruf erwidert.",
+  },
   // The type popover's inline choices editor (Nudge's Choices section).
   "voiceVariables.choice": { tr: "Seçenek", en: "Choice", de: "Option" },
   "voiceVariables.addChoice": {
@@ -4550,6 +4680,16 @@ const dictionary = {
     tr: "Seçtiğiniz kişi gerçekten arasaydı asistana verilecek bilgiler. Bir değeri değiştirmek yalnızca bu denemeyi etkiler; boş bırakılan alan gönderilmez.",
     en: "What the agent would be handed if this person really rang. Changing a value affects this test only; an empty box is not sent.",
     de: "Was der Agent bekäme, wenn diese Person wirklich anriefe. Eine Änderung gilt nur für diesen Test; ein leeres Feld wird nicht gesendet.",
+  },
+  "agentTest.firstSentence": {
+    tr: "İlk cümle",
+    en: "First sentence",
+    de: "Erster Satz",
+  },
+  "agentTest.firstSentenceHint": {
+    tr: "Bu kişiyle bu yönde bir aramada asistanın söyleyeceği açılış cümlesi.",
+    en: "The opening line the agent would say on a call with this person, this way round.",
+    de: "Der Begrüßungssatz, den der Agent bei einem Anruf mit dieser Person in dieser Richtung sagen würde.",
   },
   "agentTest.emptyCount.one": {
     tr: "{n} boş",

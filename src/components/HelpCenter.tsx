@@ -154,6 +154,19 @@ const CATEGORIES: Category[] = [
         keywords: ["instructions", "prompt", "opening line", "voice", "publish"],
       },
       {
+        id: "agent-openers",
+        title: "Open each call with the right first sentence",
+        summary: "Say something different to a first-time caller, someone you spoke to last week and someone you could not reach.",
+        steps: [
+          "Open the agent and put Opener in the opening line with @, where the changing part should be said.",
+          "Fill the four sentences under it: when you have not spoken before, when you have spoken before, when you tried but did not speak, and when they call you.",
+          "Use When in a sentence to say how long ago, for example \"we spoke yesterday\" or \"I tried you on Tuesday\".",
+          "Save. The next call uses the new sentences; no new version is needed.",
+        ],
+        note: "A call only counts as spoken when the customer really talked to the agent. A missed call, voicemail or hang-up counts as a try.",
+        keywords: ["opener", "first sentence", "greeting", "follow-up", "callback", "opening line"],
+      },
+      {
         id: "agent-variables",
         title: "Collect information during calls",
         summary: "Use variables to pass known context in, confirm details live, and save new answers.",

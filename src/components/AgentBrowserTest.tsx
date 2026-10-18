@@ -9,6 +9,7 @@ import { buttonClass, fieldClass } from "./Control";
 import { InfoTip } from "./InfoTip";
 import { SegmentedControl } from "./SegmentedControl";
 import { CustomerPickField, type PickedCustomer } from "./CustomerPickField";
+import { OPENER_KEY, renderOpener, type AgentOpeners } from "../../convex/lib/opener";
 
 // A test of the agent in the browser (P9 of the Nudge port; Nudge's
 // AgentTestPanel). The owner talks to the agent through the microphone, as a
@@ -55,7 +56,13 @@ export function AgentBrowserTest({
   hasEdits,
   stage,
   onLiveChange,
+  beginMessage,
+  openers,
 }: {
+  // The opening line and first sentences as on screen, saved or not (P34),
+  // so the panel shows, and the test says, what Save would make it say.
+  beginMessage: string;
+  openers: AgentOpeners;
   agentId: string;
   // Whether the page holds edits (or a provider draft) the test should hear.
   hasEdits: boolean;
@@ -89,11 +96,18 @@ export function AgentBrowserTest({
   const live = phase === "connecting" || phase === "live";
   useEffect(() => onLiveChange?.(live), [live, onLiveChange]);
 
-  // What the agent would be handed, refreshed whenever the person changes.
+  // What the agent would be handed, refreshed whenever the person, the
+  // direction or the first sentences change: the last two decide {{opener}}.
   // A read: it costs nothing and runs before anybody commits to a minute.
+  const openersKey = JSON.stringify(openers);
   useEffect(() => {
     let cancelled = false;
-    void readVariables({ agentId, ...(picked ? { customerId: picked.id } : {}) })
+    void readVariables({
+      agentId,
+      direction,
+      openers: JSON.parse(openersKey) as AgentOpeners,
+      ...(picked ? { customerId: picked.id } : {}),
+    })
       .then((r) => {
         if (cancelled) return;
         setVars(r.variables);
@@ -106,7 +120,7 @@ export function AgentBrowserTest({
     return () => {
       cancelled = true;
     };
-  }, [agentId, picked, readVariables, t]);
+  }, [agentId, picked, direction, openersKey, readVariables, t]);
 
   const hangUp = () => {
     try {
@@ -149,6 +163,7 @@ export function AgentBrowserTest({
       const session = await startTest({
         agentId,
         direction,
+        openers,
         ...(picked ? { customerId: picked.id } : {}),
         ...(Object.keys(overrides).length > 0 ? { overrides } : {}),
         ...(version !== null ? { agentVersion: version } : {}),
@@ -197,8 +212,22 @@ export function AgentBrowserTest({
     });
   };
 
-  const entries = Object.entries(vars ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  // {{opener}} is shown as the whole first sentence below, not as a box:
+  // the four fields on the page are where it is written.
+  const entries = Object.entries(vars ?? {})
+    .filter(([key]) => key !== OPENER_KEY)
+    .sort(([a], [b]) => a.localeCompare(b));
   const valueOf = (key: string, value: string) => overrides[key] ?? value;
+  // The opening line with this call's variables in it, the overrides typed
+  // above included: what the person on the line hears first.
+  const firstSentence = vars
+    ? renderOpener(
+        beginMessage,
+        Object.fromEntries(
+          Object.entries(vars).map(([key, value]) => [key, valueOf(key, value)]),
+        ),
+      )
+    : "";
   const filled = entries.filter(([key, value]) => valueOf(key, value).trim());
   const empty = entries.filter(([key, value]) => !valueOf(key, value).trim());
   const rows = showEmpty ? entries : filled;
@@ -233,6 +262,18 @@ export function AgentBrowserTest({
           />
         </div>
       </div>
+
+      {beginMessage.trim() && (
+        <div>
+          <div className="mb-1 flex items-center gap-1.5">
+            <h4 className="text-xs font-medium">{t("agentTest.firstSentence")}</h4>
+            <InfoTip text={t("agentTest.firstSentenceHint")} />
+          </div>
+          {/* Wraps: an opening line is often two sentences, and a cut one
+              hides the part that changes per caller. */}
+          <p className="text-sm">{vars === null ? t("common.loading") : firstSentence}</p>
+        </div>
+      )}
 
       <div>
         <div className="mb-1.5 flex items-center gap-1.5">

@@ -19,6 +19,7 @@ import { PromptEditor } from "./PromptEditor";
 import { Sheet } from "./Sheet";
 import { Toggle } from "./Toggle";
 import { useHeaderTrail } from "@/lib/headerTrail";
+import { usesOpener, type AgentOpeners } from "../../convex/lib/opener";
 import {
   VoiceVariablesEditor,
   builtinVoiceVariables,
@@ -88,6 +89,7 @@ type Detail = {
   inboundNumber: string | null;
   prompt: { general: string; beginMessage: string } | null;
   personaName: string | null;
+  openers: AgentOpeners | null;
   canEndCall: boolean;
   webhook: {
     expected: string | null;
@@ -135,9 +137,32 @@ type StoredDraft = {
   begin?: string;
   voice?: string;
   persona?: string;
+  openers?: Openers;
   voicemail?: Voicemail;
   rows?: VoiceVariable[];
 };
+
+// The four first sentences as the page edits them (P34, lib/opener): every
+// one a string, so a field never flips between controlled and not.
+type Openers = Required<AgentOpeners>;
+const OPENER_FIELDS = ["cold", "followUp", "missed", "inbound"] as const;
+const OPENER_LABELS: Record<
+  (typeof OPENER_FIELDS)[number],
+  { label: TranslationKey; hint: TranslationKey }
+> = {
+  cold: { label: "voiceDetail.openerCold", hint: "voiceDetail.openerColdHint" },
+  followUp: { label: "voiceDetail.openerFollowUp", hint: "voiceDetail.openerFollowUpHint" },
+  missed: { label: "voiceDetail.openerMissed", hint: "voiceDetail.openerMissedHint" },
+  inbound: { label: "voiceDetail.openerInbound", hint: "voiceDetail.openerInboundHint" },
+};
+const openersOf = (stored: AgentOpeners | null | undefined): Openers => ({
+  cold: stored?.cold ?? "",
+  followUp: stored?.followUp ?? "",
+  missed: stored?.missed ?? "",
+  inbound: stored?.inbound ?? "",
+});
+const sameOpeners = (a: Openers, b: Openers) =>
+  OPENER_FIELDS.every((key) => a[key].trim() === b[key].trim());
 
 const draftKey = (agentId: string) => `randevu.agentDraft.${agentId}`;
 
@@ -210,6 +235,7 @@ export function VoiceAgentPage({
   const wireWebhook = useAction(api.retellAgent.wireWebhook);
   const syncTemplate = useAction(api.retellAgent.syncTemplate);
   const setAgentPersona = useMutation(api.retell.setAgentPersona);
+  const setAgentOpeners = useMutation(api.retell.setAgentOpeners);
   const setEndCallEnabled = useAction(api.retellAgent.setEndCallEnabled);
   const attachLine = useAction(api.retellAgent.attachLine);
   const testCall = useAction(api.retellAgent.testCall);
@@ -235,6 +261,7 @@ export function VoiceAgentPage({
   const [draft, setDraft] = useState("");
   const [begin, setBegin] = useState("");
   const [persona, setPersona] = useState("");
+  const [openers, setOpeners] = useState<Openers>(openersOf(null));
   const [voice, setVoice] = useState("");
   const [voicemail, setVoicemail] = useState<Voicemail>({ action: "hangup" });
   // Only one preview plays at a time — clicking down the list otherwise leaves
@@ -277,6 +304,7 @@ export function VoiceAgentPage({
         setVoice(detail.voiceId ?? "");
         setVoicemail(detail.voicemail);
         setPersona(detail.personaName ?? "");
+        setOpeners(openersOf(detail.openers));
         // A draft left behind on this browser wins over what the server says,
         // because it is the newer intent. The amber Unsaved mark keeps it honest
         // about not being live.
@@ -286,6 +314,7 @@ export function VoiceAgentPage({
           if (stored.begin !== undefined) setBegin(stored.begin);
           if (stored.voice !== undefined) setVoice(stored.voice);
           if (stored.persona !== undefined) setPersona(stored.persona);
+          if (stored.openers !== undefined) setOpeners(openersOf(stored.openers));
           if (stored.voicemail !== undefined) setVoicemail(stored.voicemail);
           setSeed(stored.rows ?? null);
         }
@@ -311,11 +340,17 @@ export function VoiceAgentPage({
 
   const voiceDirty = !!detail && voice !== (detail.voiceId ?? "");
   const personaDirty = !!detail && persona.trim() !== (detail.personaName ?? "");
+  const openersDirty = !!detail && !sameOpeners(openers, openersOf(detail.openers));
   const voicemailDirty = !!detail && !sameVoicemail(voicemail, detail.voicemail);
   const instructionsDirty = !!detail?.prompt && draft !== detail.prompt.general;
   const openingDirty = !!detail?.prompt && begin !== detail.prompt.beginMessage;
   const promptDirty =
-    instructionsDirty || openingDirty || voiceDirty || personaDirty || voicemailDirty;
+    instructionsDirty ||
+    openingDirty ||
+    voiceDirty ||
+    personaDirty ||
+    openersDirty ||
+    voicemailDirty;
   const dirty = promptDirty || !!varsState?.dirty;
   // A draft at the provider the page did not make in this session: a publish
   // that stopped half way, or an edit from the provider's console.
@@ -334,13 +369,14 @@ export function VoiceAgentPage({
         begin,
         voice,
         persona,
+        openers,
         voicemail,
         rows: varsState?.rows,
       });
     } else {
       clearDraft(agentId);
     }
-  }, [restored, dirty, agentId, draft, begin, voice, persona, voicemail, varsState?.rows]);
+  }, [restored, dirty, agentId, draft, begin, voice, persona, openers, voicemail, varsState?.rows]);
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(true);
@@ -412,20 +448,29 @@ export function VoiceAgentPage({
     instructionsDirty || openingDirty || voiceDirty || voicemailDirty || !!varsState?.dirty;
 
   const saveAll = () => {
-    // Separate from the provider publish on purpose: the name never goes to
-    // the provider, so it must not ride a publish that could fail, and it
-    // must still save when nothing else changed.
+    // Separate from the provider publish on purpose: the name and the first
+    // sentences never go to the provider, so they must not ride a publish
+    // that could fail, and they must still save when nothing else changed.
+    // Saved BEFORE the publish, which reads them for the opener's fallback.
+    const ours: Promise<unknown>[] = [];
     if (personaDirty) {
-      void setAgentPersona({ retellAgentId: agentId, personaName: persona.trim() })
-        .then(load)
-        .catch(() => setError(t("forms.failed")));
+      ours.push(setAgentPersona({ retellAgentId: agentId, personaName: persona.trim() }));
     }
+    if (openersDirty) {
+      ours.push(setAgentOpeners({ retellAgentId: agentId, openers }));
+    }
+    const saved = Promise.all(ours);
     if (providerChanges) {
-      savePrompt();
+      void saved.then(savePrompt).catch(() => setError(t("forms.failed")));
       return;
     }
-    if (personaDirty) {
-      clearDraft(agentId);
+    if (ours.length > 0) {
+      void saved
+        .then(() => {
+          clearDraft(agentId);
+          load();
+        })
+        .catch(() => setError(t("forms.failed")));
       return;
     }
     // Nothing of ours to send, but a draft is waiting at the provider.
@@ -447,6 +492,7 @@ export function VoiceAgentPage({
     setBegin(detail?.prompt?.beginMessage ?? "");
     setVoice(detail?.voiceId ?? "");
     setPersona(detail?.personaName ?? "");
+    setOpeners(openersOf(detail?.openers));
     if (detail) setVoicemail(detail.voicemail);
     clearDraft(agentId);
     setStatus(null);
@@ -563,6 +609,14 @@ export function VoiceAgentPage({
       ...injectedVoiceContext(t).filter((row) => !seen.has(row.key)),
     ];
   }, [detail, t]);
+
+  // The openers' picker: everything the opening line offers, plus {{when}},
+  // which only means something inside an opener (lib/opener).
+  const openerVariables = useMemo(
+    () => [...promptVariables, { key: "when", label: t("voiceVariables.when") }],
+    [promptVariables, t],
+  );
+  const anyOpener = OPENER_FIELDS.some((key) => openers[key].trim());
 
   // Not from the backend: the backend would have to pick a language. Which of
   // the two unsupported shapes this is, the client can tell from engineType.
@@ -827,6 +881,46 @@ export function VoiceAgentPage({
                   />
                 </label>
 
+                {/* The first sentence, chosen while the phone rings (P34,
+                    lib/opener): four of the business's own sentences, said
+                    where the opening line has {{opener}}. Resepta's, like the
+                    persona below: they ride Save but never the provider, so
+                    a change reaches the next call with no new version. */}
+                {OPENER_FIELDS.map((key) => (
+                  <label key={key} className="mt-2 block">
+                    <span className="mb-1 flex items-center gap-1.5 text-xs font-medium">
+                      {t(OPENER_LABELS[key].label)}
+                      <InfoTip text={t(OPENER_LABELS[key].hint)} />
+                    </span>
+                    <PromptEditor
+                      value={openers[key]}
+                      onChange={(value) => setOpeners((current) => ({ ...current, [key]: value }))}
+                      variables={openerVariables}
+                      singleLine
+                    />
+                  </label>
+                ))}
+                {/* A state the owner must act on, so it stays visible: these
+                    sentences are written and the opening line never says
+                    them. Reserved line height, so typing the first one does
+                    not push the page down. */}
+                <div className="mt-1.5 flex min-h-7 items-center gap-2">
+                  {anyOpener && !usesOpener(begin) && (
+                    <>
+                      <span className="text-xs text-amber-700 dark:text-amber-400">
+                        {t("voiceDetail.openerUnused")}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setBegin((current) => `${current.trimEnd()} {{opener}}`.trim())}
+                        className={buttonClass("ghost", "xs")}
+                      >
+                        {t("voiceDetail.openerUse")}
+                      </button>
+                    </>
+                  )}
+                </div>
+
                 {/* Her name, beside the voice she says it in — the two
                     together are who the caller thinks they are talking to.
                     Rides the same Save, though it alone never reaches the
@@ -1049,6 +1143,8 @@ export function VoiceAgentPage({
               hasEdits={providerChanges || providerDraft}
               stage={stageForTest}
               onLiveChange={onTestLive}
+              beginMessage={begin}
+              openers={openers}
             />
           ) : (
           <div className="space-y-3">

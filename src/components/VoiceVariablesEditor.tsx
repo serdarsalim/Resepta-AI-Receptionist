@@ -260,6 +260,50 @@ export function injectedVoiceContext(t: ProvidedT): ProvidedVariable[] {
       description: t("voiceVariables.descInformation"),
       kind: "list",
     },
+    // The first sentence and the two call clocks behind it (P34,
+    // lib/opener), mirroring what retell.beforeCallContext adds last.
+    {
+      key: "opener",
+      label: t("voiceVariables.opener"),
+      description: t("voiceVariables.descOpener"),
+      kind: "text",
+    },
+    {
+      key: "when_we_spoke",
+      label: t("voiceVariables.whenWeSpoke"),
+      description: t("voiceVariables.descWhenWeSpoke"),
+      kind: "text",
+    },
+    {
+      key: "days_since_last_call",
+      label: t("voiceVariables.daysSinceCall"),
+      description: t("voiceVariables.descDaysSinceCall"),
+      kind: "text",
+    },
+    {
+      key: "minutes_since_last_call",
+      label: t("voiceVariables.minutesSinceCall"),
+      description: t("voiceVariables.descMinutesSinceCall"),
+      kind: "text",
+    },
+    {
+      key: "when_we_tried",
+      label: t("voiceVariables.whenWeTried"),
+      description: t("voiceVariables.descWhenWeTried"),
+      kind: "text",
+    },
+    {
+      key: "days_since_last_attempt",
+      label: t("voiceVariables.daysSinceAttempt"),
+      description: t("voiceVariables.descDaysSinceAttempt"),
+      kind: "text",
+    },
+    {
+      key: "minutes_since_last_attempt",
+      label: t("voiceVariables.minutesSinceAttempt"),
+      description: t("voiceVariables.descMinutesSinceAttempt"),
+      kind: "text",
+    },
   ];
 }
 
