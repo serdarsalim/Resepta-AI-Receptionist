@@ -1002,7 +1002,10 @@ post-call webhook completes that row and stops before `voiceEvents`, so no
 calls row, thread entry or customer field comes of it. It is metered like a
 call into `usageMonthly.voiceTest*`, a share of the voice totals, never an
 addition. A new write in the functions route checks `isTest` first; a marked
-call with no row of this org is still a test.
+call with no row of this org is still a test. The test lives on the agent page's
+Testing tab, mounted beside Setup and only hidden (P35), so never move it
+back into a sheet or anything that unmounts it: closing the sheet ended the
+call.
 
 **A person's dial says who placed it** (2026-10-17, P11). `testCall` (the
 record's Place call and the agent page's test call) puts the caller's user id
