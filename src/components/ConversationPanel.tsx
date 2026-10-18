@@ -69,6 +69,7 @@ import {
 } from "../../convex/lib/noteBody";
 import { splitQuotedHtml, splitQuotedText } from "../../convex/lib/emailQuote";
 import { HoverTip } from "./HoverTip";
+import { InfoTip } from "./InfoTip";
 import { EmailComposeWindow } from "./EmailComposeWindow";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
@@ -289,6 +290,9 @@ export function ConversationPanel({
   const placeCall = useAction(api.retellAgent.testCall);
   const addNote = useMutation(api.notes.add);
   const cancelScheduled = useMutation(api.wa.cancelScheduled);
+  // The callback this customer asked for, if one is waiting (P36): a card at
+  // the head of the Calls tab and a line at the head of All.
+  const queuedCallback = useQuery(api.callbacks.forCustomer, { customerId });
   const [sendError, setSendError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   // Empty = send now. A disclosure rather than a permanent field: almost every
@@ -1102,6 +1106,9 @@ export function ConversationPanel({
             rest, and Details unfolds the collected values + transcript IN the
             card. The "no outcome pill" decision (2026-08-25) stands — the
             summary is the outcome. */}
+        {filter === "call" && queuedCallback && (
+          <QueuedCallbackCard callback={queuedCallback} />
+        )}
         {filter === "call" && (
           <CallCards
             items={visible
@@ -1126,6 +1133,10 @@ export function ConversationPanel({
                 placedBy: "placedBy" in item ? item.placedBy : undefined,
                 bulkRun: "bulkRun" in item ? item.bulkRun : undefined,
                 booked: "booked" in item ? item.booked : undefined,
+                callbackRequestedFor:
+                  "callbackRequestedFor" in item ? item.callbackRequestedFor : undefined,
+                requestedCallback:
+                  "requestedCallback" in item ? item.requestedCallback : undefined,
               }))}
             contactName={contactName}
             focusId={focusCallId}
@@ -1138,6 +1149,32 @@ export function ConversationPanel({
 
             Email and call rows ROUTE to their own tab, because both have a
             detail worth a whole pane. WhatsApp and notes open in place. */}
+        {/* A waiting callback heads the index: it is the one thing on the
+            record that has not happened yet, and it routes to its card. */}
+        {filter === "all" && queuedCallback && (
+          <div className="-mx-4">
+            <button
+              type="button"
+              onClick={() => {
+                setReturnScrollTop(threadRef.current?.scrollTop ?? 0);
+                onFilterChange?.("call");
+              }}
+              className="flex w-full items-center gap-2 border-b border-[var(--border)] px-4 py-2 text-left transition-colors hover:bg-[var(--row-hover-bg)]"
+            >
+              <FeedIcon type="call" size={13} />
+              <span className="min-w-0 flex-1 truncate text-sm">
+                {queuedCallback.status === "dialing"
+                  ? t("callback.dialing")
+                  : t("callback.allRow", {
+                      when: formatDateTime(queuedCallback.dueAt, language),
+                    })}
+              </span>
+              <span aria-hidden className="shrink-0 text-xs text-[var(--muted)]">
+                ›
+              </span>
+            </button>
+          </div>
+        )}
         {filter === "all" &&
           thread.map((item, index) => {
             const monthOf = (ms: number) =>
@@ -2305,7 +2342,72 @@ type CallCardItem = {
   placedBy?: string;
   bulkRun?: string;
   booked?: { at: number; services: string[]; cancelled: boolean };
+  callbackRequestedFor?: number;
+  requestedCallback?: boolean;
 };
+
+type QueuedCallback = NonNullable<FunctionReturnType<typeof api.callbacks.forCustomer>>;
+
+// The callback a customer asked for, waiting (P36). Nudge's queued call card:
+// what will happen and when on the first line, who rings and where the
+// request came from under it, and Cancel. Cancel needs no confirm: it stops
+// a call, which is never the risky direction, and any member may.
+function QueuedCallbackCard({ callback }: { callback: QueuedCallback }) {
+  const { t, language } = useLanguage();
+  const cancel = useMutation(api.callbacks.cancel);
+  const [cancelling, setCancelling] = useState(false);
+  const dialing = callback.status === "dialing";
+  const facts = [
+    callback.agentName ? t("callback.agent", { name: callback.agentName }) : null,
+    t("callback.askedOn", { when: formatDateTime(callback.requestedAt, language) }),
+    callback.moved
+      ? t("callback.moved", { when: formatDateTime(callback.askedFor, language) })
+      : null,
+    callback.waiting === "busy" ? t("callback.waitingBusy") : null,
+  ].filter((fact): fact is string => !!fact);
+  return (
+    <div className="mb-2 rounded-lg bg-[var(--chat-field)] px-3.5 py-3 text-sm shadow-[var(--bubble-shadow)]">
+      <div className="flex items-center gap-2 text-xs">
+        <FeedIcon type="call" size={13} />
+        {/* The call pill's neutral look while waiting (--muted-bg is the
+            card colour in dark and would vanish here); emerald while it
+            rings, the product's "on". */}
+        <span
+          className={`shrink-0 rounded-full px-2 py-0.5 font-medium ${
+            dialing
+              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+              : "border border-[var(--border)] text-[var(--muted-strong)]"
+          }`}
+        >
+          {dialing ? t("callback.dialing") : t("callback.queued")}
+        </span>
+        <InfoTip text={t("callback.explain")} />
+        {!dialing && (
+          <button
+            type="button"
+            disabled={cancelling}
+            aria-label={t("callback.cancelLabel")}
+            onClick={() => {
+              setCancelling(true);
+              void cancel({ callbackId: callback.id }).finally(() => setCancelling(false));
+            }}
+            className="ml-auto shrink-0 rounded-md px-2 py-1 font-medium text-[var(--now-line)] transition-colors hover:bg-[var(--control-hover)] disabled:opacity-50"
+          >
+            {t("callback.cancel")}
+          </button>
+        )}
+      </div>
+      <p className="mt-2 font-medium">
+        {t("callback.callsAt", { when: formatDateTime(callback.dueAt, language) })}
+      </p>
+      <ul className="mt-1 space-y-1 text-xs text-[var(--muted-strong)]">
+        {facts.map((fact) => (
+          <li key={fact}>{fact}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function CallCards({
   items,
@@ -2384,6 +2486,12 @@ function CallCards({
                     ? `${t("calls.booked", { when: formatDateTime(c.booked.at, language) })}${
                         c.booked.services.length > 0 ? ` · ${c.booked.services.join(", ")}` : ""
                       }${c.booked.cancelled ? ` (${t("calls.bookedCancelled")})` : ""}`
+                    : null,
+                  c.requestedCallback ? t("calls.requestedCallback") : null,
+                  c.callbackRequestedFor !== undefined
+                    ? t("calls.callbackRequested", {
+                        when: formatDateTime(c.callbackRequestedFor, language),
+                      })
                     : null,
                   // On an answered call a footnote; on a missed one the only
                   // line there is.

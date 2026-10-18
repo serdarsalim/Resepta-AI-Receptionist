@@ -584,6 +584,10 @@ const feedItem = v.object({
   booked: v.optional(
     v.object({ at: v.number(), services: v.array(v.string()), cancelled: v.boolean() }),
   ),
+  // Call-only (P36): on the call where they asked to be rung back, when that
+  // callback rings; on the call that kept the promise, true.
+  callbackRequestedFor: v.optional(v.number()),
+  requestedCallback: v.optional(v.boolean()),
   // Email-only. A subject is the one thing an email has that a WhatsApp
   // message doesn't, and it is what the reader scans first.
   emailSubject: v.optional(v.string()),
@@ -806,6 +810,10 @@ export const feedForCustomer = query({
         recordingUrl: c.recordingUrl,
         collected: c.collected,
         disconnectionReason: c.disconnectionReason,
+        ...(c.callbackRequestedFor !== undefined
+          ? { callbackRequestedFor: c.callbackRequestedFor }
+          : {}),
+        ...(c.requestedCallback ? { requestedCallback: true } : {}),
       })),
       ...notes.map((n) => ({
         id: n._id as string,

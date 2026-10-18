@@ -5061,6 +5061,71 @@ const dictionary = {
     en: "since cancelled",
     de: "inzwischen storniert",
   },
+  "calls.callbackRequested": {
+    tr: "Geri aranmak istedi: {when}",
+    en: "Asked to be called back: {when}",
+    de: "Bittet um Rückruf: {when}",
+  },
+  "calls.requestedCallback": {
+    tr: "İstediği geri arama",
+    en: "The callback they asked for",
+    de: "Der gewünschte Rückruf",
+  },
+  "callback.queued": {
+    tr: "Sırada",
+    en: "Queued",
+    de: "Geplant",
+  },
+  "callback.dialing": {
+    tr: "Şimdi aranıyor",
+    en: "Calling now",
+    de: "Wird gerade angerufen",
+  },
+  "callback.callsAt": {
+    tr: "Geri arama: {when}",
+    en: "Calls back {when}",
+    de: "Rückruf {when}",
+  },
+  "callback.agent": {
+    tr: "Arayacak asistan: {name}",
+    en: "Calls with {name}",
+    de: "Ruft an mit {name}",
+  },
+  "callback.askedOn": {
+    tr: "{when} tarihli aramada istendi",
+    en: "Asked for on the call of {when}",
+    de: "Gewünscht im Anruf vom {when}",
+  },
+  "callback.moved": {
+    tr: "İstenen saat {when} idi; çalışma saatlerinize kaydırıldı",
+    en: "They asked for {when}; moved into your opening hours",
+    de: "Gewünscht war {when}; in Ihre Öffnungszeiten verschoben",
+  },
+  "callback.waitingBusy": {
+    tr: "Hatlar dolu, birazdan yeniden denenecek",
+    en: "Lines are busy, trying again shortly",
+    de: "Leitungen belegt, gleich ein neuer Versuch",
+  },
+  "callback.cancel": {
+    tr: "İptal et",
+    en: "Cancel",
+    de: "Absagen",
+  },
+  "callback.cancelLabel": {
+    tr: "Geri aramayı iptal et",
+    en: "Cancel the callback",
+    de: "Rückruf absagen",
+  },
+  "callback.allRow": {
+    tr: "Geri arama sırada: {when}",
+    en: "Callback queued for {when}",
+    de: "Rückruf geplant für {when}",
+  },
+  "callback.explain": {
+    tr: "Müşteri aramada bir saat söyleyip geri aranmak istedi. O saatte asistan bir kez arar; çalışma saatleri dışındaysa ilk açık saate kayar. Bu arada onunla konuşursanız ya da siz ararsanız iptal olur.",
+    en: "The customer asked on a call to be rung back at a time they named. The agent calls once at that time, moved to your next open hour when you are closed. It is cancelled if you speak with them first or call them yourself.",
+    de: "Der Kunde hat im Anruf um einen Rückruf zu einer genannten Zeit gebeten. Der Assistent ruft dann einmal an, außerhalb Ihrer Öffnungszeiten zur nächsten offenen Stunde. Sprechen Sie vorher mit ihm oder rufen Sie selbst an, entfällt er.",
+  },
   "voiceDetail.callMe": {
     tr: "Beni ara",
     en: "Call me",
