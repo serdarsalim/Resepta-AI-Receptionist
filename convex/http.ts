@@ -487,6 +487,7 @@ http.route({
     const context = (await ctx.runQuery(internal.retell.beforeCallContext, {
       retellAgentId: agentId,
       phone: fromNumber,
+      direction: "inbound",
     })) as {
       apiKey: string | null;
       dynamicVariables: Record<string, string>;

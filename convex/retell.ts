@@ -1,6 +1,8 @@
 import { v, type Infer, type ObjectType } from "convex/values";
 import { syncCustomerSearch } from "./lib/customerSearch";
 import { builtinAgentVariables } from "./lib/agentVariables";
+import { OPENER_KEY, chooseOpener, clockVariables } from "./lib/opener";
+import { callOutcome, reachedPhone } from "./lib/callOutcome";
 import {
   action,
   internalAction,
@@ -40,7 +42,7 @@ import {
   todayInZone,
 } from "./lib/businessHours";
 import { loadClosures } from "./lib/closureRows";
-import { voiceVariableInput } from "./lib/voiceVariables";
+import { openersValidator, voiceVariableInput } from "./lib/voiceVariables";
 import { spokenClock, spokenDateTime, spokenLead } from "./lib/speech";
 import { customerConflict } from "./lib/overlap";
 import { RESERVED_CONTACT_KEYS } from "./lib/keys";
@@ -918,6 +920,7 @@ export const agentEditorContext = internalQuery({
       variablesRetellVersion: agent.variablesRetellVersion ?? null,
       templateVersion: agent.templateVersion ?? null,
       personaName: agent.personaName ?? null,
+      openers: agent.openers ?? null,
       canEndCall: agent.canEndCall ?? true,
       voicemail: agent.voicemail ?? null,
       llmModel: agent.llmModel ?? null,
@@ -1227,9 +1230,19 @@ export const agentForInboundNumber = internalQuery({
 });
 
 export const beforeCallContext = internalQuery({
-  args: { retellAgentId: v.string(), phone: v.string() },
+  args: {
+    retellAgentId: v.string(),
+    phone: v.string(),
+    // Which way the call goes: it picks the first sentence (lib/opener). The
+    // inbound hook passes "inbound"; every dial passes "outbound". Unset reads
+    // as inbound, the hook's case, since a dial always knows it is one.
+    direction: v.optional(v.union(v.literal("inbound"), v.literal("outbound"))),
+    // The agent page's unsaved first sentences, for the browser test only, so
+    // a test hears what is on screen. Never passed by a real ring.
+    openers: v.optional(openersValidator),
+  },
   returns: v.any(),
-  handler: async (ctx, { retellAgentId, phone }) => {
+  handler: async (ctx, { retellAgentId, phone, direction, openers }) => {
     const agent = await ctx.db
       .query("retellAgents")
       .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
@@ -1389,6 +1402,22 @@ export const beforeCallContext = internalQuery({
     for (const [key, value] of Object.entries(builtins)) {
       if (!(key in dynamicVariables)) dynamicVariables[key] = value;
     }
+    // The two call clocks (days, minutes and words since we last spoke and
+    // last tried), then the first sentence they decide (P34, lib/opener).
+    // Last, and always set: {{opener}} is Resepta's to write, so a registry
+    // row of the same name never wins, and a never-empty value keeps an
+    // opening line like "{{business_name}}, {{opener}}" whole.
+    Object.assign(
+      dynamicVariables,
+      clockVariables(customer, org.language, org.timezone),
+    );
+    dynamicVariables[OPENER_KEY] = chooseOpener({
+      direction: direction ?? "inbound",
+      openers: openers ?? agent.openers,
+      vars: dynamicVariables,
+      language: org.language,
+      personaName: agent.personaName,
+    }).text;
     return {
       apiKey: await connectionField(ctx, agent.orgId, "retell", "apiKey"),
       dynamicVariables,
@@ -1979,6 +2008,33 @@ export const setAgentPersona = mutation({
       // Cleared rather than stored blank, so "has a name" is one check
       // everywhere instead of two.
       personaName: trimmed || undefined,
+    });
+    return null;
+  },
+});
+
+// The agent's four first sentences (P34, lib/opener). Resepta's own, like the
+// persona above: they never go to the provider, they are rendered into
+// {{opener}} while the phone rings, so a change reaches the next call with no
+// publish. A blank one is cleared, and so is the whole object when all four
+// are, so "has openers" stays one check.
+export const setAgentOpeners = mutation({
+  args: { retellAgentId: v.string(), openers: openersValidator },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId, openers }) => {
+    const { orgId } = await requireOwner(ctx);
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent || agent.orgId !== orgId) throw new Error("no-such-agent");
+    const clean: Record<string, string> = {};
+    for (const key of ["cold", "followUp", "missed", "inbound"] as const) {
+      const value = (openers[key] ?? "").trim().slice(0, 500);
+      if (value) clean[key] = value;
+    }
+    await ctx.db.patch(agent._id, {
+      openers: Object.keys(clean).length > 0 ? clean : undefined,
     });
     return null;
   },
@@ -3856,6 +3912,50 @@ export const completeBrowserTest = internalMutation({
 });
 
 // Post-call webhook: one row per Retell call, idempotent by retellCallId.
+// The two call clocks behind the agent's first sentence (P34,
+// customers.lastConversationAt / lastCallAttemptAt). Both recordCall
+// branches call it, because call_ended brings the disconnect code and
+// call_analyzed brings the provider's verdict on whether anybody talked.
+// Idempotent: each clock only ever moves forward to this call's start, so a
+// replayed event changes nothing. A browser test never reaches recordCall,
+// and the demo org and a customer being deleted are left alone.
+async function stampCallClocks(
+  ctx: MutationCtx,
+  args: {
+    orgId: Id<"orgs">;
+    customerId: Id<"customers"> | undefined;
+    direction: "inbound" | "outbound";
+    startedAt: number;
+    // The provider's call_successful, as recordCall stores it ("true").
+    outcome: string | undefined;
+    disconnectionReason: string | undefined;
+    durationSec: number | undefined;
+  },
+): Promise<void> {
+  if (!args.customerId) return;
+  const customer = await ctx.db.get(args.customerId);
+  if (!customer || customer.orgId !== args.orgId || isDeleting(customer)) return;
+  if (isDemo(await ctx.db.get(args.orgId))) return;
+  const patch: Partial<Doc<"customers">> = {};
+  // A conversation is the provider's own judgement, never a connected line:
+  // a silent pick-up or a hang-up on hello connects too.
+  if (args.outcome === "true" && args.startedAt > (customer.lastConversationAt ?? 0)) {
+    patch.lastConversationAt = args.startedAt;
+  }
+  // An attempt is a call we placed that reached the phone. A dial the
+  // network refused never rang, so "I tried you" would not be true.
+  const ended = callOutcome(args.disconnectionReason, args.durationSec);
+  if (
+    args.direction === "outbound" &&
+    ended !== undefined &&
+    reachedPhone(ended) &&
+    args.startedAt > (customer.lastCallAttemptAt ?? 0)
+  ) {
+    patch.lastCallAttemptAt = args.startedAt;
+  }
+  if (Object.keys(patch).length > 0) await ctx.db.patch(customer._id, patch);
+}
+
 export const recordCall = internalMutation({
   args: {
     retellAgentId: v.string(),
@@ -3927,6 +4027,15 @@ export const recordCall = internalMutation({
             : undefined,
         ...(await meterCall(ctx, agent.orgId, existing, args, existing.startedAt)),
       });
+      await stampCallClocks(ctx, {
+        orgId: agent.orgId,
+        customerId: existing.customerId,
+        direction: existing.direction === "outbound" ? "outbound" : "inbound",
+        startedAt: existing.startedAt,
+        outcome: existing.outcome ?? args.outcome,
+        disconnectionReason: existing.disconnectionReason ?? args.disconnectionReason,
+        durationSec: existing.durationSec ?? args.durationSec,
+      });
       // The analysis fills the summary the inbox row previews.
       if (existing.customerId) await recomputeThread(ctx, existing.customerId);
       return null;
@@ -3995,6 +4104,15 @@ export const recordCall = internalMutation({
     });
     const call = await ctx.db.get(callId);
     if (call) await noteCall(ctx, call);
+    await stampCallClocks(ctx, {
+      orgId: agent.orgId,
+      customerId,
+      direction,
+      startedAt: args.startedAt,
+      outcome: args.outcome,
+      disconnectionReason: args.disconnectionReason,
+      durationSec: args.durationSec,
+    });
     // The Voice card's lifetime figures (agentCallStats). On the insert only:
     // the call_analyzed event patches this same row above and returns before
     // reaching here, so one call is one count.

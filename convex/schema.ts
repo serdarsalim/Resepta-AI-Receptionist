@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
 import { threadValidator } from "./lib/thread";
 import { agentIntentValidator } from "./lib/agentChange";
-import { voiceVariableInput } from "./lib/voiceVariables";
+import { openersValidator, voiceVariableInput } from "./lib/voiceVariables";
 
 // Multi-org invariant (see AGENTS.md): every app table carries orgId and every
 // index used by app queries starts with it. `orgs` and the auth tables are the
@@ -881,6 +881,13 @@ export default defineSchema({
     // line is not a greeting. Injected as {{agent_name}} at ring time, so
     // renaming her takes effect on the next call with no republish.
     personaName: v.optional(v.string()),
+    // The agent's four first sentences (P34, lib/opener), the business's own
+    // words with {{variables}}: cold (nothing on record), followUp (we spoke
+    // before), missed (we only tried), inbound (they rang us). Resepta's, like
+    // personaName: rendered into {{opener}} while the phone rings, so an edit
+    // reaches the next call with no republish. Heard only where the opening
+    // line says {{opener}}. Unset = the template's greeting tail.
+    openers: v.optional(openersValidator),
     // True on the ONE agent whose Talimat the WhatsApp chat lane composes
     // over (chatAgent.loadTurnContext). At most one per org — chat is a
     // single conversation surface and two agents answering it is not a thing
@@ -1295,6 +1302,16 @@ export default defineSchema({
     // rather than set by a person. Display only: the record says where the
     // value came from. A person setting the language clears it.
     languageLearnedAt: v.optional(v.number()),
+    // The two call clocks behind the agent's first sentence (P34, Nudge
+    // 3ae8dcd; lib/opener). lastConversationAt: the start of the newest call,
+    // either direction, the provider judged a conversation (call_successful),
+    // so "we spoke yesterday" never follows a six-second hang-up.
+    // lastCallAttemptAt: the start of the newest call WE placed that reached
+    // the phone, answered or not, for "I tried you yesterday". Written by
+    // retell.recordCall only; never for a browser test or the demo org.
+    // Unset = never.
+    lastConversationAt: v.optional(v.number()),
+    lastCallAttemptAt: v.optional(v.number()),
     notes: v.optional(v.string()),
     // KVKK: when the customer consented to WhatsApp messages. Unset = no
     // consent recorded; sends are blocked until it's stamped.

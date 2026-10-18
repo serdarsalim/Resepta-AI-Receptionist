@@ -110,3 +110,12 @@ export function normaliseVoiceVariableKey(raw: string): string {
     .replace(/^_+|_+$/g, "")
     .slice(0, 64);
 }
+
+// The agent's four first sentences (P34, lib/opener; retellAgents.openers),
+// as the agent page saves them and the browser test previews them unsaved.
+export const openersValidator = v.object({
+  cold: v.optional(v.string()),
+  followUp: v.optional(v.string()),
+  missed: v.optional(v.string()),
+  inbound: v.optional(v.string()),
+});

@@ -15,7 +15,12 @@ import { internal } from "./_generated/api";
 import { cleanError } from "./lib/mcpProtocol";
 import { action, internalAction, type ActionCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { voiceVariableInput, normaliseVoiceVariableKey, type VoiceVariableInput } from "./lib/voiceVariables";
+import {
+  openersValidator,
+  voiceVariableInput,
+  normaliseVoiceVariableKey,
+  type VoiceVariableInput,
+} from "./lib/voiceVariables";
 import { voiceCatalogue, type CatalogueVoice } from "./lib/voiceCatalogue";
 import {
   createVoiceRuntimeToken,
@@ -42,6 +47,7 @@ import {
   publishedVersionOf,
 } from "./lib/retellDraft";
 import { publishVersionBody, versionNoteValidator, type VersionNote } from "./lib/versionNote";
+import { OPENER_KEY, openerFallback, usesOpener, type AgentOpeners } from "./lib/opener";
 import { BROWSER_TEST_MARKER, PLACED_BY_MARKER, browserTestFacts } from "./lib/browserTest";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
@@ -131,6 +137,8 @@ type EditorContext = {
   variablesRetellVersion: number | null;
   templateVersion: number | null;
   personaName: string | null;
+  // The four first sentences (retellAgents.openers, P34); null = none set.
+  openers: AgentOpeners | null;
   canEndCall: boolean;
   // The voicemail choice made on the agent page; null = the template's.
   voicemail: VoicemailChoice | null;
@@ -374,6 +382,10 @@ function importVariables(
   };
 
   for (const [name, value] of Object.entries(llm?.default_dynamic_variables ?? {})) {
+    // {{opener}} has fields of its own on the agent page (P34) and Resepta
+    // writes it at every ring; its provider default is only a fallback the
+    // publish keeps in step, never a row anybody edits.
+    if (name === OPENER_KEY) continue;
     const row = ensure(name);
     if (!row) continue;
     row.beforeSource = "static";
@@ -557,6 +569,7 @@ export const read = action({
       // current template's tuning, and the card this drives is an offer the
       // owner clicks, not an automatic rewrite.
       personaName: context.personaName,
+      openers: context.openers,
       canEndCall: context.canEndCall,
       template: {
         synced: context.templateVersion,
@@ -752,6 +765,24 @@ async function applyAgentEdits(
     }
     agentPatch.post_call_analysis_data = plan.postCallAnalysis;
     nextVariables = plan.next;
+  }
+  // {{opener}} is Resepta's to write while the phone rings (P34,
+  // lib/opener). The provider's own default for it is the fallback for a ring
+  // where Resepta is not asked: kept in step whenever the opening line that
+  // will be live says it, and carried over a variables publish, whose
+  // defaults are rebuilt from rows that never hold it.
+  if (llmId) {
+    const begin = edits.beginMessage ?? liveLlm?.begin_message ?? "";
+    if (usesOpener(begin)) {
+      const defaults =
+        (llmPatch.default_dynamic_variables as Record<string, string> | undefined) ??
+        liveLlm?.default_dynamic_variables ??
+        {};
+      const fallback = openerFallback(context.openers, live.language, context.personaName);
+      if (defaults[OPENER_KEY] !== fallback) {
+        llmPatch.default_dynamic_variables = { ...defaults, [OPENER_KEY]: fallback };
+      }
+    }
   }
   if (Object.keys(llmPatch).length > 0) {
     llmPatch.mcps = await runtimeMcpConfig(ctx, agentId, context, liveLlm ?? {});
@@ -2748,6 +2779,7 @@ export const testCall = action({
     const before = (await ctx.runQuery(internal.retell.beforeCallContext, {
       retellAgentId: agentId,
       phone: to,
+      direction: "outbound",
     })) as { dynamicVariables: Record<string, string> } | null;
 
     // Pinned to the published version, so an edit waiting on a draft never
@@ -2809,6 +2841,9 @@ export const startBrowserTest = action({
     overrides: v.optional(v.record(v.string(), v.string())),
     // The version to dial. Omitted = the published version.
     agentVersion: v.optional(v.number()),
+    // The page's first sentences as on screen, saved or not (P34), so the
+    // test opens the way Save would make it open.
+    openers: v.optional(openersValidator),
   },
   returns: v.object({
     accessToken: v.string(),
@@ -2831,7 +2866,7 @@ export const startBrowserTest = action({
   }),
   handler: async (
     ctx,
-    { agentId, customerId, direction, overrides, agentVersion: requested },
+    { agentId, customerId, direction, overrides, agentVersion: requested, openers },
   ): Promise<{
     accessToken: string;
     callId: string;
@@ -2859,6 +2894,8 @@ export const startBrowserTest = action({
     const before = (await ctx.runQuery(internal.retell.beforeCallContext, {
       retellAgentId: agentId,
       phone,
+      direction: direction ?? "outbound",
+      ...(openers ? { openers } : {}),
     })) as { dynamicVariables: Record<string, string> } | null;
     if (!before) throw new Error("test-unavailable");
     const variables: Record<string, string> = stringValues(before.dynamicVariables);
@@ -2915,14 +2952,21 @@ export const startBrowserTest = action({
 // to show and let the owner type over. Read-only; makes no provider call.
 // `unavailable` is the reason a ring would be refused right now.
 export const browserTestVariables = action({
-  args: { agentId: v.string(), customerId: v.optional(v.id("customers")) },
+  args: {
+    agentId: v.string(),
+    customerId: v.optional(v.id("customers")),
+    // Which way the test call goes and the page's unsaved first sentences:
+    // both decide {{opener}} (P34).
+    direction: v.optional(v.union(v.literal("outbound"), v.literal("inbound"))),
+    openers: v.optional(openersValidator),
+  },
   returns: v.object({
     variables: v.record(v.string(), v.string()),
     unavailable: v.boolean(),
   }),
   handler: async (
     ctx,
-    { agentId, customerId },
+    { agentId, customerId, direction, openers },
   ): Promise<{ variables: Record<string, string>; unavailable: boolean }> => {
     const context = await editorContext(ctx, agentId);
     let phone = "";
@@ -2937,6 +2981,8 @@ export const browserTestVariables = action({
     const before = (await ctx.runQuery(internal.retell.beforeCallContext, {
       retellAgentId: agentId,
       phone,
+      direction: direction ?? "outbound",
+      ...(openers ? { openers } : {}),
     })) as { dynamicVariables: Record<string, string> } | null;
     return before
       ? { variables: stringValues(before.dynamicVariables), unavailable: false }

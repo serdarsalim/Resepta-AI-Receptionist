@@ -1263,6 +1263,7 @@ export const dialNext = internalAction({
     const before = await ctx.runQuery(internal.retell.beforeCallContext, {
       retellAgentId: claim.retellAgentId,
       phone: claim.toNumber,
+      direction: "outbound",
     });
     if (!before) {
       await ctx.runMutation(internal.bulkRuns.abortRun, {
