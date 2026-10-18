@@ -1,4 +1,3 @@
-**All ported up to Nudge 741922d5. Ready to review.**
 
 # Nudge → Resepta sync: status
 
@@ -45,4 +44,4 @@
 
 **Before shipping:** Deploy Convex first (new tables agentTests; new optional fields on retellAgents, calls, waTemplates, usageMonthly). Subscribe the Meta app to template_category_update. Check on one real call that inbound answers with the published version. After the deploy run `customers:backfillSearch` and `threads:backfill`, or search finds nobody. SITE_URL must be set in Convex for pictures inside emails to load (it already is if unsubscribe links work). The email window adds the emailSignatures table and a field on memberships; deploy Convex before the frontend or Compose will fail to load signatures. Learning a customer's language adds one optional field on customers; no backfill. Member photos add one optional field on memberships; no backfill.
 
-**Up next:** Nothing buildable is left. P17 waits for you to create its secret.
+**Up next:** P34 the agent's opening lines, P35 Setup and Testing tabs, then P36 requested callbacks.
