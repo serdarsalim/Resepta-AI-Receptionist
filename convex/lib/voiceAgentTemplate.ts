@@ -116,7 +116,13 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 // field is sync-deliverable, so Update genuinely reaches existing agents; the
 // registry publish installs it too, like the summary. v14 had not shipped, so
 // an owner still clicks Update once for both.
-export const VOICE_AGENT_TEMPLATE_VERSION = 15;
+// v16 (2026-10-18, P36 of the Nudge port): a third analysis field,
+// `resepta_callback_time` (CALLBACK_TIME_FIELD below), the time a caller
+// asked to be called back, which convex/callbacks.ts turns into one queued
+// call. Sync-deliverable like v15's, so Update reaches existing agents; the
+// prompt's one line asking for a time reaches new agents only, since Update
+// never sends prompt text, and the analysis reads the transcript either way.
+export const VOICE_AGENT_TEMPLATE_VERSION = 16;
 
 // The longest one call may run before the provider ends it. Ten minutes,
 // Nudge's number on the same field (7bf2c681): its median answered call ran
@@ -247,6 +253,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "Bir istek güvenle tamamlanamıyorsa neyin eksik olduğunu söyle ve tek bir net soru sor.",
     "",
     "KAPANIŞ",
+    "Arayan daha sonra aranmak isterse hangi gün ve saatte aranmak istediğini sor ve bir kez tekrarla; o saatte seni arayacağız de. Gün ve saat vermezse ısrar etme.",
     "Arayan vedalaştığında ya da başka sorusu kalmadığında kısaca veda et. Arayan konuşurken asla kapatma.",
     "Vedanı söylediğin sırada KAPATMA. Önce sadece veda et ve arayana son bir şey söyleme fırsatı bırak; end_call'u ancak bir sonraki sıranda, arayan yeni bir şey söylemediyse çağır.",
     "Selama, merhabaya ya da hoş beş sözlerine karşılık asla kapatma. Görüşmenin ilk yarım dakikasında konuşma neredeyse hiçbir zaman bitmiş olmaz.",
@@ -297,6 +304,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "If a request cannot be completed safely, say what is missing and ask one clear question.",
     "",
     "CLOSING",
+    "If the caller would rather be called back, ask which day and time suit them and read it back once; say we will call them then. If they give no day and time, do not press.",
     "When the caller says goodbye or has nothing further, say a short goodbye. Never hang up while they are talking.",
     "Do NOT hang up in the same turn as your goodbye. Say it and leave the caller room for one last thing; call end_call only on your NEXT turn, once they have added nothing new.",
     "Never hang up in response to a greeting, a hello or an opening pleasantry. In the first half-minute a conversation is essentially never finished.",
@@ -347,6 +355,7 @@ const GENERAL_PROMPTS: Record<VoiceAgentLanguage, string[]> = {
     "Lässt sich etwas nicht sicher abschließen, sage, was fehlt, und stelle eine klare Rückfrage.",
     "",
     "ABSCHLUSS",
+    "Möchte der Anrufer lieber zurückgerufen werden, frage nach Tag und Uhrzeit und wiederhole sie einmal; sage, dass wir dann anrufen. Nennt er keinen Tag und keine Uhrzeit, dränge nicht.",
     "Verabschiedet sich der Anrufer oder hat nichts weiter, verabschiede dich kurz. Lege nie auf, während er spricht.",
     "Lege NICHT im selben Zug auf, in dem du dich verabschiedest. Verabschiede dich zuerst und lass dem Anrufer Raum für eine letzte Sache; rufe end_call erst in deinem NÄCHSTEN Zug auf, wenn nichts Neues mehr kam.",
     "Lege niemals als Antwort auf eine Begrüßung oder eine einleitende Höflichkeit auf. In der ersten halben Minute ist ein Gespräch so gut wie nie beendet.",
@@ -462,6 +471,31 @@ export function noAiCallsAnalysisField() {
   };
 }
 
+// "Call me back tomorrow at four" (P36, Nudge's call_back_time). A STRING in
+// the business's wall time, the shape every time a tool takes is in
+// (YYYY-MM-DDTHH:MM, never UTC), read by convex/callbacks.requestFromCall
+// through lib/businessHours.parseLocalStart in the business's timezone. Empty
+// is the ordinary answer, and so is a request with no time we could pin
+// ("call me later"): a callback is one real call to a real phone, so it is
+// queued only for a time the caller actually named.
+//
+// The analysis resolves "tomorrow" against {{now}}, the business's date and
+// clock the agent was given at ring time. English for every agent, like the
+// fields above.
+export const CALLBACK_TIME_FIELD = "resepta_callback_time";
+
+export function callbackTimeAnalysisField() {
+  return {
+    type: "string",
+    name: CALLBACK_TIME_FIELD,
+    description: [
+      `If the caller asked to be called back at a time they named, that time as the business's local date and time in the form YYYY-MM-DDTHH:MM (24-hour clock, no timezone).`,
+      `Resolve words like tomorrow, this afternoon at three or on Monday at ten against the date and time this call took place, {{now}}.`,
+      `Leave it empty in every other case: no callback asked for, a callback with no day and hour we can pin ("call me later", "some time next week"), or an appointment booked instead.`,
+    ].join(" "),
+  };
+}
+
 // The analysis fields that are ours rather than the salon's. Every publish
 // path replaces exactly these and keeps whatever else the agent carries, and
 // none of them is ever offered to the owner as a field to rename
@@ -469,10 +503,11 @@ export function noAiCallsAnalysisField() {
 export const TEMPLATE_ANALYSIS_FIELDS: ReadonlySet<string> = new Set([
   VOICE_SUMMARY_FIELD,
   NO_AI_CALLS_FIELD,
+  CALLBACK_TIME_FIELD,
 ]);
 
 export function templateAnalysisFields(language: string) {
-  return [summaryAnalysisField(language), noAiCallsAnalysisField()];
+  return [summaryAnalysisField(language), noAiCallsAnalysisField(), callbackTimeAnalysisField()];
 }
 
 type JsonSchema = {

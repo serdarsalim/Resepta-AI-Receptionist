@@ -11,7 +11,7 @@
 // call.
 
 import { withoutNonAnswers } from "./nonAnswer";
-import { NO_AI_CALLS_FIELD, VOICE_SUMMARY_FIELD } from "./voiceAgentTemplate";
+import { CALLBACK_TIME_FIELD, NO_AI_CALLS_FIELD, VOICE_SUMMARY_FIELD } from "./voiceAgentTemplate";
 
 export const BROWSER_TEST_MARKER = "resepta_browser_test";
 // Who placed a call by hand (P11): a user id in the dial's metadata, kept by
@@ -46,7 +46,7 @@ export type BrowserTestFacts = {
 };
 
 // The same split voiceEvents.process makes for a real call: our summary and
-// the no-AI-calls flag lifted out of the analysis bag, non-answers dropped,
+// the no-AI-calls flag and the callback time lifted out of the analysis bag, non-answers dropped,
 // live values over inferred ones, the price in micro-USD.
 export function browserTestFacts(call: Record<string, unknown>): BrowserTestFacts {
   const analysis = (call.call_analysis ?? {}) as Record<string, unknown>;
@@ -58,6 +58,9 @@ export function browserTestFacts(call: Record<string, unknown>): BrowserTestFact
   const summary = String(after[VOICE_SUMMARY_FIELD] ?? "") || String(analysis.call_summary ?? "");
   delete after[VOICE_SUMMARY_FIELD];
   delete after[NO_AI_CALLS_FIELD];
+  // A test queues nothing, so a callback the caller asked for is not an
+  // answer to show among the collected values either (P36).
+  delete after[CALLBACK_TIME_FIELD];
   const during =
     (call.collected_dynamic_variables as Record<string, unknown> | undefined) ?? {};
   const collected = { ...withoutNonAnswers(after), ...withoutNonAnswers(during) };
