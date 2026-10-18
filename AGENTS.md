@@ -339,6 +339,28 @@ kept anywhere else is dialled straight through. How it runs is in
   business's calls and every inbound call. A new automated dial-out path
   takes the same guards before it reaches the provider.
 
+## A requested callback is one call, guarded like a bulk call (2026-10-18)
+
+"Call me back tomorrow at four" (P36, `convex/callbacks.ts`; how it runs is
+in `docs/subsystems.md` → "Requested callbacks"). The post-call analysis
+field `resepta_callback_time` (template v16, the business's wall time)
+becomes ONE `callbacks` row through `callbacks.requestFromCall`, and only
+for an answered call, outside the demo, for a customer a bulk call may ring.
+One queued per customer; a newer request replaces it.
+
+- **`callbacks.claim` holds every guard**, in the transaction that claims,
+  for the bulk queue's reason: open hours (`bulkRuns.callWindowAt`, held to
+  the opening), consent and No AI calls (`bulkRuns.skipReason`), another
+  automated call ringing them, the operator's limit (which now counts bulk
+  items and callbacks together, both sides), the agent and its line. The
+  dial is pinned to the published version (`placeCall`) and a refusal for
+  want of a line requeues up to six tries. Not the bulk "already called
+  today" skip: this call was asked for.
+- **What cancels it** is a real conversation after the request
+  (`stampCallClocks`, either direction), a person's own dial (`testCall`),
+  the record's Cancel (any member) and the customer's deletion, each leaving
+  its reason on the row. A new dial path a person triggers cancels them too.
+
 ## Marketing email carries an unsubscribe, and the opt-out stops only that (2026-10-13)
 
 Marketing mail is `lib/email.isMarketingEmailKind`: `email_campaign`,

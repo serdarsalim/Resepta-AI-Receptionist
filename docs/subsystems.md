@@ -2002,6 +2002,73 @@ Not here, on purpose: Nudge's per-number caps and calls-per-second gap (a run
 makes one call at a time), a person's dial cancelling queued automated calls
 (nothing queues a call outside a run), and leaving a voicemail (P7).
 
+## Requested callbacks (2026-10-18, P36 of the Nudge port)
+
+A customer on a call asks to be rung back at a time they name; Resepta rings
+them once, then. Nudge does this with trigger rules over `call_back_time`;
+Resepta has no triggers, so it is one built-in behaviour in
+`convex/callbacks.ts` with one table, `callbacks`.
+
+**Capture.** Template v16 adds `resepta_callback_time` to the post-call
+analysis (`lib/voiceAgentTemplate.callbackTimeAnalysisField`): the time as
+the business's wall time `YYYY-MM-DDTHH:MM`, resolved against `{{now}}`,
+empty unless a day and an hour were named. It reaches existing agents
+through Update; the one prompt line asking for a time reaches new agents
+only. `voiceEvents.process` lifts it out of the analysis bag (it is never a
+collected value) and hands it to `callbacks.requestFromCall` after
+`recordCall`. That resolves the org from the agent and the customer from the
+calls row, and refuses quietly: the demo org, an erased call, a call nobody
+answered (`outcome === "true"` or a disconnect code that reads answered), a
+customer being deleted, and anyone `bulkRuns.skipReason` would skip for a
+call (no consent, No AI calls). A browser test never reaches it.
+
+**When it rings** is `lib/callbackTime.judgeCallbackTime` (a leaf; node test
+`scripts/callback-time.test.mjs`): the named time, never sooner than five
+minutes on, moved to the next open minute of the business's calling hours
+(`bulkRuns.callHoursFor`, closures cut out) and marked `moved` when that
+shifts it; nothing for a time unreadable, already gone, more than 30 days
+out or with no opening ahead. The row keeps `askedFor` and `dueAt`, the
+source call gets `calls.callbackRequestedFor`, and a newer request cancels
+an older queued one (`replaced`). A retried webhook finds its row through
+`by_source_call`.
+
+**Dialling.** `scheduler.runAt(dueAt)` wakes `callbacks.dial`, whose
+`claim` re-reads every guard in one transaction: the row still queued and
+due; the demo org (cancelled); the customer deleted, without consent or with
+No AI calls (cancelled with that reason); the business closed (held to the
+opening, `callWindowAt`); another automated call ringing them (two minutes);
+the operator's limit on automated calls at once, counting bulk items and
+callbacks together (`liveAutomatedCalls`, mirrored in
+`bulkRuns.claimNextCall`; 30 seconds); the agent missing, switched off or
+without a line (failed). Claimed, `beforeCallContext` gates the org (suspended,
+wallet empty: failed `org-gate`) and gives the variables, so the opener is
+the follow-up one; `retellAgent.placeCall` dials the published version. A
+refusal for want of a line, from the dial or from `call_ended`, requeues one
+minute longer per try up to six; a thrown fetch never re-dials.
+`callbacks.finishByCallId` (beside the bulk queue's, on `call_ended`) stamps
+`calls.requestedCallback` and settles the row: reached the phone is `done`,
+anything else `failed` with its code. The five-minute `sweep-callbacks` cron
+re-wakes a queued row two minutes past due and fails a dial stuck 20 minutes.
+
+**Cancelling.** `cancelQueuedCallbacks` is the one helper: a real
+conversation with the customer after the request (`retell.stampCallClocks`,
+when it stamps `lastConversationAt`, only for callbacks asked before that
+call began), a person's dial (`testCall`, after the provider accepts it), the
+record's Cancel (`callbacks.cancel`, any member), the customer's deletion
+(first transaction; `FOOTPRINT` kind `callbacks` sweeps the rows). Each
+leaves its reason on the row.
+
+**On screen.** `callbacks.forCustomer` gives the record its Queued card at
+the head of the Calls tab (when, which agent, the call it was asked on, the
+named time when moved, Cancel) and a line at the head of All. The feed's call
+items carry `callbackRequestedFor` and `requestedCallback` for the call
+card's two facts. A bulk run skips a customer whose callback is ringing
+(`called-today`).
+
+Not ported: Nudge's three chances counted from the last conversation and its
+missed-callback rule (a callback rings once; a missed one shows as a missed
+call), and callbacks booked by a WhatsApp button tap.
+
 ## The app lives at app.resepta.xyz (2026-08-24)
 
 Marketing left. `resepta.xyz` and `www` are a SEPARATE repo on a separate

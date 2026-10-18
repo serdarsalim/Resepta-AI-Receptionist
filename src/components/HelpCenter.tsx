@@ -282,6 +282,19 @@ const CATEGORIES: Category[] = [
         keywords: ["do not call", "no ai calls", "call anyway", "robot", "opt out", "bulk call"],
       },
       {
+        id: "callbacks",
+        title: "When a caller asks to be called back",
+        summary: "The phone agent calls a customer back once, at the time they asked for on a call.",
+        steps: [
+          "When a customer on a call asks to be called back at a day and time, an agent with its latest update notes the time. Nothing is booked for a vague \"call me later\".",
+          "The customer's record shows the callback as Queued at the top of the Calls tab: when it rings, which agent rings, and the call it was asked on.",
+          "It rings once, during your opening hours. A time when you are closed moves to your next open hour, and the card says so. Customers without consent or with No AI calls are never called back.",
+          "If you talk to them before then, or call them yourself, the callback is cancelled. Press Cancel on the card to stop it by hand.",
+          "The call they asked on reads \"Asked to be called back\", and the callback's own call says it was the callback they asked for.",
+        ],
+        keywords: ["callback", "call back", "call me later", "queued", "requested call", "ring back"],
+      },
+      {
         id: "bulk-calls",
         title: "Call a list of customers",
         summary: "Let the phone agent call the customers you tick, one at a time, while you are open.",
