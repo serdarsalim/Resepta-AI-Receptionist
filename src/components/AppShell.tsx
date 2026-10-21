@@ -348,11 +348,10 @@ const BILLING_TAB: (typeof NAV_TABS)[number] = {
   color: "var(--foreground)",
 };
 
-// Nudge's mark, drawn inline rather than shipped as a file. The square takes
-// --logo, which is red: same glyph as the sibling product, different colour, so
-// the two are told apart at a glance in a tab strip. Deliberately NOT --brand,
-// which stays green because it also paints row hover and selection, and red
-// there would read as danger on every hover.
+// The product's own mark (Nudge's glyph on --logo red) left the sidebar on
+// 2026-10-21 with the wordmark beside it: the top-left belongs to the
+// business now (see the sidebar's top row). The brand stays on sign-in and
+// on the pages customers see.
 // OrgMark lived here and is gone (2026-08-25). It resolved to the salon's logo
 // with OUR chevron as the fallback, which was right while the sidebar had only
 // one mark to give: the reasoning was that an owner who uploaded a logo has
@@ -365,36 +364,6 @@ const BILLING_TAB: (typeof NAV_TABS)[number] = {
 // the app among thirty tabs is the owner's problem there, while inside the app
 // the useful thing is which business you are looking at. The customer-facing
 // pages invert both, since there the salon is what the reader came for.
-function BrandMark({ size = 26 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 64 64"
-      className="shrink-0"
-      aria-hidden
-    >
-      <rect width="64" height="64" rx="14" fill="var(--logo)" />
-      <path
-        d="M18 20 L32 32 L18 44"
-        stroke="#ffffff"
-        strokeWidth="6.5"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M33 20 L47 32 L33 44"
-        stroke="#ffffff"
-        strokeWidth="6.5"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity="0.6"
-      />
-    </svg>
-  );
-}
 
 // The mark for the WORKSPACE row, which is not OrgMark and must not become it.
 // OrgMark falls back to BrandMark, and that fallback is right where the org
@@ -1713,44 +1682,35 @@ export function AppShell({
             mobileOpen ? "visible translate-x-0" : "invisible -translate-x-full"
           } ${showCollapsed ? "md:w-14" : "md:w-52"}`}
         >
-          {/* Two rows, because they answer different questions. The top one is
-            WHICH PRODUCT this is and never changes; the one under it is WHICH
-            BUSINESS you are pointed at and is the thing an operator running
-            several of them changes all day.
-            They used to be one row: the org's mark and the org's name, sitting
-            where a product signature goes. So the workspace wore the product's
-            slot, nothing on the screen said "Resepta", and switching business
-            looked like editing a title. Splitting them is what makes the
-            switcher legible as a control, and it costs one line of height. */}
+          {/* ONE row: the business you are working in, level with the page
+            title across the joined frame, and the fold toggle at its end
+            (Serdar, 2026-10-21: the product's own logo and name in here were
+            a distraction). The top-left belongs to the business, as Nudge's
+            shows the workspace's logo rather than its own; the Resepta brand
+            stays on sign-in and on the pages customers see. Folded, the
+            business mark is the only mark, still the switcher's trigger, over
+            the toggle. */}
           <div
-            // The space between the two rows is doing the separating, so it
-            // is wider than the app's usual stack step. At 1.5 the product
-            // name and the business under it read as one block with a line
-            // break in it; 3 split them but still crowded, so 4 (1rem) is
-            // what the eye should see. The product row is h-9 now (below), so
-            // ~0.46rem of that is the row's own room under its centred
-            // content, and gap-2 tops it up to the same 1rem.
             className={`flex flex-col ${
-              showCollapsed ? "items-center gap-2 px-1 pb-1 pt-3" : "gap-2 px-2 pb-2 pt-1.5"
+              showCollapsed ? "items-center px-1 pb-1 pt-3" : "px-2 pb-1 pt-1.5"
             }`}
           >
             <div
-              // h-9 under pt-1.5 centres the product name 1.5rem down, the
-              // middle of the 48px top bar beside it, so the name and the
-              // page title sit on one line across the joined frame (Nudge's
-              // brand row and header are both 48px for the same reason).
-              // Collapsed, the rail stacks mark over toggle and has no line
-              // to share; its pt-3 centres the mark on that line anyway.
+              // min-h-9 under pt-1.5 centres a one-line name 1.5rem down, the
+              // middle of the 48px top bar beside it. A minimum, not a
+              // height: a long business name keeps its two-line grace and
+              // the row grows rather than cutting the owner's name off.
               className={`flex items-center ${
-                showCollapsed ? "flex-col gap-1" : "h-9 w-full gap-2 px-1.5"
+                showCollapsed ? "flex-col gap-1" : "min-h-9 w-full gap-1"
               }`}
             >
-              <BrandMark size={showCollapsed ? 24 : 20} />
-              {!showCollapsed && (
-                <span className="wordmark min-w-0 flex-1 truncate text-[15px]">
-                  {t("app.name")}
-                </span>
-              )}
+              <div className={showCollapsed ? "inline-flex" : "flex min-w-0 flex-1"}>
+                <WorkspaceSwitcher
+                  fallbackName={settings?.org.name}
+                  logoUrl={settings?.org.logoUrl}
+                  collapsed={showCollapsed}
+                />
+              </div>
               {/* One control, one glyph: on desktop it folds the sidebar down
                 to symbols, on the phone it slides the drawer away. Both mean
                 "put the sidebar back", which is why the icon does not change. */}
@@ -1775,11 +1735,6 @@ export function AppShell({
               </button>
               </HoverTip>
             </div>
-            <WorkspaceSwitcher
-              fallbackName={settings?.org.name}
-              logoUrl={settings?.org.logoUrl}
-              collapsed={showCollapsed}
-            />
           </div>
 
           <nav
