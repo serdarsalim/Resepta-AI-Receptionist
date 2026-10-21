@@ -64,10 +64,7 @@ const DEFAULT_CUSTOMER_COLUMNS = ["phone", "email"] as const;
 // Org-defined columns are namespaced so a field keyed "phone" can never
 // collide with the built-in one.
 const FIELD_PREFIX = "f:";
-// Consent is a stamp, not a value, so the funnel filters on these two.
-const CONSENT_ON = "yes";
-const CONSENT_OFF = "no";
-// The email column's own funnel reuses them: "has one" / "hasn't". It exists
+// The email column's own funnel: "has one" / "hasn't". It exists
 // for the bulk sender, who needs to see who a mail can actually reach before
 // picking a hundred people it will skip. Declared as filterOptions on the
 // column rather than as a new control, so it inherits the funnel, the amber
@@ -133,57 +130,12 @@ function NewMark({ onDismiss }: { onDismiss: () => void }) {
   );
 }
 
-// A bell with a line through it: this person gets no messages. Consent used to
-// own a whole column that was blank for everyone who had it — 130px spent
-// saying nothing four rows in five, which is also what pushed Last activity
-// off the right edge. Nobody in the category does that: HubSpot and Salesforce
-// keep consent on the record and make it a segment, and Fresha and Booksy keep
-// it on the client profile.
-//
-// It cannot go all the way onto the profile here, though. In those products
-// consent gates MARKETING; under KVKK it gates everything, reminders included
-// (wa.sendAppointmentMessage), so a customer without it books on Friday and is
-// simply never reminded. That is a broken row, not a preference, and a broken
-// row earns a mark. Finding them is the Name column's funnel, which is where
-// every other filter in this table already lives.
-function NoConsentMark() {
-  const t = useT();
-  return (
-    <HoverTip text={t("customers.cannotBeMessaged")} className="inline-flex shrink-0">
-    <span
-      aria-label={t("customers.cannotBeMessaged")}
-      className="inline-flex shrink-0 items-center text-amber-600 dark:text-amber-500"
-    >
-      <svg
-        viewBox="0 0 24 24"
-        width="14"
-        height="14"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden
-      >
-        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-        <path d="M18.63 13A17.9 17.9 0 0 1 18 8" />
-        <path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14" />
-        <path d="M18 8a6 6 0 0 0-9.33-5" />
-        <path d="m2 2 20 20" />
-      </svg>
-    </span>
-    </HoverTip>
-  );
-}
-
 // Indicator, not a control: mute is set on the contact record. Without it a
 // muted row just looks like it sorts oddly, with nothing on screen saying why
 // it sits at the bottom and never lights a dot.
 //
-// A speaker with a cross, deliberately NOT the bell NoConsentMark just used.
-// The two can appear on the same row and mean different things, so they cannot
-// share a glyph. Grey rather than amber for the same reason: no consent is a
-// problem the salon has to fix, mute is a choice somebody already made.
+// A speaker with a cross, grey rather than amber: mute is a choice somebody
+// already made, not a problem the salon has to fix.
 function MutedMark() {
   const t = useT();
   return (
@@ -344,8 +296,6 @@ export function CustomersView({
         return customer.phone;
       case "email":
         return customer.email;
-      case "consent":
-        return customer.consentAt;
       case "added":
         return customer._creationTime;
       case "lastActivity":
@@ -366,7 +316,6 @@ export function CustomersView({
   // What a funnel matches on. Blank is "", which is exactly the value the
   // "Blank" entry in the checklist carries.
   const filterValue = (customer: Customer, key: string): string => {
-    if (key === "consent") return customer.consentAt ? CONSENT_ON : CONSENT_OFF;
     if (key === "email") return customer.email ? HAS_EMAIL : NO_EMAIL;
     if (key.startsWith(FIELD_PREFIX)) {
       return customValue(customer, key.slice(FIELD_PREFIX.length));
@@ -532,14 +481,9 @@ export function CustomersView({
 
   // The screen and the file disagree on purpose. A cell is read at a glance
   // and wants an age ("3g"); a spreadsheet is filtered, pivoted and kept, and
-  // an age is worthless the day after it is exported. Consent already had to
-  // opt out of displayValue for the same reason — the cell says nothing when
-  // consent is on file, which would export as a blank that reads like missing
-  // data rather than the normal case.
+  // an age is worthless the day after it is exported.
   const csvValue = (customer: Customer, key: string): string => {
     switch (key) {
-      case "consent":
-        return customer.consentAt ? t("customers.consentGiven") : t("customers.noConsent");
       case "added":
         return dayFormat.format(customer._creationTime);
       case "lastActivity":
@@ -550,14 +494,7 @@ export function CustomersView({
   };
 
   const exportCsv = () => {
-    // Consent rides along unconditionally now that it has no column to be
-    // visible in. It is the one field here that answers to a regulator, and
-    // "it wasn't on screen when I exported" is not a defence.
-    const exported = [
-      { key: "name", label: t("customers.name") },
-      ...visibleColumns,
-      { key: "consent", label: t("customers.consent") },
-    ];
+    const exported = [{ key: "name", label: t("customers.name") }, ...visibleColumns];
     const lines = [
       exported.map((column) => csvCell(column.label)).join(","),
       ...rows.map((customer) =>
@@ -711,7 +648,6 @@ export function CustomersView({
             <div className="hidden sm:contents">
               <BulkBar
                 count={picked.length}
-                noConsent={picked.filter((c) => c.consentAt === undefined).length}
                 onCompose={setComposing}
                 onClear={clearSelection}
               />
@@ -769,7 +705,6 @@ export function CustomersView({
                       }
                     />
                   )}
-                  {customer.consentAt === undefined && <NoConsentMark />}
                   {customer.mutedAt !== undefined && <MutedMark />}
                 </span>
                 <span className="block text-xs tabular-nums text-[var(--muted)]">
@@ -833,22 +768,6 @@ export function CustomersView({
                     label={t("customers.name")}
                     sortDir={table.sort.key === "name" ? table.sort.dir : null}
                     onSort={() => table.toggleSort("name")}
-                    // Consent has no column of its own any more, but the name
-                    // cell is where its mark shows — so the funnel that filters
-                    // on it belongs here, on the column it visibly affects.
-                    // Same rule as every other funnel in this table.
-                    filter={
-                      <HeaderFilter
-                        options={[CONSENT_ON, CONSENT_OFF]}
-                        selected={table.filterFor("consent")}
-                        onToggle={(value) => table.toggleFilter("consent", value)}
-                        labelFor={(value) =>
-                          value === CONSENT_ON
-                            ? t("customers.consentGiven")
-                            : t("customers.noConsent")
-                        }
-                      />
-                    }
                   />
                   {visibleColumns.map((column) => (
                     <Th
@@ -940,7 +859,6 @@ export function CustomersView({
                             }
                           />
                         )}
-                        {customer.consentAt === undefined && <NoConsentMark />}
                         {customer.mutedAt !== undefined && <MutedMark />}
                       </span>
                     </td>
@@ -1037,20 +955,14 @@ export function CustomersView({
 
 // The verbs, and the count they act on. Three buttons and a way out, because
 // a bar that appears the moment something is ticked also has to say how to
-// make it go away.
-//
-// The consent line is not decoration. Under KVKK consent gates EVERYTHING,
-// reminders included, so a selection of forty with eleven unconsented is a
-// run that will reach twenty-nine people — and the moment to learn that is
-// before the composer, not in the run detail afterwards.
+// make it go away. Who a run will skip (unsubscribed, no address) is the
+// composer's first line, before anything is sent.
 function BulkBar({
   count,
-  noConsent,
   onCompose,
   onClear,
 }: {
   count: number;
-  noConsent: number;
   onCompose: (channel: BulkChannel) => void;
   onClear: () => void;
 }) {
@@ -1062,14 +974,6 @@ function BulkBar({
       <span className="text-sm font-medium">
         {t("bulk.selected", { n: count })}
       </span>
-      {noConsent > 0 && (
-        <span
-          className="text-xs text-amber-600 dark:text-amber-500"
-          title={t("customers.cannotBeMessaged")}
-        >
-          {t("bulk.noConsentCount", { n: noConsent })}
-        </span>
-      )}
       <span className="ml-auto flex flex-wrap items-center gap-2">
         <button type="button" className={verb} onClick={() => onCompose("email")}>
           {t("bulk.email")}
@@ -1092,15 +996,11 @@ function BulkBar({
   );
 }
 
-// One field per line, in the order somebody says them out loud: who they are,
-// how to reach them, and whether we may. The old version was a three-column
-// grid wedged between the toolbar and the table, which pushed the list you
-// came to read off the bottom of the screen every time you opened it.
-//
-// Consent is last and stays checked, but it is not decoration: without it the
-// KVKK gate in wa.sendAppointmentMessage silently drops every confirmation and
-// reminder for this person. That is why it gets a sentence rather than a
-// label, and why the field it guards sits directly above it.
+// One field per line, in the order somebody says them out loud: who they are
+// and how to reach them. The old version was a three-column grid wedged
+// between the toolbar and the table, which pushed the list you came to read
+// off the bottom of the screen every time you opened it. The consent checkbox
+// that closed it went on 2026-10-21 with the gate it fed.
 function NewCustomerSheet({ onClose }: { onClose: () => void }) {
   const { t } = useLanguage();
   const create = useMutation(api.customers.create);
@@ -1122,7 +1022,6 @@ function NewCustomerSheet({ onClose }: { onClose: () => void }) {
               lastName: String(form.get("lastName") ?? "") || undefined,
               phone: String(form.get("phone") ?? ""),
               email: String(form.get("email") ?? "") || undefined,
-              consent: form.get("consent") === "on",
             });
             onClose();
           } catch (err) {
@@ -1153,16 +1052,6 @@ function NewCustomerSheet({ onClose }: { onClose: () => void }) {
         <label className="block text-xs font-medium">
           {t("customers.email")}
           <input name="email" type="email" className="mt-1" />
-        </label>
-
-        <label className="flex items-start gap-2 rounded-lg bg-[var(--muted-bg)] p-3 text-sm">
-          <input name="consent" type="checkbox" defaultChecked className="mt-0.5 w-auto" />
-          <span className="min-w-0">
-            {t("customers.consent")}
-            <span className="mt-0.5 block text-xs text-[var(--muted)]">
-              {t("customers.consentHint")}
-            </span>
-          </span>
         </label>
 
         {/* The line is reserved whether or not it holds anything, so a failed

@@ -71,7 +71,7 @@ export type ModalSubmit = {
   startAt: number;
   durationMinutes: number;
   customerId?: Id<"customers">;
-  newCustomer?: { firstName: string; lastName?: string; phone: string; consent: boolean };
+  newCustomer?: { firstName: string; lastName?: string; phone: string };
   lines: { serviceId: Id<"services">; price?: number; quantity?: number }[];
   staffId?: Id<"staff"> | null;
   notes?: string;
@@ -459,10 +459,6 @@ export function AppointmentModal({
         firstName: firstName ?? "",
         lastName: rest.join(" ") || undefined,
         phone: String(data.get("phone") ?? "").trim(),
-        // A customer added at the counter gave their number to be contacted
-        // about this booking — consent is the posture, not a checkbox to
-        // trip over mid-booking. The contact record is where it is revoked.
-        consent: true,
       };
       if (!values.newCustomer.firstName || !values.newCustomer.phone) return null;
     }

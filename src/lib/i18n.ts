@@ -845,11 +845,6 @@ const dictionary = {
     en: "{n} selected",
     de: "{n} ausgewählt",
   },
-  "bulk.noConsentCount": {
-    tr: "{n} kişinin izni yok",
-    en: "{n} without consent",
-    de: "{n} ohne Einwilligung",
-  },
   "bulk.clear": { tr: "Seçimi bırak", en: "Clear", de: "Aufheben" },
   "bulk.email": { tr: "E-posta", en: "Email", de: "E-Mail" },
   "bulk.whatsapp": { tr: "WhatsApp", en: "WhatsApp", de: "WhatsApp" },
@@ -1050,17 +1045,20 @@ const dictionary = {
     en: "Cancel the rest? Calls already ringing and messages already sent cannot be recalled.",
     de: "Den Rest abbrechen? Laufende Anrufe und bereits gesendete Nachrichten lassen sich nicht zurückholen.",
   },
+  // Runs before 2026-10-21 skipped customers without consent, and their rows
+  // still say so. Nothing skips for it now.
   "bulk.skipNoConsent": { tr: "İzin yok", en: "No consent", de: "Keine Einwilligung" },
   "bulk.skipNoEmail": { tr: "E-posta yok", en: "No email", de: "Keine E-Mail" },
   "bulk.skipBadPhone": { tr: "Numara geçersiz", en: "Bad number", de: "Nummer ungültig" },
-  // The customer asked not to be called by the AI (the record's switch, or
-  // the phone agent hearing it on an earlier call).
-  // Unsubscribed from marketing email through a link in an earlier mail.
+  // Unsubscribed from marketing: the record's switch, or the link in an
+  // earlier marketing mail. Skips every bulk channel, calls included.
   "bulk.skipUnsubscribed": {
     tr: "Abonelikten çıktı",
     en: "Unsubscribed",
     de: "Abbestellt",
   },
+  // The customer asked not to be called by the AI (the record's switch, or
+  // the phone agent hearing it on an earlier call).
   "bulk.skipNoAiCalls": {
     tr: "Asistanla aranmak istemiyor",
     en: "Asked for no AI calls",
@@ -1160,35 +1158,9 @@ const dictionary = {
     en: "Learned from their own WhatsApp reply or an answered call. Change it here and your choice stays.",
     de: "Aus der eigenen WhatsApp-Antwort oder einem angenommenen Anruf gelernt. Ändern Sie sie hier, bleibt Ihre Wahl bestehen.",
   },
-  // Short enough to sit on one line in a record label column; the KVKK detail
-  // lives in the hint next to it.
-  "customers.consent": {
-    tr: "İletişim izni",
-    en: "Messaging consent",
-    de: "Einwilligung",
-  },
-  // The record footer's one-word form. Same fact as customers.consent, in a
-  // grid column narrow enough that "Messaging consent" would wrap and drag the
-  // cell beside it out of shape. Unambiguous where it appears: it sits next to
-  // Mute on a contact record, and there is nothing else it could be consent to.
-  "customers.consentShort": {
-    tr: "İzin",
-    en: "Consent",
-    de: "Einwilligung",
-  },
-  // Says exactly what consent gates, because "no channel sends anything" was
-  // false: the away reply and the assistant's answers reply to a message the
-  // customer just sent and go without it (wa.sendAwayReply,
-  // email.sendOutOfHoursReply, the assistant's auto-send). legal.ts makes the
-  // same split in its consent section; keep the two in step.
-  "customers.consentHint": {
-    tr: "Müşterinin KVKK kapsamındaki izni. İzin yoksa randevu onayları, hatırlatmalar, kampanyalar, toplu mesaj ve aramalar ona gitmez; ekibiniz de ona WhatsApp'tan yazamaz. Kapalıyken otomatik yanıt ve asistanın cevapları yine gider, çünkü müşterinin az önce gönderdiği mesaja yanıt verirler.",
-    en: "The customer's KVKK consent. Without it they get no confirmations, reminders, campaigns or bulk messages and calls, and your team can't write to them on WhatsApp. The away reply and the assistant's answers still go, because they answer a message the customer just sent.",
-    de: "Die Einwilligung des Kunden nach DSGVO. Ohne sie bekommt er keine Terminbestätigungen, Erinnerungen, Kampagnen oder Sammelaktionen per Nachricht oder Anruf, und Ihr Team kann ihm nicht per WhatsApp schreiben. Die Abwesenheitsantwort und die Antworten des Assistenten gehen trotzdem raus, weil sie auf eine Nachricht antworten, die er gerade geschickt hat.",
-  },
-  // "Stumm", not "Stummschalten": this is a label on a switch in a four-column
-  // footer, and the extra eight characters were the widest single thing in the
-  // German layout. The switch itself supplies the verb.
+  // "Stumm", not "Stummschalten": this is a label on a switch in the record
+  // footer's one row of three, and the extra eight characters were the widest
+  // single thing in the German layout. The switch itself supplies the verb.
   "customers.mute": {
     tr: "Sessize al",
     en: "Mute",
@@ -1208,9 +1180,9 @@ const dictionary = {
     de: "Ein stummgeschalteter Kunde erscheint nicht im Posteingang und löst nirgends einen Hinweispunkt aus. Nachrichten sind weiterhin möglich; der Kontakt rutscht ans Ende der Liste.",
   },
   // "No AI calls" (customers.noAiCallsAt), the record footer's switch. Short,
-  // because it shares an auto-width label column with Consent and the footer
-  // must keep four columns at 20rem (ContactView's note); the detail rides the
-  // hint. Nudge's Turkish label for the same switch is "AI aramaz".
+  // because the footer holds three switches in one row at every width
+  // (ContactView's note); the detail rides the hint. Nudge's Turkish label for
+  // the same switch is "AI aramaz".
   "customers.noAiCalls": {
     tr: "AI aramaz",
     en: "No AI calls",
@@ -1221,31 +1193,37 @@ const dictionary = {
     en: "They asked not to be called by the voice agent. Bulk call runs skip them, and placing a call from here asks first. Reminders and messages still go. The voice agent turns this on when a caller asks on a call; only a person can turn it off.",
     de: "Der Kunde möchte nicht vom Sprachassistenten angerufen werden. Sammelaktionen per Anruf überspringen ihn, und ein Anruf von hier fragt vorher nach. Erinnerungen und Nachrichten gehen weiter. Bittet ein Anrufer im Gespräch darum, setzt der Assistent das selbst; aufheben kann es nur ein Mensch.",
   },
-  // The marketing-email opt-out (customers.marketingEmailOptOutAt), the
-  // footer's last switch. On = unsubscribed, the same direction as Mute and
-  // No AI calls beside it. Short for the footer's column (ContactView's 20rem
-  // note): "Abonelikten çıktı" and "Abgemeldet" pushed it over.
-  "customers.unsubscribed": {
-    tr: "Abone değil",
-    en: "Unsubscribed",
-    de: "Abbestellt",
+  // The marketing opt-out (customers.marketingEmailOptOutAt), the footer's
+  // first switch. On = unsubscribed, the same direction as Mute and No AI
+  // calls beside it. Nudge's word in all three languages: one word every CRM
+  // user already knows, with the detail in the hint.
+  "customers.unsubscribe": {
+    tr: "Abonelikten çık",
+    en: "Unsubscribe",
+    de: "Abmelden",
   },
-  "customers.unsubscribedHint": {
-    tr: "Açıkken müşteriye pazarlama e-postası gitmez: kampanya, toplu işlem ve geri kazanım e-postaları durur. Bu e-postaların altındaki abonelikten çıkma bağlantısı bunu açar; müşteri size söylerse siz de açabilirsiniz. Onaylar, hatırlatmalar ve WhatsApp etkilenmez.",
-    en: "On means the customer gets no marketing email from you: campaign, bulk and win-back emails stop. The unsubscribe link at the foot of those emails turns it on, and you can turn it on when they ask you in person. Confirmations, reminders and WhatsApp are not affected.",
-    de: "Ist es an, bekommt der Kunde keine Werbe-E-Mails von Ihnen: Kampagnen-, Sammel- und Rückgewinnungs-E-Mails stoppen. Der Abmeldelink am Ende dieser E-Mails schaltet es ein, und Sie können es einschalten, wenn der Kunde Sie darum bittet. Bestätigungen, Erinnerungen und WhatsApp sind nicht betroffen.",
+  "customers.unsubscribeHint": {
+    tr: "Açıkken müşteriye pazarlama gitmez: kampanyalar, toplu mesajlar, toplu aramalar ve geri kazanım mesajları onu WhatsApp'ta da e-postada da atlar. Onaylar, hatırlatmalar ve yanıtlar gitmeye devam eder. Pazarlama e-postalarının altındaki abonelikten çıkma bağlantısı bunu açar; müşteri size söylerse siz de açabilirsiniz.",
+    en: "On means no marketing from you: campaigns, bulk messages and calls, and win-backs skip them, on WhatsApp and by email. Confirmations, reminders and replies still go. The unsubscribe link at the foot of a marketing email turns it on, and you can turn it on when they ask you in person.",
+    de: "Ist es an, bekommt der Kunde keine Werbung von Ihnen: Kampagnen, Sammelnachrichten und -anrufe und Rückgewinnungen überspringen ihn, per WhatsApp und per E-Mail. Bestätigungen, Erinnerungen und Antworten gehen weiter. Der Abmeldelink am Ende einer Werbe-E-Mail schaltet es ein, und Sie können es einschalten, wenn der Kunde Sie darum bittet.",
   },
-  // Switching Unsubscribed off puts the customer back on marketing email, so
-  // the switch asks first.
+  // When a footer switch was turned on, on its hover chip.
+  "customers.sinceDate": {
+    tr: "{date} tarihinden beri",
+    en: "Since {date}",
+    de: "Seit {date}",
+  },
+  // Switching Unsubscribe off puts the customer back on marketing, so the
+  // switch asks first.
   "customers.resubscribeTitle": {
-    tr: "Pazarlama e-postaları yeniden gönderilsin mi?",
-    en: "Send them marketing email again?",
-    de: "Wieder Werbe-E-Mails senden?",
+    tr: "Pazarlama yeniden gönderilsin mi?",
+    en: "Send them marketing again?",
+    de: "Wieder Werbung senden?",
   },
   "customers.resubscribeBody": {
-    tr: "Bunu yalnızca müşteri yeniden almak istediğini söylediyse yapın. Kampanya, toplu işlem ve geri kazanım e-postaları ona yeniden gider.",
-    en: "Only do this if the customer asked to get them again. Campaign, bulk and win-back emails will reach them again.",
-    de: "Nur, wenn der Kunde sie wieder erhalten möchte. Kampagnen-, Sammel- und Rückgewinnungs-E-Mails gehen dann wieder an ihn.",
+    tr: "Bunu yalnızca müşteri yeniden almak istediğini söylediyse yapın. Kampanyalar, toplu mesajlar, toplu aramalar ve geri kazanım mesajları ona yeniden ulaşır.",
+    en: "Only do this if the customer asked to hear from you again. Campaigns, bulk messages and calls, and win-backs will reach them again.",
+    de: "Nur, wenn der Kunde wieder von Ihnen hören möchte. Kampagnen, Sammelnachrichten und -anrufe und Rückgewinnungen erreichen ihn dann wieder.",
   },
   "customers.resubscribe": {
     tr: "Yeniden gönder",
@@ -1328,18 +1306,6 @@ const dictionary = {
     en: "Could not delete. Try again.",
     de: "Löschen fehlgeschlagen. Bitte erneut versuchen.",
   },
-  "customers.noConsent": {
-    tr: "İzin yok",
-    en: "No consent",
-    de: "Keine Einwilligung",
-  },
-  // The consent funnel needs a name for the other half. The cell itself stays
-  // blank when consent is on file: only the missing one is worth a word.
-  "customers.consentGiven": {
-    tr: "İzin var",
-    en: "Consent on file",
-    de: "Einwilligung liegt vor",
-  },
   // One column header for the whole identity, since the table shows first and
   // last name together.
   "customers.name": { tr: "Ad soyad", en: "Name", de: "Name" },
@@ -1368,11 +1334,6 @@ const dictionary = {
     tr: "Henüz kimse bakmadı. Bakıldı olarak işaretle",
     en: "Nobody has looked at this yet. Mark as handled",
     de: "Noch niemand hat sich das angesehen. Als erledigt markieren",
-  },
-  "customers.cannotBeMessaged": {
-    tr: "Bu müşteriye mesaj izni verilmediği için onay, hatırlatma ve geri kazanım mesajlarının hiçbiri gitmiyor. İzni müşteri kartından işaretleyebilirsiniz.",
-    en: "No messaging consent on file, so confirmations, reminders and win-backs all skip this customer. You can record consent on their profile.",
-    de: "Keine Einwilligung hinterlegt, daher entfallen Bestätigungen, Erinnerungen und Rückgewinnungen für diese Person. Sie können die Einwilligung im Kundenprofil eintragen.",
   },
   "customers.added": { tr: "Eklendi", en: "Added", de: "Angelegt" },
   // "Last reply", not "Last activity": activity is ambiguous in an app where a
@@ -1917,7 +1878,7 @@ const dictionary = {
   // channel the confirmation is really coming by (booking.book /
   // booking.reschedule return it as confirmBy, from the send path's own
   // predicates). Nothing is shown when none is coming: no live booking rule,
-  // no consent on record, or no channel that can carry it. The single line
+  // or no channel that can carry it. The single line
   // these replaced promised "WhatsApp or email" in every one of those cases.
   "booking.confirmationWhatsApp": {
     tr: "Onay mesajınız WhatsApp ile geliyor.",
@@ -2115,6 +2076,7 @@ const dictionary = {
     en: "WhatsApp not connected",
     de: "WhatsApp nicht verbunden",
   },
+  // Only on rows from before 2026-10-21, when every send needed consent.
   "error.no-consent": {
     tr: "Müşteri izni yok",
     en: "No consent from customer",
@@ -6509,14 +6471,14 @@ const dictionary = {
     de: "Personen erhalten dies",
   },
   "campaign.noRecipients": {
-    tr: "Bu filtreye uyan, izni olan müşteri yok.",
-    en: "Nobody with consent matches this.",
-    de: "Niemand mit Einwilligung passt darauf.",
+    tr: "Bu filtreye uyan müşteri yok.",
+    en: "Nobody matches this.",
+    de: "Niemand passt darauf.",
   },
-  "campaign.consentNote": {
-    tr: "Yalnızca WhatsApp izni vermiş müşterilere gönderilir.",
-    en: "Only customers who gave WhatsApp consent are included.",
-    de: "Nur Kunden mit WhatsApp-Einwilligung werden einbezogen.",
+  "campaign.unsubscribedNote": {
+    tr: "Abonelikten çıkmış müşterilere gönderilmez.",
+    en: "Customers who unsubscribed are left out.",
+    de: "Abgemeldete Kunden werden nicht einbezogen.",
   },
   "campaign.send": { tr: "Gönder", en: "Send", de: "Senden" },
   "campaign.sendConfirm": {

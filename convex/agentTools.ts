@@ -407,7 +407,6 @@ export const createCustomers = internalMutation({
         email: v.optional(v.string()),
         language: v.optional(v.string()),
         notes: v.optional(v.string()),
-        consentAt: v.optional(v.number()),
       }),
     ),
   },
@@ -498,12 +497,6 @@ export const createCustomers = internalMutation({
         email: row.email?.trim() || undefined,
         language: row.language?.trim() || undefined,
         notes: row.notes?.trim() || undefined,
-        // KVKK consent is a legal fact about something the CUSTOMER did, and
-        // sends are blocked until it is stamped. Never inferred from the act of
-        // importing: the salon has to say when each person agreed, or the row
-        // arrives without consent and the send path keeps refusing — which is
-        // the correct failure.
-        consentAt: row.consentAt,
       });
       await syncCustomerSearch(ctx, customerId);
       // Composed here rather than read back: a hundred inserts would otherwise
@@ -755,7 +748,7 @@ export const createAppointments = internalMutation({
         }
       }
       // Deliberately NOT created here. create_customers is the door for that,
-      // and it is the one that asks about KVKK consent; minting a nameless row
+      // and it is the one that takes a name and dedupes; minting a nameless row
       // from a phone number to hang an appointment on is how a customer list
       // rots. Reported, never dropped silently — the same contract
       // create_customers makes about a number it cannot read.
@@ -1397,7 +1390,7 @@ export const createContactField = internalMutation({
     if (!key) throw new Error("That label does not produce a usable key.");
     if (RESERVED_CONTACT_KEYS.has(key)) {
       throw new Error(
-        `"${key}" is reserved. Name, phone, email and consent already exist and cannot be redefined.`,
+        `"${key}" is reserved. Name, phone and email already exist, and consent keys are kept out of custom fields.`,
       );
     }
     const existing = await ctx.db

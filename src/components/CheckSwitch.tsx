@@ -16,12 +16,13 @@
 //
 // The iOS Toggle survives on Account and the voice agent detail. Not a
 // principle, just the parts that have not been converted yet — the contact
-// record's Consent/Mute footer converted 2026-08-31.
+// record's footer converted 2026-08-31.
 export function CheckSwitch({
   on,
   label,
   onChange,
   disabled,
+  small,
 }: {
   on: boolean;
   label: string;
@@ -30,15 +31,19 @@ export function CheckSwitch({
   // be switched off. Greyed rather than absent: a control that vanishes at the
   // boundary reads as a bug, one that dims reads as a rule.
   disabled?: boolean;
+  // The contact record footer's 16px circle, Nudge's (MetaSwitch, 2026-09-21:
+  // on a row of text-xs labels the 24px ring was the biggest mark in it). The
+  // check shrinks with it so it still reads as a tick.
+  small?: boolean;
 }) {
   const check = (
     <svg
-      width="12"
-      height="12"
+      width={small ? 9 : 12}
+      height={small ? 9 : 12}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="3"
+      strokeWidth={small ? 3.5 : 3}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
@@ -54,7 +59,7 @@ export function CheckSwitch({
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange?.(!on)}
-      className={`flex h-6 w-6 items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+      className={`flex ${small ? "h-4 w-4" : "h-6 w-6"} shrink-0 items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
         on
           ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300"
           : "border border-[var(--border)] text-transparent enabled:hover:text-[var(--muted)]"

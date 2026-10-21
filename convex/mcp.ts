@@ -291,7 +291,7 @@ const TOOLS: ToolDef[] = [
     name: "create_customers",
     title: "Bring a customer list in",
     description:
-      "Add people to the book — one, or up to 100 in a call. Deduped by phone: a number already on file updates that person instead of making a second row, so re-running the same list is safe. Numbers may be written the way the salon says them ('0532 123 45 67'); they are read against the business's own country and stored international. A number that still cannot be read is REPORTED BACK, never dropped silently. Nothing is sent and no reminder is scheduled — these arrive as records. KVKK consent is NOT implied by importing: leave consentAt unset unless the salon can say when that person actually agreed, because WhatsApp sends stay blocked without it and that is the correct failure. Reversible: undo deletes the ones it created, with everything attached to them, keeping anyone who has since booked, written, called or had a note written about them.",
+      "Add people to the book — one, or up to 100 in a call. Deduped by phone: a number already on file updates that person instead of making a second row, so re-running the same list is safe. Numbers may be written the way the salon says them ('0532 123 45 67'); they are read against the business's own country and stored international. A number that still cannot be read is REPORTED BACK, never dropped silently. Nothing is sent and no reminder is scheduled — these arrive as records. Once on file they get the business's confirmations and reminders like anyone else; campaigns and bulk runs skip only a customer who unsubscribed. Reversible: undo deletes the ones it created, with everything attached to them, keeping anyone who has since booked, written, called or had a note written about them.",
     inputSchema: {
       type: "object",
       properties: {
@@ -312,11 +312,6 @@ const TOOLS: ToolDef[] = [
               email: { type: "string" },
               language: { type: "string", description: "Two-letter code, e.g. tr, en, de." },
               notes: { type: "string", description: "Anything a colleague should know." },
-              consentAt: {
-                type: "number",
-                description:
-                  "Epoch ms of when this person agreed to be messaged. OMIT unless the salon actually knows — do not stamp it to make sends work.",
-              },
             },
             required: ["phone"],
             additionalProperties: false,

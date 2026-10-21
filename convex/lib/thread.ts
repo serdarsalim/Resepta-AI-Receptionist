@@ -52,22 +52,25 @@ export function channelOfMessage(kind: string): Channel | "form" {
   return "whatsapp";
 }
 
-// A row that never left the building because this customer has no consent.
+// A row that never left the building because this customer unsubscribed
+// from marketing (lib/marketing).
 //
 // The failed row used to be written and shown on the reasoning that a
 // per-customer refusal belongs in that customer's thread rather than in the
 // owner's inbox at 06:00. Half of that still holds — it must not alert — but
-// the thread was the wrong home for it. Consent is one fact, and it is already
-// on the card as a toggle you can see and flip; the thread turned it into a
-// red row per reminder per customer, forever, in a surface whose job is to
-// show what a customer was actually told. Nothing was told. Nothing shows.
+// the thread was the wrong home for it. Unsubscribe is one fact, and it is
+// already on the card as a switch you can see and flip; the thread turned it
+// into a red row per campaign per customer, forever, in a surface whose job is
+// to show what a customer was actually told. Nothing was told. Nothing shows.
+//
+// `no-consent` is the same fact from before 2026-10-21, when consent gated
+// every send. Nothing writes it now, and the rows that carry it stay hidden
+// on every rebuild of the thread.
 //
 // Sibling case, deliberately left alone for now: `no-email-address`, which is
 // the same kind of fact and gets the same treatment the day it is as visible
-// on the card as consent is.
+// on the card as Unsubscribe is.
 export function neverLeftSilently(message: { status: string; error?: string }): boolean {
-  // The marketing-email opt-out is the same kind of fact as consent and gets
-  // the same treatment: the record shows it, the thread does not repeat it.
   return (
     message.status === "failed" &&
     (message.error === "no-consent" || message.error === "unsubscribed")

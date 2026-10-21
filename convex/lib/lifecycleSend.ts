@@ -8,9 +8,9 @@
 // confirmation is on its way (chatAgent's automationAnswered), and the phone
 // agent tells the caller a message will follow. Both used to read a count of
 // SCHEDULED messages, and a scheduled message can still fail at send time for
-// reasons visible in advance: no consent, a Cloud template not approved in
-// the customer's language, no WhatsApp connected, no words for the shop
-// phone, an email-only rule. The customer then heard nothing from anyone.
+// reasons visible in advance: a Cloud template not approved in the
+// customer's language, no WhatsApp connected, no words for the shop phone, an
+// email-only rule. The customer then heard nothing from anyone.
 
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
@@ -119,19 +119,8 @@ export function emailVerdict(a: {
   address: boolean;
   hasWords: boolean;
   language: string;
-  // A marketing send (a win-back) to a customer who unsubscribed from
-  // marketing email (customers.marketingEmailOptOutAt). Unset for every
-  // transactional kind, which an opt-out never stops.
-  unsubscribed?: boolean;
 }): { send: boolean; reason?: string } {
   if (a.channel === "whatsapp") return { send: false };
-  // Their own choice, so on "both" WhatsApp simply carries it. On email-only
-  // the refusal is the row, as consent's is: kept as the record that the
-  // business correctly did not mail them, never alerted on, never shown in
-  // the thread (lib/thread neverLeftSilently).
-  if (a.unsubscribed) {
-    return a.channel === "email" ? { send: false, reason: "unsubscribed" } : { send: false };
-  }
   if (a.channel === "email" && (!a.configured || !a.sender)) {
     return { send: false, reason: "email-not-configured" };
   }
@@ -151,8 +140,8 @@ const OPEN: Doc<"appointments">["status"][] = ["scheduled", "confirmed"];
 // it through lifecycleReaches below; the public booking and manage pages
 // (booking.book, booking.reschedule) ask it to say which channel the
 // confirmation is coming by, and to say nothing when none is (2026-10-13:
-// "on its way by WhatsApp or email" was printed whatever the rules, the
-// consent or the channels said).
+// "on its way by WhatsApp or email" was printed whatever the rules or the
+// channels said).
 export type LifecycleReach = { whatsapp: boolean; email: boolean };
 
 const NOWHERE: LifecycleReach = { whatsapp: false, email: false };
@@ -188,10 +177,10 @@ export async function lifecycleChannels(
       .collect()
   ).filter((rule) => rule.trigger === trigger && !rule.paused);
   if (rules.length === 0) return NOWHERE;
-  // The gates every channel shares, in the send's order: a suspended
-  // business sends nothing, and KVKK consent gates every channel.
+  // The gate every channel shares: a suspended business sends nothing. No
+  // consent gate since 2026-10-21, and Unsubscribe never stops a
+  // confirmation or a cancellation notice (lib/marketing).
   if ((org.status ?? "active") === "suspended") return NOWHERE;
-  if (customer.consentAt === undefined) return NOWHERE;
   // The showroom simulates every send into the thread, as one Cloud
   // WhatsApp row (wa.sendAppointmentMessage), whatever the rule's channel.
   if (isDemo(org)) return { whatsapp: true, email: false };

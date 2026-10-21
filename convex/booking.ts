@@ -87,7 +87,7 @@ type ReadCtx = { db: Pick<MutationCtx["db"], "query" | "get"> };
 
 // Which channel the confirmation for a booking or a move is coming by, as the
 // page tells the customer. Absent when no confirmation will reach them: no
-// live booking rule, no consent on record, no channel that can carry it. The
+// live booking rule, no channel that can carry it. The
 // page then says nothing rather than promise a message that is not coming
 // (lib/lifecycleSend.lifecycleChannels, the send path's own predicates).
 const confirmByValidator = v.optional(
@@ -874,9 +874,6 @@ export const book = mutation({
         ...(named.lastName ? { lastName: named.lastName } : {}),
         phone,
         ...(email ? { email } : {}),
-        // Booking an appointment and asking to hear about it IS consent,
-        // dated — the same reasoning as the request form.
-        consentAt: Date.now(),
       });
       await syncCustomerSearch(ctx, customerId);
       await recordCustomerCreated(ctx, {

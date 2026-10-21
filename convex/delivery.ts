@@ -38,6 +38,7 @@
 
 import { recomputeThread } from "./lib/thread";
 import { isDeleting } from "./lib/customerDeletion";
+import { isMarketingKind, isUnsubscribed } from "./lib/marketing";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
@@ -147,11 +148,11 @@ export const claimForRetry = internalMutation({
     const bulk = await bulkRunGate(ctx, message);
     if (bulk === "paused") return null;
     if (bulk === "cancelled") return { refused: "bulk-cancelled" as const };
-    // Marketing mail to a customer who unsubscribed after it was queued: a
-    // campaign or bulk row written before they clicked, or a win-back's
-    // retry. Every queued marketing mail crosses this claim, so this is the
-    // check that cannot be skipped (customers.marketingEmailOptOutAt).
-    if (isMarketingEmailKind(message.kind) && customer.marketingEmailOptOutAt !== undefined) {
+    // Marketing to a customer who unsubscribed after it was queued, on either
+    // channel: a campaign or bulk row written before they asked, or a
+    // win-back's retry. Every queued marketing message crosses this claim, so
+    // this is the check that cannot be skipped (lib/marketing).
+    if (isMarketingKind(message.kind) && isUnsubscribed(customer)) {
       return { refused: "unsubscribed" as const };
     }
 

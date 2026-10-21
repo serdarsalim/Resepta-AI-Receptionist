@@ -9,6 +9,10 @@
 // to and nobody else: every business sends from the same domain, so the page
 // must never be a way to learn about another one. An unknown token gets a
 // page that names no business at all.
+//
+// It unsubscribes from MARKETING on every channel (lib/marketing), not only
+// from email: the link is in an email, the request is "stop selling to me",
+// and since 2026-10-21 one switch honours it on WhatsApp and on the phone too.
 
 export type UnsubscribePageState = "confirm" | "done" | "unknown";
 
@@ -27,41 +31,41 @@ type Copy = {
 
 const COPY: Record<"tr" | "en" | "de", Copy> = {
   tr: {
-    pageTitle: "E-posta tercihleri",
+    pageTitle: "İletişim tercihleri",
     confirmTitle: "Abonelikten çıkmak istiyor musunuz?",
     confirmBody: (b) =>
-      `${b} size kampanya ve tanıtım e-postası göndermeyi bırakacak. Randevu onayları ve hatırlatmalar gelmeye devam eder.`,
+      `${b} kampanya ve tanıtımlar için size e-posta, WhatsApp ya da telefonla ulaşmayı bırakacak. Randevu onayları ve hatırlatmalar gelmeye devam eder.`,
     button: "Abonelikten çık",
     doneTitle: "Abonelikten çıktınız",
     doneBody: (b) =>
-      `${b} size artık kampanya ve tanıtım e-postası göndermeyecek. Randevu onayları ve hatırlatmalar gelmeye devam eder.`,
+      `${b} kampanya ve tanıtımlar için size artık e-posta, WhatsApp ya da telefonla ulaşmayacak. Randevu onayları ve hatırlatmalar gelmeye devam eder.`,
     unknownTitle: "Bu bağlantı artık çalışmıyor",
     unknownBody:
       "Bu e-postaları almak istemiyorsanız birini yanıtlayıp işletmeye doğrudan yazabilirsiniz.",
     someBusiness: "İşletme",
   },
   en: {
-    pageTitle: "Email preferences",
-    confirmTitle: "Unsubscribe from marketing email?",
+    pageTitle: "Contact preferences",
+    confirmTitle: "Unsubscribe from marketing?",
     confirmBody: (b) =>
-      `${b} will stop sending you campaign and promotional email. Appointment confirmations and reminders still arrive.`,
+      `${b} will stop contacting you with campaigns and offers, by email, WhatsApp or phone. Appointment confirmations and reminders still arrive.`,
     button: "Unsubscribe",
     doneTitle: "You're unsubscribed",
     doneBody: (b) =>
-      `${b} won't send you campaign or promotional email any more. Appointment confirmations and reminders still arrive.`,
+      `${b} won't contact you with campaigns or offers any more, by email, WhatsApp or phone. Appointment confirmations and reminders still arrive.`,
     unknownTitle: "This link no longer works",
     unknownBody: "To stop these emails, reply to one of them and ask the business directly.",
     someBusiness: "The business",
   },
   de: {
-    pageTitle: "E-Mail-Einstellungen",
-    confirmTitle: "Werbe-E-Mails abbestellen?",
+    pageTitle: "Kontakteinstellungen",
+    confirmTitle: "Werbung abbestellen?",
     confirmBody: (b) =>
-      `${b} schickt Ihnen dann keine Kampagnen- und Werbe-E-Mails mehr. Terminbestätigungen und Erinnerungen kommen weiterhin.`,
+      `${b} meldet sich dann nicht mehr mit Kampagnen und Angeboten bei Ihnen, weder per E-Mail noch per WhatsApp oder Telefon. Terminbestätigungen und Erinnerungen kommen weiterhin.`,
     button: "Abmelden",
     doneTitle: "Sie sind abgemeldet",
     doneBody: (b) =>
-      `${b} schickt Ihnen keine Kampagnen- und Werbe-E-Mails mehr. Terminbestätigungen und Erinnerungen kommen weiterhin.`,
+      `${b} meldet sich nicht mehr mit Kampagnen und Angeboten bei Ihnen, weder per E-Mail noch per WhatsApp oder Telefon. Terminbestätigungen und Erinnerungen kommen weiterhin.`,
     unknownTitle: "Dieser Link funktioniert nicht mehr",
     unknownBody:
       "Um diese E-Mails abzubestellen, antworten Sie auf eine davon und schreiben Sie dem Betrieb direkt.",

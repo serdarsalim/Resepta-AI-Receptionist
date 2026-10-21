@@ -52,6 +52,7 @@ import { formatMoney as formatMinorUnits } from "./lib/money";
 import { requireOrg } from "./lib/orgAuth";
 import { resolvePublicPhone } from "./lib/publicPhone";
 import { isDeleting } from "./lib/customerDeletion";
+import { isMarketingKind, isUnsubscribed } from "./lib/marketing";
 import { emailVerdict, lifecycleTemplates, whatsappVerdict } from "./lib/lifecycleSend";
 
 const SESSION_WINDOW_MS = 24 * 3600_000;
@@ -247,7 +248,6 @@ export const sendSession = action({
     if (org && (org.status ?? "active") === "suspended") {
       return { ok: false, reason: "org-suspended" };
     }
-    if (customer.consentAt === undefined) return { ok: false, reason: "no-consent" };
     // Meta's 24h session window is Meta's rule. Evolution is a linked handset
     // and has no such window — the salon can answer an old message from their
     // phone whenever they like, and refusing to do the same from inside
@@ -702,10 +702,10 @@ export const loadAwayReplyContext = internalQuery({
   },
 });
 
-// Deliberately does NOT require consentAt, unlike sendSession. Consent governs
-// messages WE start; this is a reply to someone who just wrote to us, which is
-// what every business messaging system does and what Meta's own away message
-// does. The session window is open by construction — their inbound opened it.
+// A reply to someone who just wrote to us, which is what every business
+// messaging system does and what Meta's own away message does. Not marketing,
+// so Unsubscribe never stops it (lib/marketing). The session window is open
+// by construction — their inbound opened it.
 // The once-per-window guard lives in webhook.ts, stamped before this is
 // scheduled, same ordering as the reminder tick's double-send guard.
 export const sendAwayReply = internalAction({
@@ -980,7 +980,7 @@ export const sendAppointmentMessage = internalAction({
       // applySendResult alerts if this reason warrants it. Every reason that
       // reaches here is a local refusal, so it classifies permanent and fails
       // terminally rather than entering the retry queue — which is right: a
-      // customer who never consented will not have consented in five minutes.
+      // template nobody wrote will not have been written in five minutes.
       await ctx.runMutation(internal.messages.applySendResult, {
         messageId,
         ok: false,
@@ -988,9 +988,14 @@ export const sendAppointmentMessage = internalAction({
       });
     };
 
-    // KVKK consent gates EVERY channel.
-    if (customer.consentAt === undefined) {
-      await fail("no-consent");
+    // Unsubscribe stops marketing on every channel, and a win-back is
+    // marketing (lib/marketing). The refusal is the row, kept as the record
+    // that the business correctly did not write to them: never alerted on,
+    // never shown in the thread (lib/thread neverLeftSilently). Everything
+    // else here is about a booking and goes to every customer; the consent
+    // gate that stood here went on 2026-10-21.
+    if (isMarketingKind(messageKind) && isUnsubscribed(customer)) {
+      await fail("unsubscribed");
       return null;
     }
 
@@ -1333,10 +1338,9 @@ export const sendAppointmentMessage = internalAction({
     // Switched off on a WhatsApp-only rule, skipped silently on "both" for a
     // customer it cannot reach, a visible row on email-only: the verdict in
     // lib/lifecycleSend, shared with the assistants' advance check.
-    // A win-back is marketing (lib/email isMarketingEmailKind): it carries
-    // the unsubscribe link, and a customer who used one gets no win-back
-    // email. Confirmations, reminders, follow-ups and cancellation notices
-    // are not, and an opt-out never stops them.
+    // A win-back is marketing (lib/email isMarketingEmailKind): its email
+    // carries the unsubscribe link below. An unsubscribed customer's win-back
+    // never got this far (the check above).
     const marketing = isMarketingEmailKind(`email_${messageKind}`);
     const byEmail = emailVerdict({
       channel: channelPref,
@@ -1345,7 +1349,6 @@ export const sendAppointmentMessage = internalAction({
       address: Boolean(customer.email),
       hasWords: Boolean(body),
       language,
-      unsubscribed: marketing && customer.marketingEmailOptOutAt !== undefined,
     });
     if (byEmail.reason) {
       await fail(byEmail.reason);

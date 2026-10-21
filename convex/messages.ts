@@ -160,7 +160,7 @@ export const logOutQueued = internalMutation({
 // A failure is classified (lib/sendFailure.ts) before anything is written:
 //
 //   permanent   -> status "failed" now, alert now. Nothing about waiting would
-//                  help — no consent, no approved template, a shut window.
+//                  help — no approved template, a shut window.
 //   transient   -> status stays "queued" with nextAttemptAt set, and NO alert.
 //                  The salon should never hear about a 500 that the backoff
 //                  quietly recovered from thirty seconds later.
@@ -260,8 +260,8 @@ export const applySendResult = internalMutation({
       sendingAt: undefined,
       ...(deadLettered ? { deadLetteredAt: Date.now() } : {}),
     });
-    // The failure changes what the inbox row says (and a no-consent refusal
-    // removes the entry from the thread altogether), so the summary is
+    // The failure changes what the inbox row says (and an unsubscribed
+    // refusal removes the entry from the thread altogether), so the summary is
     // rebuilt. The sent branch above does not need this: a queued row is
     // already counted as an outbound entry the moment it is inserted.
     if (message.customerId) await recomputeThread(ctx, message.customerId);
