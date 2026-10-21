@@ -37,7 +37,7 @@ import { MonthGrid, addMonths, startOfMonth } from "./MonthGrid";
 import { YearGrid, addYears, startOfYear } from "./YearGrid";
 import { BlockSheet, SheetKindTabs, type BlockDraft } from "./BlockSheet";
 import { RowMenu } from "./RowMenu";
-import { iconButtonClass } from "./Control";
+import { buttonClass, iconButtonClass } from "./Control";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { STAFF_TINT, staffSwatch, staffSwatchInk, staffTint } from "@/lib/staffTint";
 import { CalendarPanel, FilterPicker, UNASSIGNED, shownIds } from "./CalendarPanel";
@@ -98,8 +98,12 @@ function rectOf(el: Element): Rect {
 const PANEL_STORAGE_KEY = "resepta.calendar.panel";
 const FILTER_STORAGE_PREFIX = "resepta.calendar.filters.";
 
-type CalendarFilters = { staff: string[]; services: string[] };
-const NO_FILTERS: CalendarFilters = { staff: [], services: [] };
+// Team only (Serdar, 2026-10-21): a services filter answered no question
+// anybody brings to a calendar, where what you look for is who is booked.
+// A services list stored by an earlier build is ignored on read, so it can
+// never hide a booking from a filter that is no longer on screen.
+type CalendarFilters = { staff: string[] };
+const NO_FILTERS: CalendarFilters = { staff: [] };
 
 // Anything can be in localStorage: a half-written entry, a shape from another
 // build. Whatever does not read as a list of strings reads as no filter.
@@ -110,7 +114,7 @@ function readFilters(raw: string | null): CalendarFilters {
       Array.isArray(value) ? value.filter((x): x is string => typeof x === "string") : [];
     if (parsed && typeof parsed === "object") {
       const record = parsed as Record<string, unknown>;
-      return { staff: list(record.staff), services: list(record.services) };
+      return { staff: list(record.staff) };
     }
   } catch {
     // Unreadable: no filter.
@@ -217,9 +221,6 @@ export function AppointmentsView({
     const byId = new Map((staffRows ?? []).map((row) => [row._id as string, row.color]));
     return (staffId?: string) => (staffId ? byId.get(staffId) : undefined);
   }, [staffRows]);
-  // The services, for the side panel's list. The booking sheet subscribes to
-  // the same query.
-  const services = useQuery(api.services.list, {});
 
   // ── The side panel and its filters (CalendarPanel) ─────────────────────
   //
@@ -245,7 +246,7 @@ export function AppointmentsView({
       return next;
     });
 
-  // Per business: staff and service ids mean nothing in the next one.
+  // Per business: staff ids mean nothing in the next one.
   const orgId = settings?.org._id;
   const [filters, setFilters] = useState<CalendarFilters>(NO_FILTERS);
   useEffect(() => {
@@ -279,42 +280,19 @@ export function AppointmentsView({
     ];
   }, [staffRows, appointments]);
   const withUnassigned = (staffRows ?? []).length > 0;
-  // The same for services: every active one, then an inactive one a booking
-  // in range still carries.
-  const panelServices = useMemo(() => {
-    const carried = new Set(
-      (appointments ?? []).flatMap((row) =>
-        (row.items ?? []).flatMap((item) => (item.serviceId ? [item.serviceId] : [])),
-      ),
-    );
-    return (services ?? [])
-      .filter((service) => service.active || carried.has(service._id))
-      .map((service) => ({ _id: service._id as string, name: service.name }));
-  }, [services, appointments]);
 
   const staffKeys = useMemo(
     () => [...panelStaff.map((row) => row._id as string), ...(withUnassigned ? [UNASSIGNED] : [])],
     [panelStaff, withUnassigned],
   );
-  const serviceKeys = useMemo(() => panelServices.map((row) => row._id), [panelServices]);
   const shownStaff = useMemo(() => shownIds(filters.staff, staffKeys), [filters.staff, staffKeys]);
-  const shownServices = useMemo(
-    () => shownIds(filters.services, serviceKeys),
-    [filters.services, serviceKeys],
-  );
   const staffFiltered = shownStaff.length < staffKeys.length;
-  const servicesFiltered = shownServices.length < serviceKeys.length;
-  // Whether a booking survives the panel's ticks. A booking passes the team
-  // list when its person (or Unassigned) is ticked, and the services list when
-  // ANY of its lines is a ticked service: a cut and a beard trim is shown
-  // under either. A booking with no service lines shows only while every
-  // service is.
+  // Whether a booking survives the team list's ticks: its person (or
+  // Unassigned) is ticked.
   const passesFilters = useCallback(
-    (row: { staffId?: string; items?: { serviceId?: string }[] }) =>
-      (!staffFiltered || shownStaff.includes(row.staffId ?? UNASSIGNED)) &&
-      (!servicesFiltered ||
-        (row.items ?? []).some((item) => item.serviceId && shownServices.includes(item.serviceId))),
-    [staffFiltered, shownStaff, servicesFiltered, shownServices],
+    (row: { staffId?: string }) =>
+      !staffFiltered || shownStaff.includes(row.staffId ?? UNASSIGNED),
+    [staffFiltered, shownStaff],
   );
 
   // Start times for the whole year, only while the year is being looked at,
@@ -326,7 +304,6 @@ export function AppointmentsView({
           fromMs: startOfYear(anchor),
           toMs: addYears(startOfYear(anchor), 1),
           ...(staffFiltered ? { staffIds: shownStaff } : {}),
-          ...(servicesFiltered ? { serviceIds: shownServices } : {}),
         }
       : "skip",
   );
@@ -630,7 +607,7 @@ export function AppointmentsView({
             {/* h-8, the control scale's 32px declared rather than padded into
                 being, like the view menu across the row. */}
             <button
-              className="inline-flex h-8 items-center rounded-full border border-[var(--border)] px-4 text-sm font-medium transition-colors hover:bg-[var(--control-hover)]"
+              className={buttonClass("pill", "sm")}
               onClick={() => setAnchor(startOfDay(Date.now()))}
             >
               {t("appointments.today")}
@@ -686,15 +663,6 @@ export function AppointmentsView({
                 onChange={(next) => changeFilters({ staff: next })}
               />
             )}
-            {serviceKeys.length > 1 && (
-              <FilterPicker
-                allLabel={t("calendar.allServices")}
-                countLabel={(n) => t.plural("calendar.nServices", n)}
-                options={panelServices.map((row) => ({ id: row._id, label: row.name }))}
-                value={filters.services}
-                onChange={(next) => changeFilters({ services: next })}
-              />
-            )}
           </div>
           <ViewMenu view={view} onView={setView} />
         </div>
@@ -729,9 +697,6 @@ export function AppointmentsView({
             // a picked day needs a grid to land on.
             if (view === "list" || view === "year") setView("week");
           }}
-          services={panelServices}
-          serviceFilter={filters.services}
-          onServiceFilter={(next) => changeFilters({ services: next })}
           staff={panelStaff}
           withUnassigned={withUnassigned}
           staffFilter={filters.staff}
@@ -1211,9 +1176,9 @@ function ViewMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={toggle}
-        // An outlined pill, twin to the Today button across the row — the
-        // two ends of the header carry the same weight, Google's balance.
-        className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] px-4 py-1.5 text-sm font-medium transition-colors hover:bg-[var(--muted-bg)]"
+        // A raised pill, twin to the Today button across the row: the two
+        // ends of the header carry the same weight, Google's balance.
+        className={buttonClass("pill", "sm")}
       >
         {current ? t(current.key) : ""}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

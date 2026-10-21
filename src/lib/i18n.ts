@@ -5418,16 +5418,9 @@ const dictionary = {
     de: "Mindestens einer bleibt im Kalender",
   },
   "calendar.allTeam": { tr: "Tüm ekip", en: "Whole team", de: "Ganzes Team" },
-  "calendar.allServices": {
-    tr: "Tüm hizmetler",
-    en: "All services",
-    de: "Alle Leistungen",
-  },
   // The team picker's count. Not "people": Unassigned is on the same list.
   // Never under two (one shown is printed by name).
   "calendar.nSelected": { tr: "{n} seçili", en: "{n} selected", de: "{n} ausgewählt" },
-  "calendar.nServices.one": { tr: "{n} hizmet", en: "{n} service", de: "{n} Leistung" },
-  "calendar.nServices.other": { tr: "{n} hizmet", en: "{n} services", de: "{n} Leistungen" },
   // The kind switch's accessible name: what the two tabs above choose between.
   "calendar.kindLabel": {
     tr: "Ne eklenecek",
