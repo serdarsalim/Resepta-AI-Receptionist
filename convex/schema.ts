@@ -1237,6 +1237,11 @@ export default defineSchema({
     // The meter's two stamps, same contract as calls (retell.meterVoice).
     billedMicroUsd: v.optional(v.number()),
     retellCostMicroUsd: v.optional(v.number()),
+    // The owner's review of the test (Nudge's ReviewNotes on a test): what
+    // should have happened, in their words, and a verdict. Set from the
+    // opened row on the Testing tab (agentTests.setReview).
+    note: v.optional(v.string()),
+    verdict: v.optional(v.union(v.literal("pass"), v.literal("miss"))),
   })
     .index("by_org_agent_started", ["orgId", "retellAgentId", "startedAt"])
     .index("by_call", ["callId"])

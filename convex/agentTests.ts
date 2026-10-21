@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { requireOwner } from "./lib/orgAuth";
 import { isDeleting } from "./lib/customerDeletion";
@@ -132,6 +132,8 @@ const testRow = v.object({
     v.object({ tool: v.string(), detail: v.string(), ok: v.boolean(), at: v.number() }),
   ),
   billedMicroUsd: v.union(v.number(), v.null()),
+  note: v.union(v.string(), v.null()),
+  verdict: v.union(v.literal("pass"), v.literal("miss"), v.null()),
 });
 
 // Every field named, none spread: the row carries columns (the provider's
@@ -154,6 +156,8 @@ function shapeRow(row: Doc<"agentTests">) {
     recordingUrl: row.recordingUrl ?? null,
     actions: row.actions ?? [],
     billedMicroUsd: row.billedMicroUsd ?? null,
+    note: row.note ?? null,
+    verdict: row.verdict ?? null,
   };
 }
 
@@ -200,5 +204,28 @@ export const ownedTest = internalQuery({
       .first();
     if (!row || row.orgId !== orgId) return null;
     return shapeRow(row);
+  },
+});
+
+// The owner's note and verdict on a test, saved as they are typed (on blur)
+// and on every verdict click, from the opened row. Owner-only like the rest
+// of the agent page, and this org's rows only. `verdict: null` clears it; an
+// empty note is stored as no note.
+export const setReview = mutation({
+  args: {
+    id: v.id("agentTests"),
+    note: v.optional(v.string()),
+    verdict: v.optional(v.union(v.literal("pass"), v.literal("miss"), v.null())),
+  },
+  returns: v.null(),
+  handler: async (ctx, { id, note, verdict }) => {
+    const { orgId } = await requireOwner(ctx);
+    const row = await ctx.db.get(id);
+    if (!row || row.orgId !== orgId) throw new Error("no-such-test");
+    const patch: { note?: string | undefined; verdict?: "pass" | "miss" | undefined } = {};
+    if (note !== undefined) patch.note = note.trim() ? note.slice(0, 4000) : undefined;
+    if (verdict !== undefined) patch.verdict = verdict ?? undefined;
+    if (Object.keys(patch).length > 0) await ctx.db.patch(id, patch);
+    return null;
   },
 });
