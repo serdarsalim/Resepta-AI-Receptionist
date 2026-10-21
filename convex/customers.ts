@@ -85,7 +85,40 @@ const customerFields = {
   // throws (see above).
   deletingAt: v.optional(v.number()),
   deletingPhone: v.optional(v.string()),
+  // The opener's two clocks (P34, schema customers.lastConversationAt), found
+  // missing by the guard below on the day it was added: the first answered
+  // call after the deploy would have taken this customer's reads down.
+  lastConversationAt: v.optional(v.number()),
+  lastCallAttemptAt: v.optional(v.number()),
 };
+
+// Columns a row deliberately never carries to a client. `searchText` is the
+// search index's folded copy of name, address, phone and email (P13): the
+// server reads it, the screen never needs it, and it is long.
+type OmittedFromRow = "searchText";
+
+// The drift guard. Every column the schema gives a customer is mirrored in
+// customerFields or named in OmittedFromRow, or this line fails the typecheck
+// and names the column. Without it the miss surfaced in production as
+// "Value does not match validator" on every read of the table: four times,
+// the last on 2026-10-21, when the searchText backfill filled the column on
+// prod and both the Customers list and the record page went down.
+type UnmirroredCustomerColumn = Exclude<
+  keyof Doc<"customers">,
+  keyof typeof customerFields | OmittedFromRow
+>;
+const _everyCustomerColumnMirrored: [UnmirroredCustomerColumn] extends [never]
+  ? true
+  : UnmirroredCustomerColumn = true;
+void _everyCustomerColumnMirrored;
+
+// The row the list and the record page return: the document minus what a
+// client never gets, plus the dot.
+function toCustomerRow(customer: Doc<"customers">) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { searchText, ...row } = customer;
+  return { ...row, needsAttention: resolveAttention(customer) };
+}
 
 // The row plus the dot, which both the list and the record page carry.
 const customerRow = v.object({
@@ -130,7 +163,7 @@ export const get = query({
     // question the table does — and answer it the same way, through
     // resolveAttention, rather than by looking at two of the three timestamps
     // and guessing at the third.
-    return { ...customer, needsAttention: resolveAttention(customer) };
+    return toCustomerRow(customer);
   },
 });
 
@@ -253,7 +286,7 @@ export const listPage = query({
       ...result,
       page: result.page
         .filter((row) => !isDeleting(row))
-        .map((row) => ({ ...row, needsAttention: resolveAttention(row) })),
+        .map(toCustomerRow),
     };
   },
 });
