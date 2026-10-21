@@ -32,7 +32,7 @@ import { SegmentedControl } from "./SegmentedControl";
 import { ViewOnlyPill } from "./ViewOnlyPill";
 import { CheckSwitch } from "./CheckSwitch";
 import { StaffColorPicker } from "./StaffColorPicker";
-import { FIELD, ROW_GRID, RowLabel } from "./RowLabel";
+import { ControlLabel, FIELD, ROW_GRID } from "./RowLabel";
 import { buttonClass, fieldClass } from "./Control";
 import { presetLanguage } from "../../convex/lib/industryPresets";
 import { InlineEditValue } from "./RecordField";
@@ -457,26 +457,9 @@ function BookingRow() {
 // adding to it. It replaced boxes capped to their own text (AGENTS.md rule
 // 6), which had given this card five widths.
 //
-// A label is centred on a one-line control: the label cell is a control's
-// height from sm, so its words sit on the field's text line instead of 6px
-// above it, and it lines up with the FIRST line of the address box. On a
-// phone the label stacks on its field, half a row-gap away, so it reads as
-// that field's and not as the end of the row above.
-function FieldLabel({
-  label,
-  hint,
-  className = "",
-}: {
-  label: string;
-  hint?: string;
-  className?: string;
-}) {
-  return (
-    <span className={`flex items-center max-sm:-mb-3 sm:min-h-8 ${className}`}>
-      <RowLabel label={label} hint={hint} />
-    </span>
-  );
-}
+// Every label is a ControlLabel (RowLabel.tsx): on the text line of the field
+// beside it and on the first line of the address box, and on a phone close
+// over its own field.
 
 // A refusal under the field it is about, in the value column. The empty
 // label cell is gone on a phone, where it would cost a row-gap of its own.
@@ -530,7 +513,7 @@ function LegalPageRows() {
     hint?: string,
   ) => (
     <>
-      <FieldLabel label={t(label)} hint={hint} />
+      <ControlLabel label={t(label)} hint={hint} />
       <input
         key={`${field}-${tick}-${settings.org[field] ?? ""}`}
         type="url"
@@ -712,12 +695,12 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
           {/* The hint is not decoration: this field now moves the public
               booking link, and an owner tidying up their spelling has no way
               to guess that from a box labelled "Business name". */}
-          <FieldLabel
+          <ControlLabel
             label={t("settings.businessName")}
             hint={t("settings.businessNameHint")}
           />
-          {/* Every box in this card is the value column's width (FieldLabel's
-              note above says why). */}
+          {/* Every box in this card is the value column's width (the General
+              card's grammar, above FieldError, says why). */}
           <input
             key={`name-${nameTick}-${settings.org.name}`}
             className={`${FIELD} w-full`}
@@ -739,7 +722,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
           />
           {nameError && <FieldError text={nameError} />}
 
-          <FieldLabel label={t("settings.address")} hint={t("settings.addressHint")} />
+          <ControlLabel label={t("settings.address")} hint={t("settings.addressHint")} />
           {/* Three lines, the way an address is written on an envelope
               (Serdar, 2026-10-21: a real address cannot be one long bar).
               Stored with its line breaks; everything that shows it on one
@@ -764,7 +747,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
           />
 
           {/* Centred on the 48px picture rather than on a one-line field. */}
-          <FieldLabel
+          <ControlLabel
             label={t("settings.logo")}
             hint={t("settings.logoHint")}
             className="sm:self-center"
@@ -841,7 +824,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               the /r page and the booking page were two public channels for
               the same job, and the booking card next door is the one that
               survived. */}
-          <FieldLabel label={t("settings.inboundAddress")} hint={t("settings.inboundAddressHint")} />
+          <ControlLabel label={t("settings.inboundAddress")} hint={t("settings.inboundAddressHint")} />
           {/* The domain is INSIDE the box, a muted suffix after what you type
               (Serdar, 2026-10-21). Hanging to the right of the field it made
               this row wider than every other, and it read as a second value
@@ -891,7 +874,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               from the incoming address above, which needs no setup at all. */}
           {settings.org.emailFrom && (
             <>
-              <FieldLabel
+              <ControlLabel
                 label={t("settings.emailFrom")}
                 hint={t("settings.emailFromHint")}
               />
@@ -900,7 +883,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               </span>
             </>
           )}
-          <FieldLabel
+          <ControlLabel
             label={t("settings.language")}
             hint={t("settings.languageHint")}
           />
@@ -949,7 +932,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               is the "start blank, change your mind later" path the wizard
               promises. Fields a voice agent references survive the reset,
               because deleting them would wedge the agent's next publish. */}
-          <FieldLabel
+          <ControlLabel
             label={t("settings.industry")}
             hint={t("settings.industryHint")}
           />
@@ -1006,7 +989,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               as 40000 is ₺400,00 today and €400.00 tomorrow. That is the
               honest behaviour: we don't know an exchange rate and inventing
               one would silently rewrite what customers were charged. */}
-          <FieldLabel label={t("settings.currency")} hint={t("settings.currencyHint")} />
+          <ControlLabel label={t("settings.currency")} hint={t("settings.currencyHint")} />
           {/* Currency and decimals stay on ONE line: they answer the same
               question together — currency picks the symbol, language picks
               the separators, this picks how much of the number to write. A
@@ -1056,7 +1039,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               it unlocks counts in. Off by default: an org that never fills in
               prices would get a nav item leading to three zeroes, which reads
               as broken not unused. */}
-          <FieldLabel label={t("settings.revenueEnabled")} hint={t("settings.revenueEnabledHint")} />
+          <ControlLabel label={t("settings.revenueEnabled")} hint={t("settings.revenueEnabledHint")} />
           <span className="flex items-center sm:min-h-8">
             <CheckSwitch
               on={settings.org.revenueEnabled ?? false}
@@ -1079,7 +1062,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               argument survives — the sentence explaining what the page IS was
               the only thing the card's header carried that the row does
               not. */}
-          <FieldLabel
+          <ControlLabel
             label={t("settings.bookingPage")}
             hint={t("settings.bookingPageHint")}
           />
@@ -1089,7 +1072,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               because that is the door most customers meet it at. Shown with
               the page off too: the phone agent and the WhatsApp assistant obey
               it as well. */}
-          <FieldLabel label={t("settings.minNotice")} hint={t("settings.minNoticeHint")} />
+          <ControlLabel label={t("settings.minNotice")} hint={t("settings.minNoticeHint")} />
           <MinNoticeRow
             hours={settings.org.minNoticeHours}
             unit={settings.org.minNoticeUnit}
@@ -1107,7 +1090,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               product — so it disables rather than refusing after the tap. */}
           {sellsGoods && (
             <>
-              <FieldLabel
+              <ControlLabel
                 label={t("settings.fulfillment")}
                 hint={t("settings.fulfillmentHint")}
               />

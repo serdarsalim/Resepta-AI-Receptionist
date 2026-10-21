@@ -57,7 +57,7 @@ import {
   timeValueToMinutes,
   weekdayNames,
 } from "@/lib/datetime";
-import { FIELD, ROW_GRID, RowLabel } from "./RowLabel";
+import { ControlLabel, FIELD, ROW_GRID, RowLabel } from "./RowLabel";
 import { TimezoneSelect } from "./TimezoneSelect";
 import { InfoTip } from "./InfoTip";
 import { Card } from "./Card";
@@ -2472,7 +2472,7 @@ export function BusinessHoursCard({
             carries nine rows across three unrelated jobs, and a chip strip
             where one chip scrolls while five swap the pane is two grammars in
             one control. Moving the single coupled row is the smaller fix. */}
-        <RowLabel
+        <ControlLabel
           label={t("settings.timezone")}
           hint={t("settings.timezoneHint")}
         />
