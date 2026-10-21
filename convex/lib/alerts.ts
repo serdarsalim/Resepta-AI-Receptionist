@@ -748,8 +748,10 @@ export async function queueOrgAlert(
 // state of a normally-working account, and emailing about them is how a salon
 // learns to ignore the alert that actually matters:
 //
-//   no-consent            every contact who never opted in fails this way,
-//                         every time, forever. It is a KVKK record, not a bug.
+//   unsubscribed          every marketing send to a customer who asked to stop
+//                         fails this way. It is their decision, not a bug.
+//                         (no-consent, its pre-2026-10-21 sibling, is no
+//                         longer written.)
 //   wa-not-configured     true for every send until the org connects a number,
 //                         so a brand new org would get one email per send on
 //                         day one.
@@ -758,18 +760,18 @@ export async function queueOrgAlert(
 //
 // Everything else is either the org's own missing template or the provider
 // refusing a send, and both are broken AND actionable. The failed row still
-// gets written in all cases — but it is not always SHOWN: no-consent is
-// filtered out of the conversation feed (see neverLeftSilently in messages.ts)
-// because the consent toggle on the card already says that fact once, and a
-// thread is for what a customer was told.
+// gets written in all cases — but it is not always SHOWN: unsubscribed is
+// filtered out of the conversation feed (see neverLeftSilently in lib/thread)
+// because the switch on the card already says that fact once, and a thread is
+// for what a customer was told.
 const STEADY_STATE_FAILURES = new Set([
   "no-consent",
-  // The customer unsubscribed from marketing email; the record says so. Like
-  // no-consent, a fact about one customer that recurs with every campaign.
+  // The customer unsubscribed from marketing; the record says so. A fact
+  // about one customer that recurs with every campaign.
   "unsubscribed",
   "wa-not-configured",
   "session-window-closed",
-  // Email-only org, customer without an address. Like no-consent this is a
+  // Email-only org, customer without an address. Like unsubscribed this is a
   // per-customer fact whose row belongs in that customer's thread, not in the
   // owner's inbox at 06:00 for every reminder.
   "no-email-address",
@@ -784,9 +786,9 @@ const STEADY_STATE_FAILURES = new Set([
 // red line into a conversation that is supposed to show what that person was
 // told. Settings already reports this state, in one place, loudly.
 //
-// no-consent is deliberately NOT in here even though it repeats forever: it is
-// a KVKK record that we correctly did not message somebody, and evidence is
-// the one kind of row worth keeping duplicated. session-window-closed stays
+// unsubscribed is deliberately NOT in here even though it repeats: it is the
+// record that we correctly did not message somebody, and evidence is the one
+// kind of row worth keeping duplicated. session-window-closed stays
 // too — it depends on when THAT customer last wrote, so it belongs in THAT
 // thread.
 export function isOrgSetupFailure(reason: string): boolean {

@@ -4060,8 +4060,7 @@ export const recordCall = internalMutation({
     // `push` guard in messages.ts), so the call landed nowhere — the agent
     // booked correctly and the screen stayed empty. Create the contact, the
     // same way an unknown inbound WhatsApp does, with the phone standing in
-    // until a human types a name. Consent stays unset: them ringing us is not
-    // KVKK consent for us to start messaging them.
+    // until a human types a name.
     // A withheld or unreadable caller ID still leaves this undefined, because
     // there is no number to build a contact from.
     let customerId: Id<"customers"> | undefined;

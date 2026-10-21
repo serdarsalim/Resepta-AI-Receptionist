@@ -1368,8 +1368,11 @@ export default defineSchema({
     lastConversationAt: v.optional(v.number()),
     lastCallAttemptAt: v.optional(v.number()),
     notes: v.optional(v.string()),
-    // KVKK: when the customer consented to WhatsApp messages. Unset = no
-    // consent recorded; sends are blocked until it's stamped.
+    // DEAD since 2026-10-21. When the customer consented to messages; it
+    // gated every send until Serdar removed the gate and its switch
+    // (lib/marketing says why). Nothing reads or writes it now. It stays in
+    // the schema only because Convex cannot drop a field while documents
+    // still carry values.
     consentAt: v.optional(v.number()),
     // Last inbound WhatsApp message — opens Meta's 24h session window.
     lastInboundAt: v.optional(v.number()),
@@ -1481,16 +1484,16 @@ export default defineSchema({
     // look. No dot on the contact, no row in the inbox, nothing added to the
     // sidebar count. Set = muted; the timestamp is only when.
     //
-    // It is not consent and it is not a block. Consent is a legal fact about
-    // what the salon may send; mute is a working preference about what this
-    // person may put in front of the salon. Conflating them would mean muting
-    // someone silently revoked their consent, which is exactly the sort of
-    // quiet state change KVKK punishes.
+    // It is not Unsubscribe and it is not a block. Unsubscribe is the
+    // customer's request about what the salon may send them; mute is a
+    // working preference about what this person may put in front of the
+    // salon. Conflating them would mean muting someone silently took them off
+    // the marketing list, or the other way round.
     mutedAt: v.optional(v.number()),
     // "Don't call me again", said to the phone agent or to a person: when the
     // customer asked not to be called by the AI. Its own fact, deliberately
-    // NOT consentAt: someone who refuses robot calls still wants their
-    // reminders, and consent switches off every channel at once.
+    // NOT Unsubscribe: someone who refuses robot calls may still want offers
+    // by WhatsApp, and Unsubscribe stops marketing on every channel.
     //
     // Bulk call runs skip them (bulkRuns.skipReason, read again at each
     // claim), and a call placed from their record asks first and needs the
@@ -1499,18 +1502,19 @@ export default defineSchema({
     // (retell.markNoAiCallsFromCall); the agent can only ever SET it, a
     // person clears it. Set = asked; the timestamp is when.
     noAiCallsAt: v.optional(v.number()),
-    // When the customer unsubscribed from this business's MARKETING email,
-    // through the link at the foot of a campaign, bulk or win-back mail or
-    // their mail client's own Unsubscribe button (http.ts /e/u/<token>, which
-    // resolves the message row to exactly one business and customer).
+    // When the customer unsubscribed from this business's MARKETING, through
+    // the link at the foot of a campaign, bulk or win-back mail or their mail
+    // client's own Unsubscribe button (http.ts /e/u/<token>, which resolves
+    // the message row to exactly one business and customer), or from the
+    // record's Unsubscribe switch for a request made in person
+    // (customers.setMarketingEmailOptOut), which asks before clearing it.
     //
-    // Email only, and marketing only (lib/email isMarketingEmailKind):
-    // campaign, bulk and win-back mail stop, at fan-out and again at claim;
-    // confirmations, reminders and replies keep going, and WhatsApp is not
-    // touched (Meta keeps its own marketing opt-out). Not consent: consent
-    // stops every channel. Also set from the record's Unsubscribed switch for
-    // a request made in person (customers.setMarketingEmailOptOut), which asks
-    // before clearing it. Set = unsubscribed; when.
+    // Marketing only, and since 2026-10-21 every channel (lib/marketing,
+    // read through isUnsubscribed): campaigns, bulk messages and bulk calls,
+    // and win-backs stop, at fan-out and again at claim. Confirmations,
+    // reminders, follow-ups, replies and a requested callback keep going.
+    // The name still says email because the email link set it first.
+    // Set = unsubscribed; when.
     marketingEmailOptOutAt: v.optional(v.number()),
     // The conversation summary the inbox list, its badge and the Contacts dot
     // read INSTEAD of scanning messages. Kept by the write paths; lib/thread.ts
@@ -2242,8 +2246,8 @@ export default defineSchema({
     // salon, which is the product not working.
     //
     // So a failure that could plausibly succeed later is RETRIED on a backoff,
-    // and only a failure that cannot — no consent, no approved template, a
-    // closed session window — goes straight to `failed`.
+    // and only a failure that cannot — an unsubscribed customer, no approved
+    // template, a closed session window — goes straight to `failed`.
 
     // How many provider attempts this row has had. Retained after success as
     // well: "delivered on the third try" is worth being able to see.
@@ -2501,8 +2505,8 @@ export default defineSchema({
   //              voicemail, busy, declined, no answer: lib/callOutcome)
   //   failed     we could not place it, or the network or the provider
   //              refused it and nothing rang
-  //   skipped    never attempted, and WHY is in reason: no email address, no
-  //              consent, an unusable number. A bulk sender that quietly
+  //   skipped    never attempted, and WHY is in reason: no email address,
+  //              unsubscribed, an unusable number. A bulk sender that quietly
   //              drops rows is how "I sent it to everyone" becomes false.
   //   cancelled  the run was stopped before this one's turn
   bulkRunItems: defineTable({

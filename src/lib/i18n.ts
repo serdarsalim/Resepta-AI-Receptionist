@@ -1050,17 +1050,20 @@ const dictionary = {
     en: "Cancel the rest? Calls already ringing and messages already sent cannot be recalled.",
     de: "Den Rest abbrechen? Laufende Anrufe und bereits gesendete Nachrichten lassen sich nicht zurückholen.",
   },
+  // Runs before 2026-10-21 skipped customers without consent, and their rows
+  // still say so. Nothing skips for it now.
   "bulk.skipNoConsent": { tr: "İzin yok", en: "No consent", de: "Keine Einwilligung" },
   "bulk.skipNoEmail": { tr: "E-posta yok", en: "No email", de: "Keine E-Mail" },
   "bulk.skipBadPhone": { tr: "Numara geçersiz", en: "Bad number", de: "Nummer ungültig" },
-  // The customer asked not to be called by the AI (the record's switch, or
-  // the phone agent hearing it on an earlier call).
-  // Unsubscribed from marketing email through a link in an earlier mail.
+  // Unsubscribed from marketing: the record's switch, or the link in an
+  // earlier marketing mail. Skips every bulk channel, calls included.
   "bulk.skipUnsubscribed": {
     tr: "Abonelikten çıktı",
     en: "Unsubscribed",
     de: "Abbestellt",
   },
+  // The customer asked not to be called by the AI (the record's switch, or
+  // the phone agent hearing it on an earlier call).
   "bulk.skipNoAiCalls": {
     tr: "Asistanla aranmak istemiyor",
     en: "Asked for no AI calls",
@@ -1222,9 +1225,9 @@ const dictionary = {
     de: "Abmelden",
   },
   "customers.unsubscribeHint": {
-    tr: "Açıkken müşteriye pazarlama e-postası gitmez: kampanya, toplu işlem ve geri kazanım e-postaları durur. Bu e-postaların altındaki abonelikten çıkma bağlantısı bunu açar; müşteri size söylerse siz de açabilirsiniz. Onaylar, hatırlatmalar ve WhatsApp etkilenmez.",
-    en: "On means the customer gets no marketing email from you: campaign, bulk and win-back emails stop. The unsubscribe link at the foot of those emails turns it on, and you can turn it on when they ask you in person. Confirmations, reminders and WhatsApp are not affected.",
-    de: "Ist es an, bekommt der Kunde keine Werbe-E-Mails von Ihnen: Kampagnen-, Sammel- und Rückgewinnungs-E-Mails stoppen. Der Abmeldelink am Ende dieser E-Mails schaltet es ein, und Sie können es einschalten, wenn der Kunde Sie darum bittet. Bestätigungen, Erinnerungen und WhatsApp sind nicht betroffen.",
+    tr: "Açıkken müşteriye pazarlama gitmez: kampanyalar, toplu mesajlar, toplu aramalar ve geri kazanım mesajları onu WhatsApp'ta da e-postada da atlar. Onaylar, hatırlatmalar ve yanıtlar gitmeye devam eder. Pazarlama e-postalarının altındaki abonelikten çıkma bağlantısı bunu açar; müşteri size söylerse siz de açabilirsiniz.",
+    en: "On means no marketing from you: campaigns, bulk messages and calls, and win-backs skip them, on WhatsApp and by email. Confirmations, reminders and replies still go. The unsubscribe link at the foot of a marketing email turns it on, and you can turn it on when they ask you in person.",
+    de: "Ist es an, bekommt der Kunde keine Werbung von Ihnen: Kampagnen, Sammelnachrichten und -anrufe und Rückgewinnungen überspringen ihn, per WhatsApp und per E-Mail. Bestätigungen, Erinnerungen und Antworten gehen weiter. Der Abmeldelink am Ende einer Werbe-E-Mail schaltet es ein, und Sie können es einschalten, wenn der Kunde Sie darum bittet.",
   },
   // When a footer switch was turned on, on its hover chip.
   "customers.sinceDate": {
@@ -1235,14 +1238,14 @@ const dictionary = {
   // Switching Unsubscribe off puts the customer back on marketing, so the
   // switch asks first.
   "customers.resubscribeTitle": {
-    tr: "Pazarlama e-postaları yeniden gönderilsin mi?",
-    en: "Send them marketing email again?",
-    de: "Wieder Werbe-E-Mails senden?",
+    tr: "Pazarlama yeniden gönderilsin mi?",
+    en: "Send them marketing again?",
+    de: "Wieder Werbung senden?",
   },
   "customers.resubscribeBody": {
-    tr: "Bunu yalnızca müşteri yeniden almak istediğini söylediyse yapın. Kampanya, toplu işlem ve geri kazanım e-postaları ona yeniden gider.",
-    en: "Only do this if the customer asked to get them again. Campaign, bulk and win-back emails will reach them again.",
-    de: "Nur, wenn der Kunde sie wieder erhalten möchte. Kampagnen-, Sammel- und Rückgewinnungs-E-Mails gehen dann wieder an ihn.",
+    tr: "Bunu yalnızca müşteri yeniden almak istediğini söylediyse yapın. Kampanyalar, toplu mesajlar, toplu aramalar ve geri kazanım mesajları ona yeniden ulaşır.",
+    en: "Only do this if the customer asked to hear from you again. Campaigns, bulk messages and calls, and win-backs will reach them again.",
+    de: "Nur, wenn der Kunde wieder von Ihnen hören möchte. Kampagnen, Sammelnachrichten und -anrufe und Rückgewinnungen erreichen ihn dann wieder.",
   },
   "customers.resubscribe": {
     tr: "Yeniden gönder",

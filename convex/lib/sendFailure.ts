@@ -12,7 +12,7 @@
 //
 //   transient   the provider was busy, rate-limited, or unreachable. Same
 //               request, later, plausibly works.
-//   permanent   the request itself is refused — no consent, no approved
+//   permanent   the request itself is refused — unsubscribed, no approved
 //               template, the 24h window shut, a bad token. Later changes
 //               nothing until somebody acts.
 //
@@ -37,9 +37,11 @@ export const EVOLUTION_NO_REACTION = "evolution-no-reaction";
 
 // Our own refusals, raised before the provider was ever called.
 const LOCAL_REFUSALS = new Set([
+  // Before 2026-10-21 every send refused a customer without consent. Nothing
+  // writes it now; kept so an old row still classifies.
   "no-consent",
-  // A marketing mail (campaign, bulk, win-back) to a customer who
-  // unsubscribed from marketing email. Their decision; only they undo it.
+  // A marketing send (campaign, bulk, win-back) to a customer who
+  // unsubscribed. Their decision; only they undo it.
   "unsubscribed",
   "wa-not-configured",
   "session-window-closed",

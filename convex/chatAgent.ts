@@ -704,8 +704,8 @@ export const pauseForCustomer = internalMutation({
     // was answered the moment a person wrote in the thread.
     //
     // The pending DRAFT is deliberately not touched here. This runs before
-    // the send, not after it — a closed session window, a missing consent, a
-    // Meta 5xx — and retiring the draft on the way past would mean a staff
+    // the send, not after it — a closed session window, a Meta 5xx — and
+    // retiring the draft on the way past would mean a staff
     // member whose message did not go out loses the fallback text too. The
     // draft is retired from messages.applySendResult instead, where a send is
     // known to have landed.

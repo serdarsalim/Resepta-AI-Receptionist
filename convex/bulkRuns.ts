@@ -30,17 +30,18 @@
 // for calls. It gets its own, and its rules are one at a time and only while
 // the business is open — see claimNextCall.
 //
-// ── CONSENT ─────────────────────────────────────────────────────────────────
+// ── UNSUBSCRIBE ─────────────────────────────────────────────────────────────
 //
-// Every recipient needs consentAt, on all three channels including voice.
-// campaigns enforces this twice for messages; voice had no consent gate at
-// all before this file (retellAgent.testCall is a deliberate one-off with a
-// human reading the number out). Auto-dialling people who never agreed to be
-// contacted is the highest-regret thing this product can do, and KVKK does
-// not grade on whether the button was small. Do not add a bypass.
+// A bulk run is marketing on all three channels, calls included
+// (lib/marketing), so a customer who unsubscribed is skipped by every one of
+// them, and No AI calls skips a call run on top. It used to be consent
+// (customers.consentAt) that every recipient needed; that gate went on
+// 2026-10-21. Both are read again at each customer's turn, because either can
+// change while a run is going out. Do not add a bypass.
 
 import { noteMessageById } from "./lib/thread";
 import { isDeleting } from "./lib/customerDeletion";
+import { isUnsubscribed } from "./lib/marketing";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { cleanError } from "./lib/mcpProtocol";
@@ -135,31 +136,37 @@ const channelValidator = v.union(
 // customer can be contacted on this channel, or the reason string that goes
 // on the skipped item and shows in the run detail verbatim.
 //
-// The order matters: consent first, always, before anything else is even
-// looked at. It is the only one of these that is a legal fact rather than a
-// missing detail.
+// Unsubscribe first, after the deletion: it is the customer's own request,
+// and the rest are missing details.
 export function skipReason(
   customer: Doc<"customers">,
   channel: BulkChannel,
 ): string | null {
-  // Ahead even of consent: a customer being deleted is not a recipient of
-  // anything, and their item goes with them in the sweep.
+  // A customer being deleted is not a recipient of anything, and their item
+  // goes with them in the sweep.
   if (isDeleting(customer)) return "customer-deleted";
-  if (customer.consentAt === undefined) return "no-consent";
+  // Marketing, on every channel (lib/marketing). delivery.claimForRetry
+  // refuses the same for a queued message, for whoever unsubscribes after
+  // the run fanned out; claimNextCall reads this again before each call.
+  if (isUnsubscribed(customer)) return "unsubscribed";
+  return reachReason(customer, channel);
+}
+
+// Whether this customer can be reached on this channel at all, marketing or
+// not. A requested callback asks exactly this (callbacks.ts): the customer
+// asked for that call, so Unsubscribe does not stop it, and No AI calls does.
+export function reachReason(
+  customer: Doc<"customers">,
+  channel: BulkChannel,
+): string | null {
+  if (isDeleting(customer)) return "customer-deleted";
   // They asked not to be called by the AI (customers.noAiCallsAt). A run is
   // automated by definition, so there is nobody to say "call anyway"; their
   // messages are another channel and go on as normal. Read again at every
   // claim (claimNextCall), so a request made on an earlier call in the same
   // run, or switched on mid-run, still keeps the phone from ringing.
   if (channel === "call" && customer.noAiCallsAt !== undefined) return "no-ai-calls";
-  if (channel === "email") {
-    if (!customer.email) return "no-email";
-    // Unsubscribed from marketing email (customers.marketingEmailOptOutAt),
-    // and a bulk email is marketing. WhatsApp and calls are other channels.
-    // delivery.claimForRetry refuses the same at send time, for whoever
-    // unsubscribes after the run fanned out.
-    return customer.marketingEmailOptOutAt !== undefined ? "unsubscribed" : null;
-  }
+  if (channel === "email") return customer.email ? null : "no-email";
   // Both phone channels want a dialable/messageable number. customers.phone is
   // E.164-gated on write (orgAuth.assertE164), so this only catches rows that
   // predate that gate — but a run that dials a malformed string is a run that
@@ -312,8 +319,8 @@ export const fanOut = internalMutation({
       if (!customer || customer.orgId !== run.orgId) continue;
 
       // Second eligibility check, at the moment of writing the row. The
-      // pre-flight already filtered, but a fan-out can span minutes and
-      // consent can be withdrawn inside them. campaigns checks twice for
+      // pre-flight already filtered, but a fan-out can span minutes and a
+      // customer can unsubscribe inside them. campaigns checks twice for
       // exactly this reason.
       const reason = skipReason(customer, run.channel);
       if (reason) {
@@ -1083,10 +1090,10 @@ export const claimNextCall = internalMutation({
     }
 
     const customer = await ctx.db.get(next.customerId);
-    // Consent can be withdrawn between fan-out and this customer's turn, which
-    // on a long run is minutes to hours. Third check, and the last one before
-    // a phone actually rings; then what happened to them since the run began
-    // (booked, already called today: turnSkipReason).
+    // Unsubscribe and No AI calls can be switched on between fan-out and this
+    // customer's turn, which on a long run is minutes to hours. Third check,
+    // and the last one before a phone actually rings; then what happened to
+    // them since the run began (booked, already called today: turnSkipReason).
     const reason = !customer
       ? "missing-customer"
       : (skipReason(customer, "call") ??
@@ -1610,7 +1617,7 @@ export const detail = query({
         openedAt: message?.openedAt,
         answer,
         // The whole record, for Follow up: the composer judges who it can
-        // reach (consent, an address, a number) the same way it does for a
+        // reach (unsubscribed, an address, a number) the same way it does for a
         // selection made in the list.
         customer,
       });

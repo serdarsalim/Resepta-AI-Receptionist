@@ -448,9 +448,7 @@ export async function processInboundMessage(
   // customerId, and the inbox groups by customer, so the message was
   // invisible everywhere: nobody ever learned that someone had
   // written. Create the record instead, with the phone standing in
-  // until a human types a name. Consent stays unset; them writing to
-  // us opens Meta's session window, it is not KVKK consent for us to
-  // start messaging them.
+  // until a human types a name.
   let contactId = customer?._id;
   if (!contactId) {
     contactId = await ctx.db.insert("customers", {

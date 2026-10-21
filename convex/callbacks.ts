@@ -10,7 +10,7 @@
 // kept anywhere else is a guard a retry or a sweep dials straight through.
 //
 //   requestFromCall  the post-call analysis heard a time on an ANSWERED call
-//   dial / claim     at dueAt: open hours, consent, No AI calls, the
+//   dial / claim     at dueAt: open hours, No AI calls, the
 //                    platform's limit, a line, the published version
 //   finishByCallId   the call_ended webhook says what the call came to
 //   cancel paths     a real conversation since the request (retell.ts
@@ -46,7 +46,7 @@ import {
   isRetryableDialError,
   reachedPhone,
 } from "./lib/callOutcome";
-import { callHoursFor, callWindowAt, skipReason } from "./bulkRuns";
+import { callHoursFor, callWindowAt, reachReason } from "./bulkRuns";
 
 // A refused dial (no free line, the provider's own fault) goes back in line
 // this many times, one minute longer per try: the bulk queue's numbers.
@@ -106,9 +106,10 @@ export async function cancelQueuedCallbacks(
 // from the calls row recordCall wrote earlier in the same pass, never from
 // the payload. Refused, quietly, for the demo org, an erased call, a call
 // nobody answered (a voicemail greeting cannot ask for anything), a customer
-// being deleted, and anyone a bulk call would not ring (no consent, No AI
-// calls). A browser test never gets here: its webhook stops before
-// voiceEvents.
+// being deleted, and anyone the AI may not call (No AI calls, no usable
+// number). Not Unsubscribe: that stops marketing, and the customer asked for
+// this call (bulkRuns.reachReason). A browser test never gets here: its
+// webhook stops before voiceEvents.
 export const requestFromCall = internalMutation({
   args: { retellAgentId: v.string(), retellCallId: v.string(), raw: v.string() },
   // The queued row, or why nothing was queued.
@@ -152,7 +153,7 @@ export const requestFromCall = internalMutation({
 
     const customer = await ctx.db.get(call.customerId);
     if (!customer || customer.orgId !== agent.orgId) return refuse("no-customer");
-    const skip = skipReason(customer, "call");
+    const skip = reachReason(customer, "call");
     if (skip) return refuse(skip);
 
     const now = Date.now();
@@ -257,9 +258,9 @@ export const claim = internalMutation({
     if (!customer || customer.orgId !== row.orgId || isDeleting(customer)) {
       return await end("cancelled", "customer-deleted");
     }
-    // Consent and No AI calls, read again at the moment it would ring: either
-    // can change in the hours it waited.
-    const skip = skipReason(customer, "call");
+    // No AI calls, read again at the moment it would ring: it can change in
+    // the hours it waited.
+    const skip = reachReason(customer, "call");
     if (skip) return await end("cancelled", skip);
 
     // Open hours in the business's timezone, the bulk queue's own reading.

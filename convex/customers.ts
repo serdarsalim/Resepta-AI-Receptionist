@@ -433,7 +433,7 @@ export const setNoAiCalls = mutation({
     if (!customer || customer.orgId !== orgId || isDeleting(customer)) {
       throw new Error("not-found");
     }
-    // Turning it on keeps the first moment it was asked, the consent rule.
+    // Turning it on keeps the first moment it was asked.
     await ctx.db.patch(args.customerId, {
       noAiCallsAt: args.on ? (customer.noAiCallsAt ?? Date.now()) : undefined,
     });
@@ -441,9 +441,10 @@ export const setNoAiCalls = mutation({
   },
 });
 
-// The marketing-email opt-out (schema customers.marketingEmailOptOutAt), the
-// record's switch. The customer's own unsubscribe link sets it too
-// (messages.unsubscribeByToken). Any member, like consent: whoever hears "stop
+// The marketing opt-out (schema customers.marketingEmailOptOutAt, every
+// channel since 2026-10-21: lib/marketing), the record's Unsubscribe switch.
+// The customer's own unsubscribe link sets it too
+// (messages.unsubscribeByToken). Any member: whoever hears "stop
 // sending me offers" at the counter records it, and the same person can put
 // back what a customer asks to have back. The record's switch asks before
 // turning it off; this records who did either, because "who put this person

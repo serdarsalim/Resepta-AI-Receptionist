@@ -22,14 +22,17 @@
 // A customer with an address gets both, which is deliberate: the two channels
 // have very different open rates and the salon paid for neither.
 //
-// ── CONSENT IS NOT NEGOTIABLE ───────────────────────────────────────────────
+// ── UNSUBSCRIBE IS NOT NEGOTIABLE ───────────────────────────────────────────
 //
-// Every recipient must have consentAt set. This is KVKK, it is also the thing
-// that gets a WABA banned, and it is enforced twice — once when the segment is
-// built and once by the send path itself. Do not add a bypass.
+// A campaign is marketing (lib/marketing), so no customer who unsubscribed
+// receives one, on either channel. Enforced three times: when the segment is
+// built, when each row is written, and at the claim every queued message
+// crosses (delivery.claimForRetry). Do not add a bypass. Consent
+// (customers.consentAt) was the gate until 2026-10-21; nothing reads it now.
 
 import { noteMessageById } from "./lib/thread";
 import { isDeleting } from "./lib/customerDeletion";
+import { isUnsubscribed } from "./lib/marketing";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
@@ -89,9 +92,9 @@ async function matchSegment(
   const now = Date.now();
   const out: Doc<"customers">[] = [];
   for (const customer of customers) {
-    // First gate, before any other work: no consent, no campaign. Ever. A
-    // customer being deleted has neither.
-    if (customer.consentAt === undefined || isDeleting(customer)) continue;
+    // First gate, before any other work: an unsubscribed customer gets no
+    // campaign. Ever. A customer being deleted gets nothing at all.
+    if (isUnsubscribed(customer) || isDeleting(customer)) continue;
 
     const needsHistory =
       segment.notSeenForDays !== undefined ||
@@ -343,11 +346,10 @@ export const fanOut = internalMutation({
     for (const customerId of args.customerIds) {
       const customer = await ctx.db.get(customerId);
       if (!customer || customer.orgId !== campaign.orgId) continue;
-      // Second consent check, at the moment of writing the row. The segment
-      // already filtered, but the two are separated by a fan-out that can span
-      // minutes and consent can be withdrawn in between, or the customer
-      // deleted.
-      if (customer.consentAt === undefined || isDeleting(customer)) continue;
+      // Second check, at the moment of writing the row. The segment already
+      // filtered, but the two are separated by a fan-out that can span minutes
+      // and the customer can unsubscribe in between, or be deleted.
+      if (isUnsubscribed(customer) || isDeleting(customer)) continue;
 
       const customValues: Record<string, string> = {};
       for (const field of contactFields) {
@@ -397,11 +399,10 @@ export const fanOut = internalMutation({
       // token is minted here at fan-out; delivery injects the pixel, and the
       // campaign's open count is read live off these rows — bulk mail is the
       // one place an open rate means something.
-      // Not to a customer who unsubscribed from marketing email: a campaign is
-      // marketing, and their WhatsApp half above is a separate channel with
-      // Meta's own opt-out. delivery.claimForRetry refuses the same at send
-      // time, for whoever unsubscribes while the campaign is going out.
-      if (customer.email && sender && customer.marketingEmailOptOutAt === undefined) {
+      // Unsubscribed customers never got this far (the check above), and
+      // delivery.claimForRetry refuses anyone who unsubscribes while the
+      // campaign is going out.
+      if (customer.email && sender) {
         // Same token vocabulary as the campaign line, same per-customer
         // render. A subject that resolves to nothing for this customer falls
         // back to the org name rather than sending a blank line.

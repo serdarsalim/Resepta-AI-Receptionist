@@ -74,6 +74,7 @@ import type * as lib_industryPresets from "../lib/industryPresets.js";
 import type * as lib_keys from "../lib/keys.js";
 import type * as lib_lifecycleSend from "../lib/lifecycleSend.js";
 import type * as lib_llm from "../lib/llm.js";
+import type * as lib_marketing from "../lib/marketing.js";
 import type * as lib_mcpProtocol from "../lib/mcpProtocol.js";
 import type * as lib_mediaKind from "../lib/mediaKind.js";
 import type * as lib_memberPhoto from "../lib/memberPhoto.js";
@@ -227,6 +228,7 @@ declare const fullApi: ApiFromModules<{
   "lib/keys": typeof lib_keys;
   "lib/lifecycleSend": typeof lib_lifecycleSend;
   "lib/llm": typeof lib_llm;
+  "lib/marketing": typeof lib_marketing;
   "lib/mcpProtocol": typeof lib_mcpProtocol;
   "lib/mediaKind": typeof lib_mediaKind;
   "lib/memberPhoto": typeof lib_memberPhoto;

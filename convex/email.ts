@@ -102,8 +102,7 @@ export const recordInbound = internalMutation({
     // webhook already follows for an unknown number: a message filed against
     // nobody is invisible in an inbox that groups by customer, so nobody ever
     // learns that someone wrote. The address stands in until a human types a
-    // name, and consent stays unset — writing to us is not KVKK consent for
-    // us to start messaging them.
+    // name.
     if (!customerId) {
       // The From header usually carries a display name; use it rather than
       // filing a nameless row the salon has to guess at. Blank when the
@@ -277,9 +276,8 @@ export const loadOutOfHoursContext = internalQuery({
 });
 
 // The email half of the out_of_hours rule: answer a mail that arrived while
-// the salon was closed. Deliberately does NOT require consentAt, same
-// reasoning as wa.sendAwayReply — consent governs messages WE start; this is a
-// reply to someone who just wrote to us.
+// the salon was closed. A reply to someone who just wrote to us, so not
+// marketing and never stopped by Unsubscribe (wa.sendAwayReply's reasoning).
 export const sendOutOfHoursReply = internalAction({
   args: {
     customerId: v.id("customers"),

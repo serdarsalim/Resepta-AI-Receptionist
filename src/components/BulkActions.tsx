@@ -11,8 +11,8 @@
 //
 // Every gate this file draws is a disabled control with a hint, never a thrown
 // error. A run cannot be recalled, so the moment to learn that WhatsApp has no
-// approved template, or that eleven of the forty people ticked never gave
-// consent, is before the button — not in the run detail afterwards.
+// approved template, or that eleven of the forty people ticked unsubscribed,
+// is before the button — not in the run detail afterwards.
 
 import { filterPillClass } from "./filterPill";
 import { useMemo, useRef, useState } from "react";
@@ -40,17 +40,16 @@ export type BulkChannel = "email" | "whatsapp" | "call";
 // Mirrors convex/bulkRuns.skipReason, and it has to: the composer promises a
 // number before anything is written and the fan-out decides the real one, so
 // the two answering differently is the feature lying to the person using it.
-// The server re-checks anyway — consent can be withdrawn between the two —
+// The server re-checks anyway — a customer can unsubscribe between the two —
 // and anybody it drops that this did not shows up as a skipped row.
 function canReach(customer: Doc<"customers">, channel: BulkChannel): boolean {
-  if (customer.consentAt === undefined) return false;
+  // Unsubscribed from marketing, and a bulk run is marketing on every
+  // channel, calls included.
+  if (customer.marketingEmailOptOutAt !== undefined) return false;
   // Asked not to be called by the AI. A call run skips them; their messages
   // are another channel.
   if (channel === "call" && customer.noAiCallsAt !== undefined) return false;
-  // Unsubscribed from marketing email; a bulk email is marketing.
-  if (channel === "email") {
-    return Boolean(customer.email) && customer.marketingEmailOptOutAt === undefined;
-  }
+  if (channel === "email") return Boolean(customer.email);
   return /^\+[1-9]\d{6,14}$/.test(customer.phone);
 }
 
@@ -222,10 +221,10 @@ export function BulkComposer({
       <div className="space-y-3">
         {/* The count, before anything else on the sheet. "How many people is
             this" is the question that stops a run going to the wrong list,
-            and the skipped line is the half nobody expects: under KVKK
-            consent gates everything, so a selection of forty can be a run of
-            twenty-nine and the difference should never be a surprise found
-            afterwards in the history. */}
+            and the skipped line is the half nobody expects: unsubscribed
+            customers and missing addresses mean a selection of forty can be
+            a run of twenty-nine, and the difference should never be a
+            surprise found afterwards in the history. */}
         <p className="text-sm">
           {t.plural("bulk.willReach", reachable.length)}
           {skipped > 0 && (
