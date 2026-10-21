@@ -134,16 +134,18 @@ const CARD_SECTION: Record<BusinessCard, BusinessSection> = {
 // 2026-10-21: "all the buttons outside of a list"; Nudge 13bcfad1 and
 // e07ff7ae). The card holds the list and nothing else, and the row renders
 // whether or not the list has anything in it, so Add is on screen in the
-// empty state, the one state where it is the only way forward. The same
-// title, (i) and min-h-8 as Card's own header, so lifting a title out of its
-// card changes where it sits and nothing about how it looks.
+// empty state, the one state where it is the only way forward. The markup and
+// the 8px to the card (LIST_SECTION) are KnowledgeCard's, so every titled
+// list on a page sits the same way.
 //
 // Filled (LIST_ADD) where the list is what the screen is for: Team, Contact
 // fields, and Services on Knowledge. Outlined (LIST_ADD_SECONDARY) for a
-// second list on a screen that already has its filled one, so a page never
-// stacks solid buttons down one edge (AGENTS.md, one loud thing per screen).
+// second list on a screen that already has its filled one, as Add knowledge
+// is, so a page never stacks solid buttons down one edge (AGENTS.md, one loud
+// thing per screen).
 const LIST_ADD = buttonClass("primary", "sm");
 const LIST_ADD_SECONDARY = buttonClass("outline", "sm");
+const LIST_SECTION = "space-y-2";
 
 function ListHead({
   title,
@@ -155,10 +157,12 @@ function ListHead({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-8 items-center gap-2">
-      <h2 className="text-sm font-semibold">{title}</h2>
-      {tip && <InfoTip text={tip} />}
-      {action && <div className="ml-auto flex items-center">{action}</div>}
+    <div className="flex min-h-8 items-center justify-between gap-3">
+      <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+        {title}
+        {tip && <InfoTip text={tip} />}
+      </h2>
+      {action}
     </div>
   );
 }
@@ -304,7 +308,7 @@ export function BusinessView() {
           week. */}
       {section === "hours" && <HoursCard isOwner={isOwner} org={settings.org} />}
       {section === "team" && (
-        <div className="space-y-8">
+        <div className="space-y-4">
           <PeopleCard isOwner={isOwner} />
           {/* Renders only for an owner who has a second business. */}
           <OtherBusinessesCard isOwner={isOwner} ref={businessesRef} />
@@ -1671,11 +1675,12 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
     ) : null;
 
   return (
-    // Each list's title and Add sit above its card (ListHead), and the two
-    // lists are a section apart, so a title reads as the head of the card
+    // Each list's title and Add sit above its card (ListHead). The lists are
+    // the page's own card gap apart (KnowledgeView's 1rem), twice the 8px
+    // between a title and its card, so a title reads as the head of the card
     // under it and not as the foot of the one above.
-    <div className="space-y-8">
-      <div className="space-y-3">
+    <div className="space-y-4">
+      <div className={LIST_SECTION}>
         <ListHead
           title={t("services.title")}
           tip={t("services.hint")}
@@ -1712,7 +1717,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
           a question the click just answered. The switch stays for a mistake.
           Outlined, because Add service is this page's filled action. */}
       {goods.length > 0 && (
-        <div className="space-y-3">
+        <div className={LIST_SECTION}>
           <ListHead
             title={t("services.products")}
             tip={t("services.productsHint")}
@@ -2029,7 +2034,7 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
     // a sheet (2026-10-21). The form used to unfold at the foot of the table,
     // which with the button above the card would have put the form a list's
     // length away from the button that opened it.
-    <div className="space-y-3">
+    <div className={LIST_SECTION}>
       <ListHead
         title={t("fields.title")}
         tip={t("fields.hint")}
@@ -2405,7 +2410,7 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
 
   if (roster === undefined || team === undefined) {
     return (
-      <div className="space-y-3">
+      <div className={LIST_SECTION}>
         {head}
         <Card>
           <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
@@ -2477,7 +2482,7 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
         : t("roster.removeAccess");
 
   return (
-    <div className="space-y-3">
+    <div className={LIST_SECTION}>
     {head}
     <Card disabled={!isOwner}>
       <div className="space-y-3">
@@ -2908,7 +2913,7 @@ function OtherBusinessesCard({
     // Titled above its card like the Team list over it, so the tab reads as
     // two sections with one grammar. It has nothing to add: access is given
     // per person inside.
-    <div ref={ref} className="space-y-3">
+    <div ref={ref} className={LIST_SECTION}>
     <ListHead title={t("share.title")} tip={t("share.hint")} />
     <Card disabled={!isOwner}>
       <div className="space-y-1">
