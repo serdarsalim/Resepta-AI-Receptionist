@@ -136,10 +136,15 @@ export function isContextRow(row: VoiceVariable): boolean {
 // unlocked. Mirrors deriveCaptureRows in retellAgent.ts row for row — the
 // editor renders this list, publish derives from the same lock set, and
 // voiceLockedIdentity is the single opt-out both read.
+//
+// The description is what the agent is told when it collects the column (the
+// ask* keys), never the read-only "what it knows" line builtinVoiceVariables
+// shows: that one said "from their customer card", which made a row the
+// agent ASKS about read as one that could never fill an empty card.
 const IDENTITY_CAPTURE = [
-  { lock: "firstname", labelKey: "customers.firstName", descKey: "voiceVariables.descFirstName" },
-  { lock: "lastname", labelKey: "customers.lastName", descKey: "voiceVariables.descLastName" },
-  { lock: "email", labelKey: "customers.email", descKey: "voiceVariables.descEmail" },
+  { lock: "firstname", labelKey: "customers.firstName", descKey: "voiceVariables.askFirstName" },
+  { lock: "lastname", labelKey: "customers.lastName", descKey: "voiceVariables.askLastName" },
+  { lock: "email", labelKey: "customers.email", descKey: "voiceVariables.askEmail" },
 ] as const;
 
 // The context the runtime injects on every call without any configuration.
@@ -762,7 +767,7 @@ export function VoiceVariablesEditor({
               behind the (i) (Serdar: "this should be behind (i) ... not
               standalone text again"). */}
           <InfoTip
-            text={`${managed ? t("voiceVariables.hint") : t("voiceVariables.importedHint")} ${t("voiceVariables.seesHint")} ${t("voiceVariables.builtinHint")}`}
+            text={`${managed ? t("voiceVariables.hint") : t("voiceVariables.importedHint")} ${t("voiceVariables.seesHint")} ${t("voiceVariables.builtinHint")} ${t("voiceVariables.nameHint")}`}
           />
         </div>
         {status && <span className="text-xs text-[var(--muted)]">{status}</span>}

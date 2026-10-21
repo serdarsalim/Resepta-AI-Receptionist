@@ -123,10 +123,10 @@ export const begin = internalMutation({
     let row = exact ?? (latest?.status !== "complete" ? latest : null);
 
     if (row?.status === "complete") {
-      return { claimed: false, complete: true, apiKey, orgName: org.name, platformVoiceModel, platformHighPriority, row };
+      return { claimed: false, complete: true, apiKey, orgName: org.name, orgLanguage: org.language, platformVoiceModel, platformHighPriority, row };
     }
     if (row && (row.leaseUntil ?? 0) > Date.now()) {
-      return { claimed: false, complete: false, apiKey, orgName: org.name, platformVoiceModel, platformHighPriority, row };
+      return { claimed: false, complete: false, apiKey, orgName: org.name, orgLanguage: org.language, platformVoiceModel, platformHighPriority, row };
     }
 
     // The line a new agent answers must be one THIS workspace may use: on its
@@ -195,7 +195,7 @@ export const begin = internalMutation({
       });
       row = (await ctx.db.get(row._id))!;
     }
-    return { claimed: true, complete: false, apiKey, orgName: org.name, platformVoiceModel, platformHighPriority, row };
+    return { claimed: true, complete: false, apiKey, orgName: org.name, orgLanguage: org.language, platformVoiceModel, platformHighPriority, row };
   },
 });
 

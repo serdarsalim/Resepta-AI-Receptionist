@@ -4055,6 +4055,23 @@ const dictionary = {
     en: "Voicemail",
     de: "Mailbox",
   },
+  "voiceDetail.noteSummaryLanguage": {
+    tr: "Özet dili",
+    en: "Summary language",
+    de: "Sprache der Zusammenfassung",
+  },
+  // The language call summaries are written in (2026-10-21). Starts as the
+  // business's language; the hint says so and that old summaries stay put.
+  "voiceDetail.summaryLanguage": {
+    tr: "Özet dili",
+    en: "Summary language",
+    de: "Sprache der Zusammenfassung",
+  },
+  "voiceDetail.summaryLanguageHint": {
+    tr: "Arama özetlerinin yazıldığı dil. Asistan hangi dilde konuşursa konuşsun, işletmenizin diliyle başlar. Değişiklik yayınladıktan sonraki aramalarda geçerli olur; eski özetler olduğu gibi kalır.",
+    en: "The language call summaries are written in. It starts as your business's language, whatever language the agent speaks. A change applies to calls after you publish; earlier summaries stay as they are.",
+    de: "Die Sprache, in der Anrufzusammenfassungen geschrieben werden. Sie beginnt mit der Sprache Ihres Betriebs, egal welche Sprache der Agent spricht. Eine Änderung gilt für Anrufe nach dem Veröffentlichen; frühere Zusammenfassungen bleiben, wie sie sind.",
+  },
   // Voicemail (Nudge 8782af94): one dropdown naming every answer, because a
   // switch beside a second choice was four answers drawn as two controls.
   "voiceDetail.voicemail": {
@@ -4329,6 +4346,32 @@ const dictionary = {
     tr: "Arayanın müşteri kartındaki soyadı.",
     en: "The caller's last name, from their customer card.",
     de: "Der Nachname des Anrufers, aus seiner Kundenkarte.",
+  },
+  // The identity rows of the Variables matrix: what the agent is TOLD when it
+  // collects them, which is retellAgent.deriveCaptureRows' stock wording.
+  // The desc* keys above say what it KNOWS before the call; the matrix showed
+  // those until 2026-10-21, so a row the agent asks about read "from their
+  // customer card" and looked like it could never fill an empty one.
+  "voiceVariables.askFirstName": {
+    tr: "Arayanın adı, söylediği gibi.",
+    en: "The caller's first name, exactly as they give it.",
+    de: "Der Vorname des Anrufers, so wie er ihn nennt.",
+  },
+  "voiceVariables.askLastName": {
+    tr: "Arayanın soyadı, söylediği gibi.",
+    en: "The caller's last name, exactly as they give it.",
+    de: "Der Nachname des Anrufers, so wie er ihn nennt.",
+  },
+  "voiceVariables.askEmail": {
+    tr: "Arayanın e-posta adresi, harf harf.",
+    en: "The caller's email address, spelled out.",
+    de: "Die E-Mail-Adresse des Anrufers, buchstabiert.",
+  },
+  // What the identity rows' switch does since 2026-10-21 (template v17).
+  "voiceVariables.nameHint": {
+    tr: "Arayan adını söylerse, anahtarı kapalı olsa bile boş müşteri kartına yazılır. Kapalı anahtar yalnızca kayıtlı bir bilginin değiştirilmesini engeller.",
+    en: "When a caller says their name, it goes onto an empty customer card even with its switch off. Off only stops the agent changing a saved value.",
+    de: "Nennt der Anrufer seinen Namen, kommt er auf eine leere Kundenkarte, auch wenn sein Schalter aus ist. Aus verhindert nur, dass ein gespeicherter Wert geändert wird.",
   },
   "voiceVariables.descPhone": {
     tr: "Arayanın telefon numarası.",

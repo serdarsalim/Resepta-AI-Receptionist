@@ -454,10 +454,13 @@ export default defineSchema({
     // This is a PREFERENCE, unlike the lane selector deliberately absent
     // above: WhatsApp-vs-email is a real decision the salon owns, whereas
     // cloud-vs-shop-phone is plumbing read off what is configured.
-    // Identity columns the voice agent may NOT write, chosen in Business →
-    // Fields. Phone is not listed because it is not a choice: callers are
-    // matched by it. Unset means none locked — a receptionist that can
-    // correct a misspelt name is the default, not the upgrade.
+    // Identity columns the voice agent may NOT change, chosen in Business →
+    // Fields or on the agent's Variables matrix. Phone is not listed because
+    // it is not a choice: callers are matched by it. Unset means none locked —
+    // a receptionist that can correct a misspelt name is the default, not the
+    // upgrade. A locked column that is EMPTY still takes the caller's first
+    // value (retell.applyVoiceContactValues, 2026-10-21): the lock protects
+    // what somebody wrote, and an empty card has nothing to protect.
     voiceLockedIdentity: v.optional(
       v.array(
         v.union(v.literal("firstname"), v.literal("lastname"), v.literal("email")),
@@ -925,6 +928,13 @@ export default defineSchema({
         text: v.optional(v.string()),
       }),
     ),
+    // The language this agent's call summaries are written in, as chosen on
+    // the agent page (2026-10-21). Unset follows the business's language
+    // (lib/voiceAgentTemplate.summaryLanguageFor), which is what a Turkish
+    // business's staff want to read whatever language the agent was created
+    // in. Written only after the provider accepted the publish, like
+    // voicemail, and read back by syncTemplate so Update keeps the choice.
+    summaryLanguage: v.optional(v.union(v.literal("tr"), v.literal("en"), v.literal("de"))),
     // Variables staged on the provider's draft and not yet live (P8/P9: a
     // browser test stages the page's edits before dialling). The registry
     // (voiceAgentVariables) describes what callers hear, so it moves only

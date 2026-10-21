@@ -118,7 +118,8 @@ contact fields: every field whose switch is on becomes prefill-for-repeat-
 callers + ask-when-missing + post-call transcript recovery, landing on its own
 field; the unlocked identity columns (first name, last name, email) ride along
 as questions landing on the customer's own columns. Phone is never derived —
-the caller is matched by it. `voiceAgentVariables` still exists as storage,
+the caller is matched by it. The caller's NAME does not depend on any of this
+since template v17: see "Template v17" below. `voiceAgentVariables` still exists as storage,
 but publish overwrites it with derived rows plus any legacy static context;
 hand-authored capture rows are filtered out and cannot come back through any
 door, the MCP tool included.
@@ -489,6 +490,37 @@ field, so `syncTemplate` delivers all of it to existing agents.
   arrive with their own tools, so only the five calendar tools (present since
   v1) may be named in a live answer, and `end_call` never, since a business
   can switch it off (Nudge ba2d956a).
+
+## Template v17 (2026-10-21)
+
+Estate Emlak's test call: the caller said "Abdülkadir Çelik", the card kept
+only the number, and the summary came back in English. The provider's version
+history explained both. The call ran on a version with no name field at all
+(First name's switch had been off since the morning and Last name's still
+is), the owner's own script never told the agent to save anything, and the
+summary's instruction said "Write it in English" because the agent was born
+English and later switched to Turkish in the provider's dashboard, which no
+Resepta publish rebuilt. Update delivers all of the fix:
+
+- **The caller's name is ours on every agent.** `customer_first_name` and
+  `customer_last_name` are analysis fields of the template
+  (`callerNameAnalysisFields`), under the identity keys the ring-time
+  injection already uses, whatever the script or the matrix switches say. An
+  analysis value only fills an empty column (`fillOnlyMissing`), and a derived
+  name row's post-call half gives way to ours (`planVariables`).
+- **save_customer_details names the identity keys itself**, so an owner who
+  rewrites the prompt from scratch still leaves the agent a way to save a
+  name. A tool description, so it reaches an agent at its next publish of
+  anything.
+- **A switched-off identity column means "never change a saved value"**, not
+  "never write one". `applyVoiceContactValues` and the ring-time
+  `{{information}}` list both read it that way: a locked column is writable
+  while it is empty.
+- **The summary is in the agent's summary language**: the agent page's
+  Summary language (`retellAgents.summaryLanguage`, part of the one Publish),
+  else the business's language (`summaryLanguageFor`), never the language the
+  agent speaks. The app's own language never changed it and still does not; a
+  summary already written stays as written.
 
 ## Current limits
 

@@ -168,13 +168,21 @@ export function builtinAgentVariables(args: {
       ];
       return parts.join(", ");
     })(),
-    // Identity keys drop out when the salon locked them — the write list
-    // must match what the gate will accept or the agent invents excuses.
-    // They stay on the card above either way: the lock is a WRITE lock, and
+    // Identity keys drop out when the salon locked them and this caller's
+    // card already has the value — the write list must match what the gate
+    // will accept or the agent invents excuses. A lock stops a CHANGE, not a
+    // first value (retell.applyVoiceContactValues), so while a locked column
+    // is empty it stays writable. They stay on the card above either way:
     // withholding the caller's own name would break the greeting.
     information: [
-      ...["firstname", "lastname", "email"].filter(
-        (key) => !(org.voiceLockedIdentity ?? []).includes(key),
+      ...(["firstname", "lastname", "email"] as const).filter(
+        (key) =>
+          !(org.voiceLockedIdentity ?? []).includes(key) ||
+          !(key === "firstname"
+            ? customer?.firstName
+            : key === "lastname"
+              ? customer?.lastName
+              : customer?.email),
       ),
       ...args.contactFields
         .filter((field) => field.source === "voice")
