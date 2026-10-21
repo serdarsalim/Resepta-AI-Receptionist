@@ -7,6 +7,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
+import { CollectedList } from "./CallDetail";
 import { CallRecording } from "./CallRecording";
 import { InfoTip } from "./InfoTip";
 
@@ -42,12 +43,6 @@ export const TOOL_LABELS: Record<string, TranslationKey> = {
 const BOX = "min-w-0 rounded-lg border border-[var(--border)] p-4";
 const BOX_TITLE = "text-xs font-medium text-[var(--foreground)]";
 
-function formatValue(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
-
 // "customer_first_name" → "Customer first name": what the analysis wrote,
 // dressed the way the variables are when there is no label to read.
 export function dressKey(key: string): string {
@@ -72,8 +67,9 @@ export function AgentTestResult({
 }) {
   const { t } = useLanguage();
   const actions = result?.actions ?? [];
-  const collected = Object.entries(result?.collected ?? {}).filter(([, value]) =>
-    formatValue(value).trim(),
+  const collected = result?.collected ?? {};
+  const heardAnything = Object.values(collected).some(
+    (value) => value !== null && value !== undefined && value !== "",
   );
   const turns = result?.turns ?? [];
 
@@ -129,19 +125,12 @@ export function AgentTestResult({
               <p className="text-xs leading-relaxed text-[var(--foreground)]">{result.summary}</p>
             </section>
           )}
-          {collected.length > 0 && (
+          {/* The call card's own list, so a test and a call say what was
+              heard the same way (yes and no, lists, nested answers). */}
+          {heardAnything && (
             <section className={BOX}>
               <h4 className={`mb-2 ${BOX_TITLE}`}>{t("agentTest.collected")}</h4>
-              <dl className="space-y-1 text-xs">
-                {collected.map(([key, value]) => (
-                  <div key={key} className="flex min-w-0 gap-2">
-                    <dt className="shrink-0 text-[var(--muted-strong)]">{dressKey(key)}</dt>
-                    <dd className="min-w-0 break-words text-[var(--foreground)]">
-                      {formatValue(value)}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
+              <CollectedList values={collected} />
             </section>
           )}
           {review.testId && (

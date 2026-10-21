@@ -37,7 +37,7 @@ type Fetched = TestResult | "loading" | "failed";
 
 // The agent page's pane card, shared by Setup and both Testing cards so the
 // two tabs read as one page.
-export const AGENT_PANE_CARD = "rounded-xl border border-[var(--border)] bg-[var(--card)] p-5";
+export const AGENT_PANE_CARD = "card-raised p-5";
 
 // The whole row is the disclosure: a hand and a hover fill, so it reads as
 // something that opens.

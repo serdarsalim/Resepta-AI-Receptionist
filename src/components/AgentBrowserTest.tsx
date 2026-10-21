@@ -243,34 +243,56 @@ export function AgentBrowserTest({
   const speakerId = speakers.some((device) => device.id === audio.speaker)
     ? audio.speaker
     : undefined;
-  const showAudio = mics.length > 0 || speakers.length > 0 || devicesUnnamed;
+  // A phone's browser names no device until a call has run, and lets
+  // nobody pick a speaker: a picker offering "System default" alone is
+  // noise there, so it waits for names. A desktop shows it from the start.
+  const [coarsePointer, setCoarsePointer] = useState(false);
+  useEffect(() => {
+    setCoarsePointer(window.matchMedia?.("(pointer: coarse)").matches ?? false);
+  }, []);
+  const showAudio =
+    mics.length > 0 || speakers.length > 0 || (devicesUnnamed && !coarsePointer);
 
-  // What the agent would be handed, refreshed whenever the person, the
+  // What the agent would be handed, read again whenever the person, the
   // direction or the first sentences change: the last two decide {{opener}}.
   // A read: it costs nothing and runs before anybody commits to a minute.
-  const openersKey = JSON.stringify(openers);
+  // Only while the tab is showing and no call is up. The first sentences
+  // are typed on Setup, and a read per keystroke there, each one wiping the
+  // values typed here, was a call nobody asked for; coming back to the tab
+  // reads once if anything changed meanwhile.
+  const readKey = JSON.stringify({ agentId, customer: picked?.id ?? null, direction, openers });
+  const lastRead = useRef<string | null>(null);
   useEffect(() => {
-    if (!seen) return;
+    if (!active || live || readKey === lastRead.current) return;
+    lastRead.current = readKey;
+    let landed = false;
     let cancelled = false;
+    const sent = JSON.parse(readKey) as { openers: AgentOpeners };
     void readVariables({
       agentId,
       direction,
-      openers: JSON.parse(openersKey) as AgentOpeners,
+      openers: sent.openers,
       ...(picked ? { customerId: picked.id } : {}),
     })
       .then((r) => {
+        landed = true;
         if (cancelled) return;
         setVars(r.variables);
         setUnavailable(r.unavailable);
         setOverrides({});
       })
       .catch(() => {
-        if (!cancelled) setError(t("agentTest.failed"));
+        landed = true;
+        if (cancelled) return;
+        lastRead.current = null;
+        setError(t("agentTest.failed"));
       });
     return () => {
       cancelled = true;
+      // Dropped before it landed: the next showing reads again.
+      if (!landed) lastRead.current = null;
     };
-  }, [seen, agentId, picked, direction, openersKey, readVariables, t]);
+  }, [active, live, readKey, agentId, picked, direction, readVariables, t]);
 
   const hangUp = () => {
     try {
@@ -388,10 +410,13 @@ export function AgentBrowserTest({
   // nothing fills it (that empty line is the finding). {{opener}} is shown
   // as the whole first sentence instead: the fields on Setup are where it is
   // written.
-  const asked = useMemo(
-    () => placeholders(`${promptText}\n${beginMessage}`),
-    [promptText, beginMessage],
-  );
+  // The first sentences count: a name an opener speaks is one the agent
+  // says. {{when}} is the openers' own word, not a variable.
+  const asked = useMemo(() => {
+    const keys = placeholders([promptText, beginMessage, ...Object.values(openers)].join("\n"));
+    keys.delete("when");
+    return keys;
+  }, [promptText, beginMessage, openers]);
   const labelOf = useCallback((key: string) => labels[key] ?? dressKey(key), [labels]);
   const rows = useMemo<Row[] | null>(() => {
     if (!vars) return null;
