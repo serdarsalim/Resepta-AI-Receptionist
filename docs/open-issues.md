@@ -47,9 +47,6 @@ These change what gets built next — don't paper over them:
   app, and the live browser test is Serdar's to run (an agent → Testing →
   Start test, talk, Hang up; then open an older test and set Pass or Miss
   with a note).
-- **`convex/_generated/api.d.ts` was edited by hand** for `agentReviews`,
-  `lib/businessAddress` and `lib/marketing`, because codegen fails in a
-  worktree. Run `npx convex codegen` once on main and commit any difference.
 - **The ignored `consent` flag** on `customers.create`, `customers.update`
   and `schedule.create` is there for tabs loaded before 2026-10-21; drop it
   once those are gone.
