@@ -4017,6 +4017,12 @@ const dictionary = {
     en: "Unpublished draft",
     de: "Unveröffentlichter Entwurf",
   },
+  // The same, when the draft's version is known: the tab row's status.
+  "voiceDetail.draftVersion": {
+    tr: "Taslak v{n}, yayında değil",
+    en: "Draft v{n}, not live",
+    de: "Entwurf v{n}, nicht live",
+  },
   "voiceDetail.draftPendingHint": {
     tr: "Bu asistanda arayanların henüz duymadığı değişiklikler var. Yayınla onları yayına alır, Vazgeç siler.",
     en: "This agent has changes callers do not hear yet. Publish puts them live; Discard throws them away.",
@@ -4651,21 +4657,24 @@ const dictionary = {
     en: "Places a real call to the number you enter, using this agent. The phone genuinely rings and the minutes are billed.",
     de: "Ruft die eingegebene Nummer mit diesem Assistenten wirklich an. Das Telefon klingelt tatsächlich, und die Minuten werden berechnet.",
   },
-  // The browser test (P9): a web call from the agent page.
-  "agentTest.modeBrowser": {
-    tr: "Tarayıcıda",
-    en: "In the browser",
-    de: "Im Browser",
+  // The browser test (P9; the Testing tab redone on Nudge's, 2026-10-21): a
+  // web call from the agent page. The Call setup card (who, which way, which
+  // microphone, then what the agent knows), and the Test results card under
+  // it with the running test as its open top row.
+  "agentTest.setupTitle": {
+    tr: "Arama ayarı",
+    en: "Call setup",
+    de: "Anruf einrichten",
   },
-  "agentTest.modePhone": {
-    tr: "Telefonu çaldır",
-    en: "Ring a phone",
-    de: "Telefon anrufen",
+  "agentTest.setupHint": {
+    tr: "{name} ile mikrofonunuzdan konuşun. Telefon çalmaz; randevu alınmaz, bilgi kaydedilmez, mesaj gitmez. Dakikalar normal bir arama gibi ücretlendirilir. Kim olarak boş kalırsa yeni bir arayan olursunuz; bir müşteri seçerseniz asistan o kişiyle gerçek bir aramada duyacağı her şeyi duyar.",
+    en: "Talk to {name} through your microphone. No phone rings, and nothing is booked, saved or sent; the minutes are billed like a call. Leave Call as empty to be a new caller, or pick a customer and the agent hears exactly what a real call with them would carry.",
+    de: "Sprechen Sie über Ihr Mikrofon mit {name}. Kein Telefon klingelt, nichts wird gebucht, gespeichert oder verschickt; die Minuten werden wie ein Anruf berechnet. Bleibt „Anrufen als“ leer, sind Sie ein neuer Anrufer. Mit einem Kunden hört der Agent genau das, was ein echter Anruf mit ihm mitbringen würde.",
   },
-  "agentTest.browserHint": {
-    tr: "Asistanla mikrofonunuzdan konuşun. Hiçbir şey kaydedilmez, randevu alınmaz, mesaj gitmez; dakikalar normal arama gibi ücretlendirilir.",
-    en: "Talk to the agent through your microphone. Nothing is booked, saved or sent; the minutes are billed like a call.",
-    de: "Sprechen Sie über Ihr Mikrofon mit dem Agenten. Nichts wird gebucht, gespeichert oder verschickt; die Minuten werden wie ein Anruf berechnet.",
+  "agentTest.draftIncluded": {
+    tr: "Taslağınızla çalışır: kaydedilmemiş değişiklikler önce taslağa yazılır, yayınlayana kadar hiçbir şey yayına çıkmaz.",
+    en: "It runs your draft: unsaved edits are saved to it first, and nothing goes live until you publish.",
+    de: "Läuft mit Ihrem Entwurf: ungespeicherte Änderungen werden zuerst dort gesichert, und live geht nichts, bis Sie veröffentlichen.",
   },
   "agentTest.callAs": {
     tr: "Kim olarak",
@@ -4688,14 +4697,35 @@ const dictionary = {
     de: "Richtung",
   },
   "agentTest.outbound": {
-    tr: "Biz arıyoruz",
-    en: "We call them",
-    de: "Wir rufen an",
+    tr: "Asistan arar",
+    en: "Agent calls them",
+    de: "Agent ruft an",
   },
   "agentTest.inbound": {
-    tr: "Onlar arıyor",
-    en: "They call us",
-    de: "Sie rufen an",
+    tr: "Müşteri arar",
+    en: "They call the agent",
+    de: "Kunde ruft an",
+  },
+  // Which microphone and speaker the web call uses: one picker, two groups.
+  "agentTest.audio": {
+    tr: "Ses",
+    en: "Audio",
+    de: "Audio",
+  },
+  "agentTest.mic": {
+    tr: "Mikrofon",
+    en: "Microphone",
+    de: "Mikrofon",
+  },
+  "agentTest.speaker": {
+    tr: "Hoparlör",
+    en: "Speaker",
+    de: "Lautsprecher",
+  },
+  "agentTest.systemDefault": {
+    tr: "Sistem varsayılanı",
+    en: "System default",
+    de: "Systemstandard",
   },
   "agentTest.variables": {
     tr: "Asistanın bildikleri",
@@ -4703,44 +4733,75 @@ const dictionary = {
     de: "Was der Agent weiß",
   },
   "agentTest.variablesHint": {
-    tr: "Seçtiğiniz kişi gerçekten arasaydı asistana verilecek bilgiler. Bir değeri değiştirmek yalnızca bu denemeyi etkiler; boş bırakılan alan gönderilmez.",
-    en: "What the agent would be handed if this person really rang. Changing a value affects this test only; an empty box is not sent.",
-    de: "Was der Agent bekäme, wenn diese Person wirklich anriefe. Eine Änderung gilt nur für diesen Test; ein leeres Feld wird nicht gesendet.",
+    tr: "Asistanın konuşmadan önce aldığı her değer. Bir müşteri seçtiyseniz o kişiden gelir. Hepsini yalnızca bu deneme için değiştirebilirsiniz; boş bırakılan gönderilmez. Değeri olmayanlar en alttaki satırın arkasında durur, açıp bir değer yazabilirsiniz. Bu asistanın talimatının hiç anmadığı değerler de gönderilir ama söylediklerini değiştirmez; onlar yanındaki satırın arkasındadır.",
+    en: "Every value the agent gets before it speaks. With a customer picked, they come from that person. Change any of them for this test only; an empty one is not sent. Values it doesn't have fold behind the line at the bottom; open it to type one. Values this agent's prompt never mentions are still sent along but change nothing it says; they sit behind the line beside it.",
+    de: "Jeder Wert, den der Agent bekommt, bevor er spricht. Mit einem gewählten Kunden kommen sie von dieser Person. Jeder lässt sich nur für diesen Test ändern; ein leerer wird nicht gesendet. Werte ohne Inhalt liegen hinter der Zeile unten, dort lässt sich einer eintragen. Werte, die der Prompt dieses Agenten nie nennt, werden mitgesendet, ändern aber nichts an dem, was er sagt; sie liegen hinter der Zeile daneben.",
   },
-  "agentTest.firstSentence": {
-    tr: "İlk cümle",
-    en: "First sentence",
-    de: "Erster Satz",
+  "agentTest.reading": {
+    tr: "Asistanın duyacakları okunuyor…",
+    en: "Reading what the agent would hear…",
+    de: "Wird gelesen, was der Agent hören würde…",
   },
-  "agentTest.firstSentenceHint": {
-    tr: "Bu kişiyle bu yönde bir aramada asistanın söyleyeceği açılış cümlesi.",
-    en: "The opening line the agent would say on a call with this person, this way round.",
-    de: "Der Begrüßungssatz, den der Agent bei einem Anruf mit dieser Person in dieser Richtung sagen würde.",
+  // The two folds under the variables, each saying what it hides.
+  "agentTest.unknownMore.one": {
+    tr: "Bilmediği {n} değer daha · değer ekle",
+    en: "{n} more it doesn't know · add a value",
+    de: "{n} weiterer ohne Wert · Wert eintragen",
   },
-  "agentTest.emptyCount.one": {
-    tr: "{n} boş",
-    en: "{n} empty",
-    de: "{n} leer",
+  "agentTest.unknownMore.other": {
+    tr: "Bilmediği {n} değer daha · değer ekle",
+    en: "{n} more it doesn't know · add a value",
+    de: "{n} weitere ohne Wert · Wert eintragen",
   },
-  "agentTest.emptyCount.other": {
-    tr: "{n} boş",
-    en: "{n} empty",
-    de: "{n} leer",
+  "agentTest.unknownHide.one": {
+    tr: "Bilmediği {n} değeri gizle",
+    en: "Hide the one it doesn't know",
+    de: "Den Wert ohne Inhalt ausblenden",
+  },
+  "agentTest.unknownHide.other": {
+    tr: "Bilmediği {n} değeri gizle",
+    en: "Hide the {n} it doesn't know",
+    de: "Die {n} ohne Wert ausblenden",
+  },
+  "agentTest.unreadMore.one": {
+    tr: "{n} değer daha gönderiliyor, bu asistan okumuyor",
+    en: "{n} more sent along, not read by this agent",
+    de: "{n} weiterer mitgesendet, von diesem Agenten nicht gelesen",
+  },
+  "agentTest.unreadMore.other": {
+    tr: "{n} değer daha gönderiliyor, bu asistan okumuyor",
+    en: "{n} more sent along, not read by this agent",
+    de: "{n} weitere mitgesendet, von diesem Agenten nicht gelesen",
+  },
+  "agentTest.unreadHide.one": {
+    tr: "Okunmayan {n} değeri gizle",
+    en: "Hide the one not read by this agent",
+    de: "Den nicht gelesenen ausblenden",
+  },
+  "agentTest.unreadHide.other": {
+    tr: "Okunmayan {n} değeri gizle",
+    en: "Hide the {n} not read by this agent",
+    de: "Die {n} nicht gelesenen ausblenden",
   },
   "agentTest.unavailable": {
     tr: "Asistan şu an arama alamıyor: kapalı, işletme askıda ya da bakiye boş.",
     en: "The agent cannot take calls right now: it is switched off, the business is suspended or the balance is empty.",
     de: "Der Agent kann gerade keine Anrufe annehmen: Er ist ausgeschaltet, das Geschäft ist gesperrt oder das Guthaben ist leer.",
   },
-  "agentTest.draftIncluded": {
-    tr: "Yayınlanmamış değişiklikleriniz bu denemede geçerli.",
-    en: "Your unpublished edits are part of this test.",
-    de: "Ihre unveröffentlichten Änderungen gelten in diesem Test.",
-  },
   "agentTest.start": {
     tr: "Denemeyi başlat",
     en: "Start test",
     de: "Test starten",
+  },
+  "agentTest.staging": {
+    tr: "Değişiklikleriniz taslağa kaydediliyor…",
+    en: "Saving your edits to the draft…",
+    de: "Ihre Änderungen werden im Entwurf gespeichert…",
+  },
+  "agentTest.connectingMic": {
+    tr: "Bağlanıyor, mikrofona izin verin…",
+    en: "Connecting, allow the microphone…",
+    de: "Verbindung wird aufgebaut, Mikrofon erlauben…",
   },
   "agentTest.connecting": {
     tr: "Bağlanıyor…",
@@ -4749,58 +4810,38 @@ const dictionary = {
   },
   "agentTest.live": {
     tr: "Görüşmede",
-    en: "On the call",
-    de: "Im Gespräch",
+    en: "Live",
+    de: "Live",
   },
-  "agentTest.agentTalking": {
-    tr: "Asistan konuşuyor",
-    en: "The agent is talking",
-    de: "Der Agent spricht",
+  "agentTest.liveOn": {
+    tr: "v{n} ile görüşmede",
+    en: "Live on v{n}",
+    de: "Live auf v{n}",
+  },
+  "agentTest.liveOnDraft": {
+    tr: "Taslak v{n} ile görüşmede",
+    en: "Live on draft v{n}",
+    de: "Live auf Entwurf v{n}",
+  },
+  "agentTest.ended": {
+    tr: "Bitti",
+    en: "Ended",
+    de: "Beendet",
+  },
+  "agentTest.afterHangUp": {
+    tr: "Konuşulanlar siz kapattığınızda görünür.",
+    en: "What was said appears when you hang up.",
+    de: "Das Gesagte erscheint, sobald Sie auflegen.",
   },
   "agentTest.hangUp": {
     tr: "Kapat",
     en: "Hang up",
     de: "Auflegen",
   },
-  "agentTest.waiting": {
-    tr: "Görüşme özetleniyor…",
-    en: "Writing up the call…",
-    de: "Das Gespräch wird ausgewertet…",
-  },
-  "agentTest.summary": {
-    tr: "Özet",
-    en: "Summary",
-    de: "Zusammenfassung",
-  },
-  "agentTest.wouldDo": {
-    tr: "Neler yapardı",
-    en: "What it would have done",
-    de: "Was er getan hätte",
-  },
-  "agentTest.wouldDoNone": {
-    tr: "Hiçbir şey değişmezdi.",
-    en: "Nothing would have changed.",
-    de: "Nichts hätte sich geändert.",
-  },
-  "agentTest.collected": {
-    tr: "Öğrendikleri",
-    en: "What it heard",
-    de: "Was er erfahren hat",
-  },
-  "agentTest.transcript": {
-    tr: "Konuşma metni",
-    en: "Transcript",
-    de: "Gesprächsverlauf",
-  },
-  "agentTest.agentRole": {
-    tr: "Asistan",
-    en: "Agent",
-    de: "Agent",
-  },
-  "agentTest.callerRole": {
-    tr: "Siz",
-    en: "You",
-    de: "Sie",
+  "agentTest.again": {
+    tr: "Yeniden dene",
+    en: "Test again",
+    de: "Erneut testen",
   },
   "agentTest.failed": {
     tr: "Deneme başlatılamadı.",
@@ -4812,10 +4853,106 @@ const dictionary = {
     en: "The microphone was not allowed. Allow it from the browser's address bar and try again.",
     de: "Das Mikrofon wurde nicht erlaubt. Erlauben Sie es in der Adressleiste und versuchen Sie es erneut.",
   },
-  "agentTest.again": {
-    tr: "Yeniden dene",
-    en: "Test again",
-    de: "Erneut testen",
+  // The Test results card: one line per test, opened for the whole result.
+  "agentTest.history": {
+    tr: "Deneme sonuçları",
+    en: "Test results",
+    de: "Testergebnisse",
+  },
+  "agentTest.historyHint": {
+    tr: "Bu asistanın son tarayıcı denemeleri, en yenisi üstte. Sürmekte olan deneme en üstte açık durur ve siz kapattığınızda dolar. Eski bir denemeyi açıp kaydını dinleyebilir, konuşulanları okuyabilir ve not bırakabilirsiniz.",
+    en: "This agent's latest browser tests, newest first. The test you are running sits open at the top and fills in when you hang up. Open an older one to play it back, read what was said and leave a note.",
+    de: "Die letzten Browser-Tests dieses Agenten, neueste zuerst. Der laufende Test steht geöffnet ganz oben und füllt sich, sobald Sie auflegen. Einen älteren öffnen, um ihn abzuspielen, das Gespräch zu lesen und eine Notiz zu hinterlassen.",
+  },
+  "agentTest.coldCall": {
+    tr: "Soğuk arama",
+    en: "Cold call",
+    de: "Kaltanruf",
+  },
+  "agentTest.unknownCaller": {
+    tr: "Bilinmeyen arayan",
+    en: "Unknown caller",
+    de: "Unbekannter Anrufer",
+  },
+  "agentTest.rowOutbound": {
+    tr: "asistan aradı",
+    en: "agent called",
+    de: "Agent hat angerufen",
+  },
+  "agentTest.rowInbound": {
+    tr: "aradı",
+    en: "called in",
+    de: "hat angerufen",
+  },
+  "agentTest.versionDraft": {
+    tr: "taslak v{n}",
+    en: "draft v{n}",
+    de: "Entwurf v{n}",
+  },
+  "agentTest.open": {
+    tr: "Aç",
+    en: "Open",
+    de: "Öffnen",
+  },
+  "agentTest.hide": {
+    tr: "Gizle",
+    en: "Hide",
+    de: "Ausblenden",
+  },
+  "agentTest.waiting": {
+    tr: "Konuşma metni ve kayıt getiriliyor…",
+    en: "Fetching the transcript and the recording…",
+    de: "Gesprächsverlauf und Aufnahme werden geholt…",
+  },
+  "agentTest.loadingWords": {
+    tr: "Konuşma metni getiriliyor…",
+    en: "Fetching the transcript…",
+    de: "Gesprächsverlauf wird geladen…",
+  },
+  "agentTest.noWords": {
+    tr: "Bu denemenin konuşma metni yok.",
+    en: "No transcript for this test.",
+    de: "Kein Gesprächsverlauf für diesen Test.",
+  },
+  "agentTest.conversation": {
+    tr: "Konuşma",
+    en: "Conversation",
+    de: "Gespräch",
+  },
+  "agentTest.summary": {
+    tr: "Özet",
+    en: "Summary",
+    de: "Zusammenfassung",
+  },
+  "agentTest.wouldDo": {
+    tr: "Neler yapardı",
+    en: "What it would have done",
+    de: "Was er getan hätte",
+  },
+  "agentTest.wouldDoHint": {
+    tr: "Gerçek bir aramada asistanın araçlarının yapacakları. Deneme hiçbir randevu almaz, taşımaz, iptal etmez ve bilgi kaydetmez.",
+    en: "What the agent's tools would have done on a real call. A test books, moves, cancels and saves nothing.",
+    de: "Was die Werkzeuge des Agenten bei einem echten Anruf getan hätten. Ein Test bucht, verschiebt, storniert und speichert nichts.",
+  },
+  "agentTest.wouldDoNone": {
+    tr: "Hiçbir şey değişmezdi.",
+    en: "Nothing would have changed.",
+    de: "Nichts hätte sich geändert.",
+  },
+  "agentTest.collected": {
+    tr: "Öğrendikleri",
+    en: "What it heard",
+    de: "Was er erfahren hat",
+  },
+  "agentTest.agentRole": {
+    tr: "Asistan",
+    en: "Agent",
+    de: "Agent",
+  },
+  "agentTest.callerRole": {
+    tr: "Siz",
+    en: "You",
+    de: "Sie",
   },
   "agentTest.refused": {
     tr: "reddedildi",
@@ -4842,20 +4979,49 @@ const dictionary = {
     en: "Details saved",
     de: "Gespeicherte Daten",
   },
-  "agentTest.history": {
-    tr: "Denemeler",
-    en: "Tests",
-    de: "Tests",
+  // The owner's review of a test, in the opened row: a note and a verdict.
+  "agentTest.notes": {
+    tr: "Notlar",
+    en: "Notes",
+    de: "Notizen",
   },
-  "agentTest.historyHint": {
-    tr: "Bu asistanla yapılan son tarayıcı denemeleri. Bir satıra tıklayınca konuşma metni gelir.",
-    en: "The latest browser tests of this agent. Click a row for its transcript.",
-    de: "Die letzten Browser-Tests dieses Agenten. Ein Klick auf eine Zeile zeigt den Gesprächsverlauf.",
+  "agentTest.notesPlaceholder": {
+    tr: "Bu aramada ne olmalıydı?",
+    en: "What should have happened on this call?",
+    de: "Was hätte in diesem Anruf passieren sollen?",
   },
-  "agentTest.noSummary": {
-    tr: "Özet yok",
-    en: "No summary",
-    de: "Keine Zusammenfassung",
+  "agentTest.verdict": {
+    tr: "Karar",
+    en: "Verdict",
+    de: "Urteil",
+  },
+  "agentTest.pass": {
+    tr: "Geçti",
+    en: "Pass",
+    de: "Bestanden",
+  },
+  "agentTest.miss": {
+    tr: "Kaçırdı",
+    en: "Miss",
+    de: "Daneben",
+  },
+  // The phone test, kept at the foot of the Call setup card: Nudge cut its
+  // own (a contact's Call button does the same), Resepta keeps it one click
+  // away.
+  "agentTest.phoneOpen": {
+    tr: "Bunun yerine gerçek bir telefonu çaldır",
+    en: "Ring a real phone instead",
+    de: "Stattdessen ein echtes Telefon anrufen",
+  },
+  "agentTest.phoneClose": {
+    tr: "Telefon denemesini kapat",
+    en: "Close the phone test",
+    de: "Telefontest schließen",
+  },
+  "agentTest.phoneNumber": {
+    tr: "Aranacak numara",
+    en: "Number to ring",
+    de: "Anzurufende Nummer",
   },
   // The chat simulator (P9b): the owner writes as a customer, nothing sent.
   "chatSim.open": {

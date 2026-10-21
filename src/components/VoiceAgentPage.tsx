@@ -13,8 +13,7 @@ import { buttonClass, fieldClass } from "./Control";
 import { EditorSaveBar } from "./EditorSaveBar";
 import { AgentVersionHistory } from "./AgentVersionHistory";
 import { AgentBrowserTest } from "./AgentBrowserTest";
-import { AgentTestsLog } from "./AgentTestsLog";
-import { SegmentedControl } from "./SegmentedControl";
+import { AGENT_PANE_CARD } from "./AgentTestsLog";
 import { PromptEditor } from "./PromptEditor";
 import { Toggle } from "./Toggle";
 import { useHeaderTrail } from "@/lib/headerTrail";
@@ -106,8 +105,6 @@ type Detail = {
   voiceLockedIdentity?: string[];
   voiceIdentityDescriptions?: Partial<Record<"firstname" | "lastname" | "email", string>>;
 };
-
-const E164_RE = /^\+[1-9]\d{6,14}$/;
 
 type Voicemail = {
   action: "off" | "hangup" | "static_text" | "prompt";
@@ -246,7 +243,6 @@ export function VoiceAgentPage({
   const setAgentOpeners = useMutation(api.retell.setAgentOpeners);
   const setEndCallEnabled = useAction(api.retellAgent.setEndCallEnabled);
   const attachLine = useAction(api.retellAgent.attachLine);
-  const testCall = useAction(api.retellAgent.testCall);
   const renameAgent = useAction(api.retellAgent.renameAgent);
   // null = not editing. The title IS the rename control: a name is identity,
   // and identity edits belong on the thing itself (Serdar asked for the
@@ -299,11 +295,6 @@ export function VoiceAgentPage({
     else url.searchParams.delete(AGENT_TAB_PARAM);
     window.history.replaceState(null, "", url);
   };
-  // In the browser (a web call, nothing real) or ringing a real phone.
-  const [testMode, setTestMode] = useState<"browser" | "phone">("browser");
-  const [testLive, setTestLive] = useState(false);
-  const [testTo, setTestTo] = useState("");
-  const [testError, setTestError] = useState<string | null>(null);
   // The line dropdown writes straight to the provider — no Save, because it
   // isn't part of the draft the prompt and variables share. It gets its own
   // in-flight and failed states, and the reload restores the real binding if
@@ -563,7 +554,6 @@ export function VoiceAgentPage({
     }
     return providerDraft ? (detail?.version ?? null) : null;
   };
-  const onTestLive = useCallback((value: boolean) => setTestLive(value), []);
 
   // Binding a line is immediate and unrelated to the draft: it changes which
   // phone rings this agent, not what the agent says. Riding Save would mean an
@@ -583,35 +573,6 @@ export function VoiceAgentPage({
       .then(() => load())
       .catch(() => setLineError(true))
       .finally(() => setAssigning(false));
-  };
-
-  const placeTestCall = () => {
-    const to = testTo.trim();
-    // Checked here as well as in the action: the action's error is English,
-    // this one speaks the org's language.
-    if (!E164_RE.test(to)) {
-      setTestError(t("voiceDetail.badNumber"));
-      return;
-    }
-    setTestError(null);
-    void run(t("voiceDetail.calling"), async () => {
-      let res: { from: string; to: string };
-      try {
-        res = (await testCall({ agentId, toNumber: to })) as { from: string; to: string };
-      } catch (error) {
-        // The number belongs to a customer who asked not to be called by the
-        // AI. A test call has nobody to say "call anyway" on their behalf;
-        // their record's Place call does.
-        if (error instanceof Error && error.message.includes("no-ai-calls")) {
-          setStatus(t("voiceDetail.noAiCalls"));
-          return;
-        }
-        throw error;
-      }
-      setStatus(
-        t("voiceDetail.callingFromTo", { to: res.to, from: res.from }),
-      );
-    });
   };
 
   // The registry's rows plus the built-ins the runtime always injects
@@ -641,6 +602,26 @@ export function VoiceAgentPage({
     [promptVariables, t],
   );
   const anyOpener = OPENER_FIELDS.some((key) => openers[key].trim());
+
+  // The state the save bars name: unsaved edits on this page, or a draft at
+  // the provider callers do not hear yet, by its version when it has one.
+  const draftState = dirty
+    ? t("voiceDetail.unsaved")
+    : detail?.version !== null && detail?.version !== undefined
+      ? t("voiceDetail.draftVersion", { n: detail.version })
+      : t("voiceDetail.draftPending");
+  const draftStateTitle = dirty
+    ? t("voiceDetail.unsavedHint")
+    : t("voiceDetail.draftPendingHint");
+
+  // What the browser test calls each variable: the rows as they stand on
+  // screen (saved or not), then the built-ins.
+  const variableLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const row of promptVariables) labels[row.key] = row.label;
+    for (const row of varsState?.rows ?? []) if (row.key && row.label) labels[row.key] = row.label;
+    return labels;
+  }, [promptVariables, varsState?.rows]);
 
   // Not from the backend: the backend would have to pick a language. Which of
   // the two unsupported shapes this is, the client can tell from engineType.
@@ -700,29 +681,6 @@ export function VoiceAgentPage({
               />
             )}
           </h2>
-          {/* The shared save bar. The state is said out loud rather than
-              implied by an enabled button: an edited prompt looks live, and
-              the agent is still answering the phone with the version Retell
-              has. */}
-          {(dirty || providerDraft) && (
-            <EditorSaveBar
-              status={dirty ? t("voiceDetail.unsaved") : t("voiceDetail.draftPending")}
-              statusTitle={
-                dirty ? t("voiceDetail.unsavedHint") : t("voiceDetail.draftPendingHint")
-              }
-              onDiscard={discardAll}
-              discardLabel={t("voiceDetail.discard")}
-              onSave={saveAll}
-              saveLabel={saving ? t("voiceDetail.publishing") : t("voiceDetail.publish")}
-              busy={saving}
-            />
-          )}
-          {notice && (
-            <span className="shrink-0 text-xs text-amber-700 dark:text-amber-400">{notice}</span>
-          )}
-          {status && !dirty && !providerDraft && (
-            <span className="shrink-0 text-xs text-[var(--muted)]">{status}</span>
-          )}
           {lineError && (
             <span className="shrink-0 text-xs text-amber-700 dark:text-amber-400">
               {t("voiceDetail.lineFailed")}
@@ -771,23 +729,69 @@ export function VoiceAgentPage({
 
         {/* Underlined tabs, VoiceView's (AGENTS.md "Tabs are underlined"):
             darker plus an underline, never bolder, so switching reflows
-            nothing. */}
-        <div className="flex items-center gap-5 border-b border-[var(--border)]">
-          {AGENT_TABS.map((entry) => (
-            <button
-              key={entry.id}
-              type="button"
-              onClick={() => chooseTab(entry.id)}
-              aria-current={tab === entry.id ? "page" : undefined}
-              className={`-mb-px border-b-2 px-0.5 py-2.5 text-sm transition-colors ${
-                tab === entry.id
-                  ? "border-[var(--foreground)] text-[var(--foreground)]"
-                  : "border-transparent text-[var(--muted-strong)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              {t(entry.label)}
-            </button>
-          ))}
+            nothing. The save state rides the strip's trailing edge on both
+            tabs (Nudge, 2026-09-20: "publish, draft, all these buttons
+            should be in the same row as Setup and Testing"), so a draft a
+            test staged is published or discarded from where you are. Said
+            out loud rather than implied by an enabled button: an edited
+            prompt looks live, and the agent is still answering the phone
+            with the version the provider has. On a phone the state takes a
+            line of its own ABOVE the tabs, so the rule stays under them. */}
+        <div className="flex flex-col-reverse gap-y-2 border-b border-[var(--border)] sm:flex-row sm:items-end sm:justify-between sm:gap-x-4">
+          <div className="-mb-px flex items-end gap-5">
+            {AGENT_TABS.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                onClick={() => chooseTab(entry.id)}
+                aria-current={tab === entry.id ? "page" : undefined}
+                className={`border-b-2 px-0.5 py-2.5 text-sm transition-colors ${
+                  tab === entry.id
+                    ? "border-[var(--foreground)] text-[var(--foreground)]"
+                    : "border-transparent text-[var(--muted-strong)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                {t(entry.label)}
+              </button>
+            ))}
+          </div>
+          {(notice || (status && !dirty && !providerDraft) || dirty || providerDraft) && (
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1 sm:pb-1.5">
+              {notice && (
+                <span className="text-xs text-amber-700 dark:text-amber-400">{notice}</span>
+              )}
+              {status && !dirty && !providerDraft && (
+                <span className="text-xs text-[var(--muted)]">{status}</span>
+              )}
+              {(dirty || providerDraft) && (
+                <>
+                  {/* On a phone the sentence leads the line and the two
+                      buttons wrap under it, right-aligned: the bar alone
+                      does not shrink, and pushed past the left edge it cut
+                      the sentence in half. */}
+                  <span
+                    title={draftStateTitle}
+                    className="mr-auto inline-flex items-center gap-1.5 text-sm font-medium text-amber-600 sm:hidden dark:text-amber-400"
+                  >
+                    <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                    {draftState}
+                  </span>
+                  <div className="ml-auto">
+                    <EditorSaveBar
+                      status={draftState}
+                      statusTitle={draftStateTitle}
+                      statusFromSm
+                      onDiscard={discardAll}
+                      discardLabel={t("voiceDetail.discard")}
+                      onSave={saveAll}
+                      saveLabel={saving ? t("voiceDetail.publishing") : t("voiceDetail.publish")}
+                      busy={saving}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {error && <p className="text-sm text-amber-700 dark:text-amber-400">{error}</p>}
@@ -796,10 +800,7 @@ export function VoiceAgentPage({
         )}
 
         {detail && (
-          <div
-            hidden={tab !== "setup"}
-            className="space-y-5 rounded-xl border border-[var(--border)] bg-[var(--card)] p-5"
-          >
+          <div hidden={tab !== "setup"} className={`space-y-5 ${AGENT_PANE_CARD}`}>
             {/* One quiet line, not a slab. It only appears when the plumbing is
                 actually broken, and a boxed amber warning the height of a
                 paragraph made a fixable config detail the loudest thing on a
@@ -1127,16 +1128,8 @@ export function VoiceAgentPage({
                   it. */}
               <div className="ml-auto">
                 <EditorSaveBar
-                  status={
-                    dirty
-                      ? t("voiceDetail.unsaved")
-                      : providerDraft
-                        ? t("voiceDetail.draftPending")
-                        : null
-                  }
-                  statusTitle={
-                    dirty ? t("voiceDetail.unsavedHint") : t("voiceDetail.draftPendingHint")
-                  }
+                  status={dirty || providerDraft ? draftState : null}
+                  statusTitle={draftStateTitle}
                   onDiscard={dirty || providerDraft ? discardAll : undefined}
                   discardLabel={t("voiceDetail.discard")}
                   onSave={saveAll}
@@ -1149,73 +1142,25 @@ export function VoiceAgentPage({
           </div>
         )}
 
-        {/* Testing (P35): the browser test with what the agent knows and the
-            first sentence, or the real-phone test, and every past test
-            with its playback underneath. Mounted from the first render and
-            only hidden on Setup, so a call in progress keeps talking while
-            the prompt is open. */}
+        {/* Testing (P35; redone on Nudge's 2026-10-21): the Call setup card
+            and Test results under it, each a card of its own. Mounted from
+            the first render and only hidden on Setup, so a call in progress
+            keeps talking while the prompt is open; it reads nothing until
+            the tab is first shown. */}
         {detail && (
-          <div
-            hidden={tab !== "testing"}
-            className="space-y-5 rounded-xl border border-[var(--border)] bg-[var(--card)] p-5"
-          >
-            <SegmentedControl
-              value={testMode}
-              disabled={testLive}
-              ariaLabel={t("voiceDetail.tabTesting")}
-              semantics="tabs"
-              onChange={setTestMode}
-              segments={[
-                { id: "browser", label: t("agentTest.modeBrowser") },
-                { id: "phone", label: t("agentTest.modePhone"), hint: t("voiceDetail.testHint") },
-              ]}
+          <div hidden={tab !== "testing"}>
+            <AgentBrowserTest
+              agentId={agentId}
+              agentName={detail.name}
+              active={tab === "testing"}
+              hasEdits={providerChanges || providerDraft}
+              stage={stageForTest}
+              beginMessage={begin}
+              openers={openers}
+              promptText={draft}
+              labels={variableLabels}
+              phoneTestStale={dirty || providerDraft}
             />
-            {testMode === "browser" ? (
-              <AgentBrowserTest
-                agentId={agentId}
-                hasEdits={providerChanges || providerDraft}
-                stage={stageForTest}
-                onLiveChange={onTestLive}
-                beginMessage={begin}
-                openers={openers}
-              />
-            ) : (
-              <div className="space-y-3">
-                <p className="text-sm text-[var(--muted)]">
-                  {t("voiceDetail.confirmCall", { to: testTo.trim() || "…", name: detail.name })}
-                </p>
-                {/* Unsaved edits are not part of the call — Retell runs the saved
-                    config. Saying so here beats hearing the old prompt and
-                    assuming the editor is broken. */}
-                {dirty && (
-                  <p className="text-xs text-amber-700 dark:text-amber-400">
-                    {t("voiceDetail.testUnsaved")}
-                  </p>
-                )}
-                <input
-                  value={testTo}
-                  onChange={(e) => setTestTo(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && placeTestCall()}
-                  placeholder="+905321234567"
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm"
-                />
-                {testError && (
-                  <p className="text-xs text-amber-700 dark:text-amber-400">{testError}</p>
-                )}
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    disabled={!testTo.trim()}
-                    onClick={placeTestCall}
-                    className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)] disabled:opacity-40"
-                  >
-                    {t("voiceDetail.callMe")}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <AgentTestsLog agentId={agentId} />
           </div>
         )}
       </div>
