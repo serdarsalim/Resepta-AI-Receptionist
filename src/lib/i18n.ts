@@ -1451,12 +1451,14 @@ const dictionary = {
     de: "Zitierten Text anzeigen",
   },
   "email.compose": { tr: "E-posta yaz", en: "Compose", de: "Verfassen" },
-  // The call card's expander: collected values + transcript unfold in place.
-  "calls.details": { tr: "Ayrıntılar", en: "Details", de: "Details" },
-  "calls.hideDetails": {
-    tr: "Ayrıntıları gizle",
-    en: "Hide details",
-    de: "Details ausblenden",
+  // The call card's expander, under the recording: the transcript opens below
+  // it, closed by default. The collected values are always in view, so this
+  // opens the transcript and nothing else. Its closed label is
+  // calls.transcript.
+  "calls.hideTranscript": {
+    tr: "Konuşma dökümünü gizle",
+    en: "Hide transcript",
+    de: "Transkript ausblenden",
   },
   // The clamp on a long email card — measured overflow only, so most cards
   // never show it.
@@ -5070,6 +5072,34 @@ const dictionary = {
     tr: "İstediği geri arama",
     en: "The callback they asked for",
     de: "Der gewünschte Rückruf",
+  },
+  // The call card's pill for a call that was picked up and ran. The other
+  // line outcomes say it in the bulk run's words (bulk.outcome*, read from
+  // lib/callOutcome), so one call reads the same on both screens.
+  "calls.statusCompleted": { tr: "Tamamlandı", en: "Completed", de: "Abgeschlossen" },
+  // The team's review of one call (ReviewNotes, calls.setReview): a note and
+  // a verdict. Pass, the agent handled the call; Miss, it got something
+  // wrong. Both verdicts show while the note is being written, and at rest
+  // only the one picked.
+  "review.title": { tr: "Notlar", en: "Notes", de: "Notizen" },
+  "review.placeholder": {
+    tr: "Not ekleyin…",
+    en: "Add a note…",
+    de: "Notiz hinzufügen…",
+  },
+  "review.verdict": { tr: "Değerlendirme", en: "Verdict", de: "Bewertung" },
+  "review.pass": { tr: "Geçti", en: "Pass", de: "Bestanden" },
+  "review.miss": { tr: "Kaçırdı", en: "Miss", de: "Daneben" },
+  // After the first writer's name, when someone else changed the review since.
+  "review.editedBy": {
+    tr: "{name} düzenledi",
+    en: "edited by {name}",
+    de: "bearbeitet von {name}",
+  },
+  "review.notSaved": {
+    tr: "Kaydedilemedi",
+    en: "Not saved",
+    de: "Nicht gespeichert",
   },
   "callback.queued": {
     tr: "Sırada",
