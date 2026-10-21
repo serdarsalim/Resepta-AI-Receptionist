@@ -21,6 +21,7 @@ import { recordSendUsage } from "./lib/usage";
 import { supersedePendingSuggestions } from "./lib/agentDrafts";
 import { noteBulkItemResult } from "./bulkRuns";
 import { memberPhoto } from "./lib/memberPhoto";
+import { callVerdict } from "./schema";
 import {
   channel,
   channelOfMessage,
@@ -588,6 +589,20 @@ const feedItem = v.object({
   // callback rings; on the call that kept the promise, true.
   callbackRequestedFor: v.optional(v.number()),
   requestedCallback: v.optional(v.boolean()),
+  // Call-only: who was on the line, for the card's "Ayşe → Bella". The agent
+  // by the name the business knows it by (this org's retellAgents row only),
+  // and the customer's number as the call carried it, which names a caller
+  // nobody has typed a name for yet.
+  agentName: v.optional(v.string()),
+  customerNumber: v.optional(v.string()),
+  // Call-only (2026-10-21): the team's review of the call (calls.setReview),
+  // signed by who wrote it first and, when someone else changed it since, by
+  // who did.
+  note: v.optional(v.string()),
+  verdict: v.optional(callVerdict),
+  noteBy: v.optional(v.string()),
+  noteEditedBy: v.optional(v.string()),
+  noteAt: v.optional(v.number()),
   // Email-only. A subject is the one thing an email has that a WhatsApp
   // message doesn't, and it is what the reader scans first.
   emailSubject: v.optional(v.string()),
@@ -639,6 +654,34 @@ const feedItem = v.object({
   editedAt: v.optional(v.number()),
 });
 
+// A call's review as its card shows it (calls.setReview): the words, the
+// verdict and the signature. "Edited by" only when the last writer is not the
+// first, and nothing at all for a review holding neither words nor verdict.
+function reviewOfCall(
+  c: Doc<"calls">,
+  names: Map<string, string | undefined>,
+): {
+  note?: string;
+  verdict?: Doc<"calls">["verdict"];
+  noteBy?: string;
+  noteEditedBy?: string;
+  noteAt?: number;
+} {
+  if (!c.note && !c.verdict) return {};
+  const by = c.noteCreatedBy ? names.get(c.noteCreatedBy) : undefined;
+  const editedBy =
+    c.noteUpdatedBy && c.noteUpdatedBy !== c.noteCreatedBy
+      ? names.get(c.noteUpdatedBy)
+      : undefined;
+  return {
+    ...(c.note ? { note: c.note } : {}),
+    ...(c.verdict ? { verdict: c.verdict } : {}),
+    ...(by ? { noteBy: by } : {}),
+    ...(editedBy ? { noteEditedBy: editedBy } : {}),
+    ...(c.noteUpdatedAt !== undefined ? { noteAt: c.noteUpdatedAt } : {}),
+  };
+}
+
 // One customer's whole history, newest first, every channel interleaved.
 // Shared by the inbox right pane and the contact page — one implementation.
 export const feedForCustomer = query({
@@ -680,6 +723,34 @@ export const feedForCustomer = query({
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
       .order("desc")
       .take(200);
+    // Who signs each call's review, and the agent each call spoke to, read
+    // once per distinct person and agent before the per-call reads below.
+    const reviewerNames = new Map<string, string | undefined>();
+    for (const userId of new Set(
+      calls.flatMap((c) =>
+        [c.noteCreatedBy, c.noteUpdatedBy].filter((id): id is Id<"users"> => !!id),
+      ),
+    )) {
+      const user = await ctx.db.get(userId);
+      reviewerNames.set(userId, user?.name ?? user?.email ?? undefined);
+    }
+    const agentNames = new Map<string, string | undefined>();
+    for (const retellAgentId of new Set(
+      calls.flatMap((c) => (c.retellAgentId ? [c.retellAgentId] : [])),
+    )) {
+      const agent = await ctx.db
+        .query("retellAgents")
+        .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+        .first();
+      // This org's agent only. The provider account is shared, so a name is
+      // read only off a row that proves the agent is this business's.
+      agentNames.set(
+        retellAgentId,
+        agent && agent.orgId === orgId
+          ? agent.name?.trim() || agent.personaName?.trim() || undefined
+          : undefined,
+      );
+    }
     // What each call set in motion, read per call and only where the row
     // points somewhere: the placer (a member's name, once per person), the
     // bulk run that dialled it (bulkRunItems by call id, this org's only),
@@ -814,6 +885,11 @@ export const feedForCustomer = query({
           ? { callbackRequestedFor: c.callbackRequestedFor }
           : {}),
         ...(c.requestedCallback ? { requestedCallback: true } : {}),
+        ...reviewOfCall(c, reviewerNames),
+        ...(c.retellAgentId && agentNames.get(c.retellAgentId)
+          ? { agentName: agentNames.get(c.retellAgentId) }
+          : {}),
+        ...(c.fromNumber ? { customerNumber: c.fromNumber } : {}),
       })),
       ...notes.map((n) => ({
         id: n._id as string,

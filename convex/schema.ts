@@ -25,6 +25,11 @@ export const bulkRunHoldReason = v.union(
   v.literal("busy"),
 );
 
+// A team's verdict on one call (calls.verdict): the agent handled it, or it
+// missed something. Exported so calls.setReview and the feed's returns
+// validator are this one and not copies of it.
+export const callVerdict = v.union(v.literal("pass"), v.literal("miss"));
+
 export default defineSchema({
   ...authTables,
 
@@ -1286,6 +1291,22 @@ export default defineSchema({
     // table read per card.
     callbackRequestedFor: v.optional(v.number()),
     requestedCallback: v.optional(v.boolean()),
+    // The team's review of the call (2026-10-21, Nudge's call reviews): a
+    // note in their own words and a verdict, Pass or Miss, so a business can
+    // tell which calls its agent got wrong. ONE per call, shared by every
+    // member and written by any of them (calls.setReview); the card signs it
+    // with who wrote first and who changed it last. The three note* stamps
+    // cover the verdict too, since the two are one review, and all three go
+    // when the review is emptied. Kept on the call row, not a table of its
+    // own: it is one per call and belongs to it, the feed already reads the
+    // row, and deleting the customer deletes the call and the note with it.
+    // Never put in front of the chat or phone agent: it is the team's talk
+    // about the call, not something the customer said.
+    note: v.optional(v.string()),
+    verdict: v.optional(callVerdict),
+    noteCreatedBy: v.optional(v.id("users")),
+    noteUpdatedBy: v.optional(v.id("users")),
+    noteUpdatedAt: v.optional(v.number()),
     // Call metering — stamped ONCE each, in recordCall, idempotent on the
     // field being unset so the call_ended/call_analyzed double-fire (and any
     // webhook retry) can never double-bill. billedMicroUsd is FROZEN at the
