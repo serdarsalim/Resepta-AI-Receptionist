@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useLanguage } from "@/lib/LanguageProvider";
 import type { TranslationKey } from "@/lib/i18n";
+import { callOutcome, type CallOutcome } from "../../convex/lib/callOutcome";
 
 // One opened call, everywhere a call is opened: Voice → Calls, the contact
 // feed's expanded Calls column, and the mixed feed's card. Three screens used
@@ -61,33 +62,127 @@ export function humanizeCallEnd(
 
 // ── Outcome ──────────────────────────────────────────────────────────────────
 
-// Retell reports `call_successful` as a boolean, and it reached the table as
-// the literal strings "true" and "false" — a raw field name leaking into a
-// salon owner's screen. Green when the agent got what it called for, amber
-// when it didn't; amber rather than red because an unsuccessful call is a
-// normal outcome, not a fault.
-export function CallOutcomePill({ outcome }: { outcome: string | null | undefined }) {
+// What happened on the line, in the words the bulk run's detail uses for the
+// same call (lib/callOutcome reads it from the disconnect code, never from a
+// transcript). "Completed" is the call card's own: a call picked up and run,
+// whichever side rang.
+const LINE_OUTCOME_KEYS: Record<CallOutcome, TranslationKey> = {
+  answered: "calls.statusCompleted",
+  voicemail: "bulk.outcomeVoicemail",
+  busy: "bulk.outcomeBusy",
+  declined: "bulk.outcomeDeclined",
+  "no-answer": "bulk.itemNoAnswer",
+  refused: "bulk.outcomeRefused",
+  failed: "bulk.itemFailed",
+};
+
+// The call's status pill. Two questions, Nudge's split between them: the
+// WORD says what happened on the line (Completed, No answer, Voicemail…)
+// when the caller passes the disconnect code or the length, and the COLOUR
+// says whether the agent got what it called for. Retell reports that as
+// `call_successful`, stored as the strings "true" and "false". Green when it
+// did, amber when it didn't or the call never reached a person; amber rather
+// than red because an unsuccessful call is a normal outcome, not a fault.
+// Neutral while there is no verdict on a call that ran. Without the line
+// facts (Voice → Calls passes only the verdict) the word is the verdict's.
+// A free-text outcome, logged by a person or an import, says itself.
+export function CallOutcomePill({
+  outcome,
+  disconnectionReason,
+  durationSec,
+}: {
+  outcome: string | null | undefined;
+  disconnectionReason?: string | null;
+  durationSec?: number | null;
+}) {
   const { t } = useLanguage();
-  if (!outcome) return null;
   const successful = outcome === "true" ? true : outcome === "false" ? false : null;
+  const written = outcome && successful === null ? outcome : null;
+  const line = written ? undefined : callOutcome(disconnectionReason, durationSec);
   const label =
+    written ??
+    (line
+      ? t(LINE_OUTCOME_KEYS[line])
+      : successful === true
+        ? t("calls.successful")
+        : successful === false
+          ? t("calls.unsuccessful")
+          : null);
+  if (!label) return null;
+  const tone =
     successful === true
-      ? t("calls.successful")
-      : successful === false
-        ? t("calls.unsuccessful")
-        : outcome;
+      ? "good"
+      : successful === false || (line !== undefined && line !== "answered")
+        ? "bad"
+        : "neutral";
   return (
     <span
-      className={`inline-block shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
-        successful === true
-          ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-          : successful === false
-            ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
-            : "border border-[var(--border)] text-[var(--muted)]"
+      // When the word is the line's, the agent's own verdict is the colour;
+      // the hover says it in words.
+      title={
+        line && successful !== null
+          ? t(successful ? "calls.successful" : "calls.unsuccessful")
+          : undefined
+      }
+      // The border is on every tone, transparent on the filled ones, so a
+      // pill is one size whatever it says.
+      className={`inline-block shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${
+        tone === "good"
+          ? "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+          : tone === "bad"
+            ? "border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-400"
+            : "border-[var(--border)] text-[var(--muted)]"
       }`}
     >
       {label}
     </span>
+  );
+}
+
+// ── Parties ──────────────────────────────────────────────────────────────────
+
+// Who was on the call, Nudge's "Ann Claxton → AD Host Qualification": whoever
+// rang first, so the arrow says which way the call went. Both names at full
+// strength, since two parties of one call are one fact; the arrow is the quiet
+// part, and it is drawn rather than typed, because "→" arrives at whatever
+// weight the font's own glyph happens to have. The hover names the direction
+// in words and the customer's number.
+export function CallPartiesLine({
+  from,
+  to,
+  title,
+  className = "",
+}: {
+  from: string;
+  to: string;
+  title?: string;
+  className?: string;
+}) {
+  return (
+    // Wraps between the parties, never inside a name: on a phone the second
+    // name drops to its own line whole rather than both breaking mid-name.
+    <div
+      className={`flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-[var(--foreground)] ${className}`}
+      title={title}
+    >
+      <span className="min-w-0 break-words">{from}</span>
+      <svg
+        viewBox="0 0 24 24"
+        width="14"
+        height="14"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="shrink-0 text-[var(--muted)]"
+        aria-hidden
+      >
+        <path d="M5 12h14" />
+        <path d="m12 5 7 7-7 7" />
+      </svg>
+      <span className="min-w-0 break-words">{to}</span>
+    </div>
   );
 }
 
@@ -317,9 +412,20 @@ function formatCollected(
 }
 
 // Exported since 2026-09-01: the conversation pane's call CARDS render the
-// collected values directly on the card (no artefact box of their own), so
-// they need the list without the rest of CallDetail.
-export function CollectedList({ values }: { values: Record<string, unknown> }) {
+// collected values in their own panel, so they need the list without the rest
+// of CallDetail.
+//
+// Two columns, Nudge's (2026-10-21 here): the labels in one, sized to the
+// longest, and the answers left-aligned down the other, with no colon and no
+// heading over them. A label is read to find your way down the list, so it is
+// --muted-strong; the answer is what you came for and reads at full strength.
+export function CollectedList({
+  values,
+  className = "",
+}: {
+  values: Record<string, unknown>;
+  className?: string;
+}) {
   const { t } = useLanguage();
   const rows = Object.entries(values)
     .filter(([, value]) => !isEmpty(value))
@@ -330,11 +436,13 @@ export function CollectedList({ values }: { values: Record<string, unknown> }) {
   if (rows.length === 0) return null;
 
   return (
-    <dl className="space-y-0.5">
+    <dl
+      className={`grid grid-cols-[minmax(0,max-content)_1fr] gap-x-3 gap-y-1 text-xs ${className}`}
+    >
       {rows.map(([key, text]) => (
-        <div key={key} className="flex gap-2 text-xs">
-          <dt className="shrink-0 text-[var(--muted)]">{humanizeKey(key)}:</dt>
-          <dd className="min-w-0 break-words">{text}</dd>
+        <div key={key} className="contents">
+          <dt className="text-[var(--muted-strong)]">{humanizeKey(key)}</dt>
+          <dd className="min-w-0 break-words text-[var(--foreground)]">{text}</dd>
         </div>
       ))}
     </dl>

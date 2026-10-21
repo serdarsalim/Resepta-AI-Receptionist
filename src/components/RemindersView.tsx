@@ -2067,34 +2067,36 @@ function RulesCard({
 
   return (
     <div className="space-y-2">
-      <Card
-        disabled={!isOwner}
-        // Inside the card, hard right, the same corner Customers and Team
-        // now use. It floated on the page above the card, which read as a
-        // button belonging to the page rather than to the list it adds to.
-        //
-        // Gated on isOwner here rather than by the fieldset: a Card's action
-        // renders outside it.
-        action={
-          isOwner ? (
-            <button
-              type="button"
-              onClick={() => setAdding(true)}
-              className="card-action"
-            >
-              {t("settings.ruleAdd")}
-            </button>
-          ) : undefined
-        }
-      >
+      {/* The list's toolbar, ABOVE the card (P32, Nudge e07ff7ae; Serdar
+          2026-10-21: "we don't put a button inside a list"). The page IS the
+          list it adds to, so the add is filled, and the card holds the
+          rules and nothing else. */}
+      {isOwner && (
+        <div className="flex min-h-8 items-center justify-end">
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className={buttonClass("primary", "sm")}
+          >
+            {t("settings.ruleAdd")}
+          </button>
+        </div>
+      )}
+      <Card disabled={!isOwner}>
         {/* Two named columns (Serdar, 2026-08-28): when, and what we send.
             The arrow chain narrated itself row after row; a header says it
             once. The channel is no longer a third node — the message chip's
             own icons say WhatsApp, email or both, and a rule sending nowhere
             says so by dimming. */}
-        <div className="hidden grid-cols-[minmax(0,17rem)_minmax(0,1fr)] gap-x-6 px-3 pb-1.5 pt-1 text-xs font-medium text-[var(--muted-strong)] sm:grid">
+        {/* Two balanced columns and the row's way in (Serdar, 2026-10-21):
+            When was capped at 17rem, so the longest trigger wrapped while
+            the right half of the card stood empty. Half each gives every
+            trigger one line, and the chevron ends each row at the card's
+            edge, saying the row opens. */}
+        <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1fr)_1rem] gap-x-6 px-3 pb-1.5 pt-1 text-xs font-medium text-[var(--muted-strong)] sm:grid">
           <span>{t("settings.rulesWhen")}</span>
           <span>{t("settings.rulesWhat")}</span>
+          <span aria-hidden />
         </div>
         <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
           {rules.map((rule) => {
@@ -2123,7 +2125,7 @@ function RulesCard({
                   {/* A rule sending nowhere dims its whole row: "off" is a
                       fact about the chain, not a word at its end. */}
                   <div
-                    className={`grid grid-cols-1 gap-y-1 sm:grid-cols-[minmax(0,17rem)_minmax(0,1fr)] sm:items-center sm:gap-x-6 ${
+                    className={`grid grid-cols-1 gap-y-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_1rem] sm:items-center sm:gap-x-6 ${
                       liveChannels.length === 0 ? "opacity-60" : ""
                     }`}
                   >
@@ -2222,6 +2224,20 @@ function RulesCard({
                       </span>
                     )}
                     </span>
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                      className="hidden text-[var(--muted)] sm:block"
+                    >
+                      <path d="m9 18 6-6-6-6" />
+                    </svg>
                   </div>
                 </div>
               </div>

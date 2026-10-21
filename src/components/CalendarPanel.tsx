@@ -13,13 +13,15 @@ import {
 } from "@/lib/datetime";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { staffSwatch, staffSwatchInk } from "@/lib/staffTint";
+import { buttonClass } from "./Control";
 import { addMonths, startOfMonth } from "./MonthGrid";
 import { StaffColorPicker } from "./StaffColorPicker";
 
 // The calendar's side panel, Google Calendar's left column (Nudge's
 // CalendarPanel, 2026-10-12 there): a small month to jump with, and the
-// business's services and team as tick lists that filter the grid. The team
-// list is also the colour key: every box wears the person's colour, and an
+// business's team as a tick list that filters the grid (no services list
+// since 2026-10-21, Serdar: who is booked is the question). The team list is
+// also the colour key: every box wears the person's colour, and an
 // owner recolours someone from the dot on their row, the same picker as the
 // Team card's.
 //
@@ -57,16 +59,12 @@ export function toggled(
   return all.every((x) => next.includes(x)) ? [] : next;
 }
 
-export type PanelService = { _id: string; name: string };
 export type PanelStaff = { _id: Id<"staff">; name: string; color: string; active: boolean };
 
 export function CalendarPanel({
   anchor,
   highlight,
   onPickDay,
-  services,
-  serviceFilter,
-  onServiceFilter,
   staff,
   withUnassigned,
   staffFilter,
@@ -78,11 +76,6 @@ export function CalendarPanel({
   // The days the main view shows, banded on the small month (day and week).
   highlight: { from: number; to: number } | null;
   onPickDay: (day: number) => void;
-  // The services worth filtering by: every active one, plus an inactive one
-  // a booking in view still carries.
-  services: PanelService[];
-  serviceFilter: string[];
-  onServiceFilter: (next: string[]) => void;
   // The same for people: everyone on the team, plus a deactivated person a
   // booking in view still names.
   staff: PanelStaff[];
@@ -96,8 +89,6 @@ export function CalendarPanel({
 }) {
   const { t } = useLanguage();
 
-  const serviceIds = services.map((s) => s._id as string);
-  const shownServices = shownIds(serviceFilter, serviceIds);
   const staffIds = [...staff.map((s) => s._id as string), ...(withUnassigned ? [UNASSIGNED] : [])];
   const shownStaff = shownIds(staffFilter, staffIds);
 
@@ -163,36 +154,6 @@ export function CalendarPanel({
                 />
               </li>
             )}
-          </ul>
-        </section>
-      )}
-
-      {services.length > 1 && (
-        <section aria-label={t("services.title")}>
-          <h3 className="mb-1 flex h-7 items-center pl-1 text-sm font-medium text-[var(--muted-strong)]">
-            {t("services.title")}
-          </h3>
-          <ul>
-            {services.map((service) => {
-              const checked = shownServices.includes(service._id);
-              return (
-                <li key={service._id} className="flex items-center rounded-md hover:bg-[var(--row-hover-bg)]">
-                  <TickRow
-                    label={service.name}
-                    checked={checked}
-                    locked={checked && shownServices.length === 1}
-                    // ON's own hue (--switch-on), the colour every switch in
-                    // the app already wears: a service has no colour of its
-                    // own, and only a person's colour may mean a person.
-                    color="var(--switch-on)"
-                    ink="#ffffff"
-                    onToggle={() =>
-                      onServiceFilter(toggled(serviceFilter, serviceIds, serviceIds, service._id))
-                    }
-                  />
-                </li>
-              );
-            })}
           </ul>
         </section>
       )}
@@ -385,7 +346,7 @@ export function FilterPicker({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={toggle}
-        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--border)] px-4 text-sm font-medium transition-colors hover:bg-[var(--control-hover)]"
+        className={buttonClass("pill", "sm")}
       >
         <span className="max-w-[10rem] truncate">{label}</span>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

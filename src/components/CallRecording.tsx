@@ -96,7 +96,10 @@ export function CallRecording({
         type="button"
         onClick={toggle}
         aria-label={playing ? t("calls.pauseRecording") : t("calls.playRecording")}
-        className={iconButtonClass("quiet", "xs")}
+        // Nudge's raised square (its `secondary`, Resepta's `outline` since
+        // the controls took Nudge's depth): a ring and a soft drop, not a
+        // border, so the one control on the player reads as one.
+        className={iconButtonClass("outline", "xs")}
       >
         {playing ? (
           <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden>
@@ -139,7 +142,10 @@ export function CallRecording({
         }}
         className="group relative min-w-0 flex-1 cursor-pointer py-3 outline-none focus-visible:[&>div]:ring-2 focus-visible:[&>div]:ring-[var(--accent)]/40"
       >
-        <div className="h-1 w-full rounded-full bg-[var(--border)] transition-[height] duration-150 group-hover:h-1.5">
+        {/* The track is mixed from the ink, not --border: the player sits on
+            the call card (--chat-field), and in dark --border (#262626) is
+            that card's own colour (#242424), which left the track invisible. */}
+        <div className="h-1 w-full rounded-full bg-[color-mix(in_srgb,var(--foreground)_14%,transparent)] transition-[height] duration-150 group-hover:h-1.5">
           <div
             className="relative h-full rounded-full bg-[var(--foreground)]"
             style={{ width: `${pct}%` }}

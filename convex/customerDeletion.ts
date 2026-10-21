@@ -313,6 +313,8 @@ const FOOTPRINT: Source[] = [
     },
     countCap: 200,
   }),
+  // The team's review of a call (its note and verdict, calls.setReview) lives
+  // on the call row and goes with it.
   source({
     kind: "calls",
     rows: (ctx, customer) =>
