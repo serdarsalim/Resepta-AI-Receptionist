@@ -431,11 +431,14 @@ const ChevronsUpDownIcon = makeIcon(
 // names the sidebar, it does not point anywhere. Chevrons and hamburgers are
 // both out of the design language here. Stroke 1.5 like the nav glyphs it
 // sits above: it is sidebar chrome.
-function PanelLeftIcon({ size = 16 }: { size?: number }) {
+// The fold toggle's glyphs, Nudge's (Serdar, 2026-10-21: "that's how I use
+// it in Nudge"): the arrow points where the rail will go, left to fold it,
+// right to open it again.
+function SidebarArrowIcon({ open }: { open: boolean }) {
   return (
     <svg
-      width={size}
-      height={size}
+      width={16}
+      height={16}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -444,15 +447,13 @@ function PanelLeftIcon({ size = 16 }: { size?: number }) {
       strokeLinejoin="round"
       aria-hidden
     >
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <path d="M9 3v18" />
+      <polyline points={open ? "15 18 9 12 15 6" : "9 18 15 12 9 6"} />
     </svg>
   );
 }
 
-// The phone drawer's glyph. Not PanelLeftIcon: the panel-left mark describes a
-// sidebar that stays put and gets narrower, which is what the desktop toggle
-// does. On a phone the same tap opens a drawer over the page, and a hamburger
+// The phone drawer's glyph. Not the fold arrows: they describe a sidebar
+// that stays put and gets narrower, which is what the desktop toggle does. On a phone the same tap opens a drawer over the page, and a hamburger
 // is the one icon every phone user already reads as "menu".
 function MenuIcon({ size = 18 }: { size?: number }) {
   return (
@@ -1183,17 +1184,14 @@ function UserMenu({
 // only for the anonymous demo walk-in, who can neither switch nor found.
 const WORKSPACE_MENU_WIDTH = 224; // w-56, used for the viewport clamp
 
+// Expanded rail only: folded, the rail shows no mark at all (Serdar,
+// 2026-10-21), so switching business waits for the rail to open.
 function WorkspaceSwitcher({
   fallbackName,
   logoUrl,
-  collapsed = false,
 }: {
   fallbackName?: string;
   logoUrl?: string | null;
-  // Collapsed, the brand mark IS the trigger — otherwise switching org would
-  // mean expanding the sidebar first, which for an operator running several
-  // client workspaces is the one thing they do most.
-  collapsed?: boolean;
 }) {
   const { t } = useLanguage();
   const data = useQuery(api.users.myWorkspaces, {});
@@ -1218,11 +1216,7 @@ function WorkspaceSwitcher({
   // the sidebar laid out the same, and nothing below this row moves when the
   // query lands.
   if (!data || (data.workspaces.length < 2 && !data.canFound)) {
-    return collapsed ? (
-      <HoverTip text={label} side="right">
-        <WorkspaceMark logoUrl={logoUrl} name={label} size={24} />
-      </HoverTip>
-    ) : (
+    return (
       <div className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5">
         <WorkspaceMark logoUrl={logoUrl} name={label} size={24} />
         {/* Two lines before the ellipsis, not one: "Bella Güzellik Salo…" is
@@ -1241,20 +1235,11 @@ function WorkspaceSwitcher({
 
   return (
     <>
-      {/* Folded, the mark is all there is: its name shows beside it at once,
-          as every folded row's does (P20). */}
-      <HoverTip
-        text={label}
-        side="right"
-        disabled={!collapsed || open}
-        className={collapsed ? "inline-flex" : "flex w-full"}
-      >
       <button
         ref={btnRef}
         onClick={toggle}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={collapsed ? label : undefined}
         // A resting SURFACE, not a wash. The old trigger was bare text with a
         // 10px caret parked at the far end of a flex-1 span, so at rest it read
         // as the page's title and the only thing saying "control" arrived once
@@ -1263,36 +1248,25 @@ function WorkspaceSwitcher({
         // own hover and active states and read as permanently pressed. See
         // --pane-field in globals.css for why white is the material that
         // cannot be mistaken for a state.
-        className={
-          collapsed
-            ? "rounded-lg transition-opacity hover:opacity-80"
-            : "flex w-full items-center gap-2 rounded-lg bg-[var(--pane-field)] px-1.5 py-1.5 text-left text-sm font-semibold tracking-tight transition-colors hover:bg-[var(--pane-field-hover)]"
-        }
+        className="flex w-full items-center gap-2 rounded-lg bg-[var(--pane-field)] px-1.5 py-1.5 text-left text-sm font-semibold tracking-tight transition-colors hover:bg-[var(--pane-field-hover)]"
       >
-        {collapsed ? (
-          <WorkspaceMark logoUrl={logoUrl} name={label} size={24} />
-        ) : (
-          <>
-            <WorkspaceMark logoUrl={logoUrl} name={label} size={24} />
-            {/* Same two-line grace as the single-workspace name above. */}
-            <span
-              title={label}
-              className="line-clamp-2 min-w-0 flex-1 break-words leading-snug"
-            >
-              {label}
-            </span>
-            {/* 1.75 at 14px, Nudge's account-row chevron: the house 1.5
-                drawn two pixels smaller would go fainter than the rows. */}
-            <ChevronsUpDownIcon
-              width={14}
-              height={14}
-              strokeWidth={1.75}
-              className="shrink-0 text-[var(--muted)]"
-            />
-          </>
-        )}
+        <WorkspaceMark logoUrl={logoUrl} name={label} size={24} />
+        {/* Same two-line grace as the single-workspace name above. */}
+        <span
+          title={label}
+          className="line-clamp-2 min-w-0 flex-1 break-words leading-snug"
+        >
+          {label}
+        </span>
+        {/* 1.75 at 14px, Nudge's account-row chevron: the house 1.5
+            drawn two pixels smaller would go fainter than the rows. */}
+        <ChevronsUpDownIcon
+          width={14}
+          height={14}
+          strokeWidth={1.75}
+          className="shrink-0 text-[var(--muted)]"
+        />
       </button>
-      </HoverTip>
       {/* Through a portal with fixed positioning, never an absolute child: the
           sidebar is overflow-hidden, so an in-flow menu gets clipped at the
           pane edge (see AGENTS.md — this recurs). */}
@@ -1682,60 +1656,49 @@ export function AppShell({
             mobileOpen ? "visible translate-x-0" : "invisible -translate-x-full"
           } ${showCollapsed ? "md:w-14" : "md:w-52"}`}
         >
-          {/* ONE row: the business you are working in, level with the page
-            title across the joined frame, and the fold toggle at its end
-            (Serdar, 2026-10-21: the product's own logo and name in here were
-            a distraction). The top-left belongs to the business, as Nudge's
-            shows the workspace's logo rather than its own; the Resepta brand
-            stays on sign-in and on the pages customers see. Folded, the
-            business mark is the only mark, still the switcher's trigger, over
-            the toggle. */}
+          {/* The title's line holds the fold arrow alone, at the rail's
+            right end as Nudge has it, and the business switcher sits on a
+            row of its own under it (Serdar, 2026-10-21: beside the arrow the
+            switcher "looks off"). No product mark: the top-left belongs to
+            the business, and the Resepta brand stays on sign-in and on the
+            pages customers see. Folded, the arrow is all there is, and
+            switching business waits for the rail to open. */}
           <div
-            className={`flex flex-col ${
-              showCollapsed ? "items-center px-1 pb-1 pt-3" : "px-2 pb-1 pt-1.5"
+            className={`flex h-12 shrink-0 items-center ${
+              showCollapsed ? "justify-center px-1" : "justify-end pl-2 pr-4"
             }`}
           >
-            <div
-              // min-h-9 under pt-1.5 centres a one-line name 1.5rem down, the
-              // middle of the 48px top bar beside it. A minimum, not a
-              // height: a long business name keeps its two-line grace and
-              // the row grows rather than cutting the owner's name off.
-              className={`flex items-center ${
-                showCollapsed ? "flex-col gap-1" : "min-h-9 w-full gap-1"
-              }`}
+            {/* One control: on desktop it folds the sidebar down to symbols,
+              on the phone it slides the drawer away. Its label waits half a
+              second: the toggle sits where the pointer crosses on the way
+              into the rail, and an instant label flashed on every pass
+              (Nudge fa6a0d95). */}
+            <HoverTip
+              text={showCollapsed ? t("nav.expand") : t("nav.collapse")}
+              side="right"
+              delay={500}
+              className="inline-flex shrink-0"
             >
-              <div className={showCollapsed ? "inline-flex" : "flex min-w-0 flex-1"}>
-                <WorkspaceSwitcher
-                  fallbackName={settings?.org.name}
-                  logoUrl={settings?.org.logoUrl}
-                  collapsed={showCollapsed}
-                />
-              </div>
-              {/* One control, one glyph: on desktop it folds the sidebar down
-                to symbols, on the phone it slides the drawer away. Both mean
-                "put the sidebar back", which is why the icon does not change. */}
-              {/* Its label waits half a second: the toggle sits where the
-                  pointer crosses on the way into the rail, and an instant
-                  label flashed on every pass (Nudge fa6a0d95). */}
-              <HoverTip
-                text={showCollapsed ? t("nav.expand") : t("nav.collapse")}
-                side="right"
-                delay={500}
-                className="inline-flex shrink-0"
-              >
-              <button
-                type="button"
-                onClick={() =>
-                  mobileOpen ? setMobileOpen(false) : toggleCollapsed()
-                }
-                aria-label={showCollapsed ? t("nav.expand") : t("nav.collapse")}
-                className="shrink-0 rounded p-0.5 text-[var(--muted)] transition-colors hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
-              >
-                <PanelLeftIcon />
-              </button>
-              </HoverTip>
-            </div>
+            <button
+              type="button"
+              onClick={() =>
+                mobileOpen ? setMobileOpen(false) : toggleCollapsed()
+              }
+              aria-label={showCollapsed ? t("nav.expand") : t("nav.collapse")}
+              className="shrink-0 rounded p-0.5 text-[var(--muted)] transition-colors hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
+            >
+              <SidebarArrowIcon open={!showCollapsed} />
+            </button>
+            </HoverTip>
           </div>
+          {!showCollapsed && (
+            <div className="px-2 pb-1">
+              <WorkspaceSwitcher
+                fallbackName={settings?.org.name}
+                logoUrl={settings?.org.logoUrl}
+              />
+            </div>
+          )}
 
           <nav
             className={`flex flex-1 flex-col pb-1 pt-4 ${showCollapsed ? "px-1" : "px-2"}`}
