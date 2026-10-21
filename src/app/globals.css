@@ -117,8 +117,9 @@
     var(--pane) 48%,
     color-mix(in srgb, var(--brand) 8%, var(--pane)) 100%
   );
-  /* The ground of the shell. The content plane's --content-bg wash is mixed
-     from it, and the sidebar rail (.app-pane) sits one step lighter. */
+  /* The ground of the shell. The workspace's --content-bg wash is mixed
+     from it, and the frame around it (.app-pane: the sidebar rail and the
+     top bar) sits one step lighter. */
   --pane: #f1f1f3;
   /* Primary action accent — soft blue, white text in both modes */
   --accent: #3b82f6;
@@ -225,11 +226,12 @@
      ring while light went flat would have made dark the only theme still
      outlining its cards. */
   --card-shadow: none;
-  /* Lighter than the pane rather than white, same idea inverted: --card is
-     #171717 against the rail's #141414, three units, which is the dark-mode
-     trap where a --card pill on a --muted-bg track vanishes. */
-  --pane-field: #232323;
-  --pane-field-hover: #2c2c2c;
+  /* Lighter than the rail rather than white, same idea inverted. The rail
+     is the #25272b charcoal of the joined frame (.app-pane), so the field
+     steps up from it; the old #232323 sat BELOW that rail and read as a
+     hole cut into it. */
+  --pane-field: #303237;
+  --pane-field-hover: #393b41;
   /* Halved: the same mix that reads as a tint on white reads as a colour cast
      on near-black. */
   --content-bg: linear-gradient(
@@ -337,11 +339,31 @@ thead {
   --event-past-fg: color-mix(in srgb, var(--event) 55%, var(--muted));
 }
 
+/* The joined navigation frame (Nudge 5668cdfd, 2026-10-16; here
+   2026-10-21): the sidebar rail AND the 48px top bar wear this one flat
+   fill, and the workspace (`main`) meets it with a 12px upper-left curve and
+   a quiet edge (.workspace-boundary). Dark is a lighter charcoal than the
+   near-black workspace (--pane #0c0c0c) and the cards (#171717), so the frame
+   reads as its own plane; the old #141414 sat three units from the cards. */
 .app-pane {
   background: #f8f8f9;
 }
 .dark .app-pane {
-  background: #141414;
+  background: #25272b;
+}
+
+/* One quiet rule follows the workspace's corner: the top edge everywhere,
+   the left edge from md, where the rail sits beside it. Nothing cuts through
+   the band the sidebar's brand row and the top bar share. */
+.workspace-boundary {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--border) 50%, transparent);
+  border-width: 1px 0 0;
+}
+@media (min-width: 48rem) {
+  .workspace-boundary {
+    border-left-width: 1px;
+  }
 }
 
 /* Public landing-page entrance motion. It changes opacity and transform only,

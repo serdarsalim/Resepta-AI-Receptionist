@@ -624,17 +624,14 @@ function ShellHeader({
   }, [placeholder]);
 
   return (
-    // min-h-13 is the whole reason every tab's first row lands in the same
-    // place. Without it the header is as tall as whatever it happens to hold:
-    // ~55px on a tab with a search box, ~42px on one without — so switching
-    // from Customers to Reminders jumped the card and its Add button 13px up
-    // the screen. The floor is the search box's own height plus this padding,
-    // so tabs that have one are unchanged and the rest stop shifting.
+    // A fixed 48px band, the sidebar brand row's height, on the frame's own
+    // fill (the wrapper's .app-pane), so the bar and the rail read as one
+    // frame (Nudge 5668cdfd). Fixed rather than a floor: a tab with a search
+    // box and one without must put their first row in the same place, or
+    // switching from Customers to Automations jumps the card up the screen.
     // ONE inset on every tab, so the title never moves as you switch (P25,
-    // Nudge ca95e0f8). It used to follow the Inbox's and the record's cards
-    // to their 8px frame; there the title now lines up with the text inside
-    // the card rather than the card's rim.
-    <header className="gutter-align flex min-h-13 items-center justify-between gap-3 px-4 pb-1 pt-3">
+    // Nudge ca95e0f8).
+    <header className="gutter-align flex h-12 shrink-0 items-center justify-between gap-3 px-4">
       <div
         className={`group/title flex min-w-0 items-center gap-1.5 ${
           expanded ? "hidden sm:flex" : "flex"
@@ -1663,15 +1660,16 @@ export function AppShell({
     // filtering happens down there, so the query has to sit over the pair.
     <HeaderSearchProvider>
     <HeaderPanesProvider>
-      {/* No padding and no gap: both panes meet the window edge (Nudge
-          607c9708, 2026-10-12; asked for here the next day). The content
-          used to be a rounded sheet inset 8px in a gutter, and every view
-          already puts its content in cards, so the sheet was a card holding
-          cards. The cards are the paper now; don't bring the inset back
-          without taking them out first. data-app-shell gives the document's
-          reserved scrollbar track back (globals.css): this root never
-          scrolls the document, and the track was a 15px strip of page white
-          between the content and the window's right edge. */}
+      {/* No padding and no gap: the frame meets the window edge (Nudge
+          607c9708, 2026-10-12). The sidebar rail and the top bar are ONE
+          frame in one fill (.app-pane, Nudge 5668cdfd; here 2026-10-21), and
+          the workspace under the bar meets it with a 12px upper-left curve
+          (.workspace-boundary on `main`). The workspace is not a sheet inset
+          in a gutter: every view already puts its content in cards, and a
+          sheet would be a card holding cards. data-app-shell gives the
+          document's reserved scrollbar track back (globals.css): this root
+          never scrolls the document, and the track was a 15px strip of page
+          white between the content and the window's right edge. */}
       <div data-app-shell className="flex h-[100dvh] overflow-hidden bg-[var(--pane)]">
         {/* Fixed overlay, so it costs the layout nothing and renders on every
           screen rather than only the one the operator arrived on. The
@@ -1696,12 +1694,11 @@ export function AppShell({
           to reach Business and Settings, now that the avatar menu no longer
           shortcuts there.
 
-          The rail's md:border-r is the one line between the two panes. With
-          no gutter left, nothing else separates them. Plain --border is
-          within a shade of what Nudge's 70% mix of its own darker --border
-          lands on, and it is the same weight as the short rule between the
-          nav groups. The drawer
-          keeps its shadow and takes no border: it slides over the page. */}
+          The rail draws no edge of its own: it and the top bar are one
+          frame, and the line between the frame and the workspace is main's
+          .workspace-boundary, which follows the corner rather than cutting
+          through the shared top band. The drawer keeps its shadow: it slides
+          over the page. */}
         {/* Off-canvas is not hidden: translated away, the drawer keeps its place
           in the accessibility tree and every destination inside it stays
           tabbable, so tabbing off the phone menu button walks into an
@@ -1712,7 +1709,7 @@ export function AppShell({
           `md:visible` puts the desktop pane back. */}
         <aside
           aria-label={t("nav.primary")}
-          className={`app-pane fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col overflow-hidden shadow-xl transition-[transform,visibility] duration-[120ms] ease-out motion-reduce:transition-none md:visible md:static md:translate-x-0 md:border-r md:border-[var(--border)] md:shadow-none md:transition-[width] ${
+          className={`app-pane fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col overflow-hidden shadow-xl transition-[transform,visibility] duration-[120ms] ease-out motion-reduce:transition-none md:visible md:static md:translate-x-0 md:shadow-none md:transition-[width] ${
             mobileOpen ? "visible translate-x-0" : "invisible -translate-x-full"
           } ${showCollapsed ? "md:w-14" : "md:w-52"}`}
         >
@@ -1733,19 +1730,17 @@ export function AppShell({
             // what the eye should see. The product row is h-9 now (below), so
             // ~0.46rem of that is the row's own room under its centred
             // content, and gap-2 tops it up to the same 1rem.
-            className={`flex flex-col pt-3 ${
-              showCollapsed ? "items-center gap-2 px-1 pb-1" : "gap-2 px-2 pb-2"
+            className={`flex flex-col ${
+              showCollapsed ? "items-center gap-2 px-1 pb-1 pt-3" : "gap-2 px-2 pb-2 pt-1.5"
             }`}
           >
             <div
-              // h-9 under pt-3 centres the product name 1.875rem down, the
-              // same line as the page title in the header beside it (pt-3
-              // plus half of min-h-13's 2.25rem content box). With the panes
-              // flush and one hairline between them, the two read as one
-              // band across the top of the window, and the name sat 8px
-              // above the title. Nudge's brand row and header share h-14 for
-              // the same reason. Collapsed, the rail stacks mark over toggle
-              // and has no line to share.
+              // h-9 under pt-1.5 centres the product name 1.5rem down, the
+              // middle of the 48px top bar beside it, so the name and the
+              // page title sit on one line across the joined frame (Nudge's
+              // brand row and header are both 48px for the same reason).
+              // Collapsed, the rail stacks mark over toggle and has no line
+              // to share; its pt-3 centres the mark on that line anyway.
               className={`flex items-center ${
                 showCollapsed ? "flex-col gap-1" : "h-9 w-full gap-2 px-1.5"
               }`}
@@ -1895,15 +1890,11 @@ export function AppShell({
           </nav>
         </aside>
 
-        {/* The content plane, flush to the window like the rail beside it:
-          no radius, no inset, no shadow. It is the ground the view's own
-          cards sit on, not a sheet of its own, so it wears the --content-bg
-          wash over --pane rather than --background. White here meant
-          card-raised was white on white and had to buy its separation
-          entirely with shadow. Every tab gets the plane, the calendar
-          included: its grid is a card like any other (design-language.md).
-          It does not scroll; `main` below does (min-h-0 is load-bearing). */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[image:var(--content-bg)]">
+        {/* The right half of the frame: the top bar sits on its .app-pane
+          fill, the same as the rail beside it, and `main` below is the
+          workspace. It does not scroll; `main` does (min-h-0 is
+          load-bearing). */}
+        <div className="app-pane flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* No ✕ on any tab. Business traded its close button for the search box
             first, and Account followed (2026-08-12) once it had grown enough
             rows to be worth searching. The header holds ONE control on the
@@ -1953,8 +1944,14 @@ export function AppShell({
             ground and only the grid sits on paper, and from sm the frame is
             12px with 8px under a grid, so the calendar takes the pane. The
             list page-scrolls and keeps its bottom padding. The gutter stays:
-            switching between the list and a grid must not move the toolbar. */}
-        <main className="thin-scroll page-scroll stable-gutter relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 max-sm:px-2 max-sm:has-[[data-fills-pane]]:pb-0 has-[[data-calendar-ground]]:bg-[var(--pane)] sm:has-[[data-calendar-ground]]:px-3 sm:has-[[data-calendar-ground]]:pt-3 sm:has-[[data-fills-pane]]:has-[[data-calendar-ground]]:pb-2">
+            switching between the list and a grid must not move the toolbar.
+
+            The workspace itself: the --content-bg wash (fixed, so it stays
+            put while the cards scroll over it), a 12px upper-left curve from
+            md where the rail sits beside it, and .workspace-boundary's quiet
+            edge along the top and the left. The calendar ground drops the
+            wash for plain --pane. */}
+        <main className="thin-scroll page-scroll stable-gutter workspace-boundary relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[image:var(--content-bg)] bg-fixed p-4 md:rounded-tl-xl max-sm:px-2 max-sm:has-[[data-fills-pane]]:pb-0 has-[[data-calendar-ground]]:bg-none has-[[data-calendar-ground]]:bg-[var(--pane)] sm:has-[[data-calendar-ground]]:px-3 sm:has-[[data-calendar-ground]]:pt-3 sm:has-[[data-fills-pane]]:has-[[data-calendar-ground]]:pb-2">
             {/* Above the content rather than in a corner: someone clicking
               through a demo should never be a minute into it before working
               out that the salon isn't real. Inside the scrolling pane so it
