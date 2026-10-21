@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useT } from "@/lib/LanguageProvider";
 import { foldSearch, type SortDir } from "@/lib/useTableState";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
+import { buttonClass } from "./Control";
 
 // Shared table chrome: the quiet sort header, the funnel filter that lives ON
 // the column it filters, the column picker, and the search box. Ported from
@@ -371,12 +372,10 @@ export function ColumnPicker({
         type="button"
         onClick={toggle}
         aria-expanded={open}
-        // A bordered button, not a ghost label. It opens a menu and changes
-        // the table under it, so it should look like something you press —
-        // the borderless version read as a caption sitting above the table.
-        className={`inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--muted-bg)] ${
-          open ? "bg-[var(--muted-bg)]" : ""
-        } ${className}`}
+        // A view control, so the raised round pill (Nudge's Columns and
+        // Filters): it changes what the table shows rather than doing work,
+        // and the borderless version read as a caption above the table.
+        className={`${buttonClass("pill", "sm")} ${className}`}
       >
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
           <rect x="3" y="4" width="18" height="16" rx="2" />

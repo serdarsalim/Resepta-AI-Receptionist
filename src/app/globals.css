@@ -26,9 +26,27 @@
      b43691f4). Their own pair because dark --muted-bg equals --card, which
      made the track vanish into the card and left the picked cell a shade of
      near-black on near-black. */
-  --segment-track: #f5f5f5;
+  /* The pill switch (Nudge, 2026-10-20): a ring for the thumb's edge and a
+     soft drop for the lift, where a solid #dcdcdc border made it a box
+     sitting in a box. */
+  --segment-track: #efeff1;
   --segment-thumb: #ffffff;
-  --segment-thumb-border: #dcdcdc;
+  --segment-thumb-border: rgb(0 0 0 / 0.06);
+  --segment-thumb-shadow: 0 0 0 1px var(--segment-thumb-border), 0 1px 2px rgb(0 0 0 / 0.06),
+    0 2px 8px -2px rgb(0 0 0 / 0.12);
+  /* Buttons have DEPTH, not a flat outline (Nudge, 2026-10-20, Serdar after
+     Attio; here 2026-10-21): a secondary button is RAISED (white, a hairline
+     ring, a soft drop) and a filled one is CRISP (a darker edge and a faint
+     light line along its top). Rings, not borders, so a button keeps its
+     declared box. Dark lifts with a lighter surface and a top highlight
+     instead, since a drop shadow vanishes on black. */
+  --raised: #ffffff;
+  --raised-hover: #f7f7f8;
+  --raised-shadow: 0 0 0 1px rgb(0 0 0 / 0.1), 0 1px 2px rgb(0 0 0 / 0.06);
+  --solid-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 0 0 1px rgb(0 0 0 / 0.08),
+    0 1px 2px rgb(0 0 0 / 0.12);
+  --primary-bg: var(--accent);
+  --primary-hover: color-mix(in srgb, var(--accent) 88%, #000);
   /* A page heading is the darkest thing on its page, never a softened slate.
      #334155 was blue-tinted AND lighter than --foreground, so every title sat
      below the body text under it. */
@@ -203,6 +221,18 @@
   --segment-track: #0c0c0c;
   --segment-thumb: #2e2e2e;
   --segment-thumb-border: #404040;
+  --segment-thumb-shadow: 0 0 0 1px var(--segment-thumb-border), 0 1px 2px rgb(0 0 0 / 0.5),
+    inset 0 1px 0 rgb(255 255 255 / 0.05);
+  --raised: #242424;
+  --raised-hover: #2c2c2c;
+  --raised-shadow: 0 0 0 1px rgb(255 255 255 / 0.09), inset 0 1px 0 rgb(255 255 255 / 0.05),
+    0 1px 2px rgb(0 0 0 / 0.5);
+  /* The blue sits a step darker on black and lightens to the accent on
+     hover; a softer top highlight, so its edge does not glow. */
+  --solid-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), 0 0 0 1px rgb(0 0 0 / 0.3),
+    0 1px 2px rgb(0 0 0 / 0.5);
+  --primary-bg: color-mix(in srgb, var(--accent) 80%, #000);
+  --primary-hover: var(--accent);
   --page-title: var(--foreground);
   --brand: #10b981;
   /* Muted less than the light theme's. The same desaturation that calms a
@@ -720,16 +750,20 @@ thead {
      (the record's "+ Add sale" wears it at 28px). The two must agree. */
   .card-action {
     height: 2rem;
-    border: 1px solid var(--border);
     border-radius: 0.5rem;
     padding-inline: 0.625rem;
     font-size: 0.875rem;
     font-weight: 500;
     color: var(--foreground);
+    /* Raised, Control.tsx's `outline` (2026-10-21): white, a hairline ring
+       and a soft drop instead of a flat border. A ring, so the box keeps
+       its declared height. */
+    background: var(--raised);
+    box-shadow: var(--raised-shadow);
     transition: background-color 120ms;
   }
   .card-action:hover:not(:disabled) {
-    background: var(--control-hover);
+    background: var(--raised-hover);
   }
   .card-action:disabled {
     opacity: 0.4;

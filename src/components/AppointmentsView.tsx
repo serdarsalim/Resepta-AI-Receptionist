@@ -37,7 +37,7 @@ import { MonthGrid, addMonths, startOfMonth } from "./MonthGrid";
 import { YearGrid, addYears, startOfYear } from "./YearGrid";
 import { BlockSheet, SheetKindTabs, type BlockDraft } from "./BlockSheet";
 import { RowMenu } from "./RowMenu";
-import { iconButtonClass } from "./Control";
+import { buttonClass, iconButtonClass } from "./Control";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { STAFF_TINT, staffSwatch, staffSwatchInk, staffTint } from "@/lib/staffTint";
 import { CalendarPanel, FilterPicker, UNASSIGNED, shownIds } from "./CalendarPanel";
@@ -630,7 +630,7 @@ export function AppointmentsView({
             {/* h-8, the control scale's 32px declared rather than padded into
                 being, like the view menu across the row. */}
             <button
-              className="inline-flex h-8 items-center rounded-full border border-[var(--border)] px-4 text-sm font-medium transition-colors hover:bg-[var(--control-hover)]"
+              className={buttonClass("pill", "sm")}
               onClick={() => setAnchor(startOfDay(Date.now()))}
             >
               {t("appointments.today")}
@@ -1211,9 +1211,9 @@ function ViewMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={toggle}
-        // An outlined pill, twin to the Today button across the row — the
-        // two ends of the header carry the same weight, Google's balance.
-        className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] px-4 py-1.5 text-sm font-medium transition-colors hover:bg-[var(--muted-bg)]"
+        // A raised pill, twin to the Today button across the row: the two
+        // ends of the header carry the same weight, Google's balance.
+        className={buttonClass("pill", "sm")}
       >
         {current ? t(current.key) : ""}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

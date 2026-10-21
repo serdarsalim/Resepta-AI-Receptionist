@@ -56,6 +56,12 @@ const GAP: Record<ControlSize, string> = {
   md: "gap-1.5",
 };
 
+// Buttons have DEPTH, not a flat outline (Nudge, 2026-10-20; here
+// 2026-10-21): `primary` is crisp (--solid-shadow: a darker edge and a light
+// line along the top) and darkens on hover instead of fading its label;
+// `outline` is RAISED (--raised*: white, a hairline ring, a soft drop; a
+// lighter surface in dark). Rings, not borders, so the box keeps its height.
+//
 // primary  the one action a card, sheet or editor is FOR. Filled accent.
 // ghost    a real action that is not the main one: text on a hover wash, no
 //          border (AGENTS.md: secondary and ghost buttons are text plus a
@@ -65,7 +71,12 @@ const GAP: Record<ControlSize, string> = {
 // outline  the card-action tier: a card's own action in its header and a
 //          section's "+ Add" inside a card. `.card-action` in globals.css is
 //          this look at sm and stays the class Card headers use; the two
-//          must agree.
+//          must agree. Raised, and boxed (rounded-lg): it does work.
+// pill     a VIEW control, the switch's thumb as a button (Nudge's `lifted`):
+//          a raised round pill. The calendar's Today and its view menu, a
+//          picker that changes what a list shows. Round because shape says
+//          what a control is: rounded-lg does work, rounded-full chooses what
+//          you see (Nudge's Control.tsx, rule 2).
 // danger   destructive. Muted at rest and red on hover, so a Delete does not
 //          shout from the foot of every editor it sits in.
 //
@@ -76,15 +87,18 @@ const GAP: Record<ControlSize, string> = {
 //
 // The hover wash is --control-hover, a foreground mix, not --muted-bg: in
 // dark --muted-bg IS --card, so a muted-bg hover on a card shows nothing.
-export type ControlVariant = "primary" | "ghost" | "quiet" | "outline" | "danger";
+export type ControlVariant = "primary" | "ghost" | "quiet" | "outline" | "pill" | "danger";
 
 const VARIANT: Record<ControlVariant, string> = {
-  primary: "bg-[var(--accent)] text-[var(--accent-fg)] hover:opacity-90",
+  primary:
+    "bg-[var(--primary-bg)] text-[var(--accent-fg)] shadow-[var(--solid-shadow)] hover:bg-[var(--primary-hover)]",
   ghost: "text-[var(--foreground)] hover:bg-[var(--control-hover)]",
   quiet:
     "text-[var(--muted)] hover:bg-[var(--control-hover)] hover:text-[var(--foreground)]",
   outline:
-    "border border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--control-hover)]",
+    "bg-[var(--raised)] text-[var(--foreground)] shadow-[var(--raised-shadow)] hover:bg-[var(--raised-hover)]",
+  // Hover steps a hair toward the ink: greyer in light, lighter in dark.
+  pill: "bg-[var(--segment-thumb)] text-[var(--foreground)] shadow-[var(--segment-thumb-shadow)] hover:bg-[color-mix(in_srgb,var(--segment-thumb)_95%,var(--foreground))]",
   danger:
     "text-[var(--muted)] hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400",
 };
@@ -99,15 +113,17 @@ const DISABLED =
 
 // Geometry only: height, radius, type, rhythm. For a control that cannot take
 // a variant's colours but still has to line up with the ones that do.
-export function controlClass(size: ControlSize = "sm"): string {
-  return `inline-flex ${HEIGHT[size]} shrink-0 items-center justify-center ${GAP[size]} whitespace-nowrap rounded-lg ${PAD_X[size]} text-sm font-medium transition-colors`;
+// `round` swaps the radius rather than stacking a second one: two radius
+// utilities are decided by Tailwind's order, not the class string.
+export function controlClass(size: ControlSize = "sm", round = false): string {
+  return `inline-flex ${HEIGHT[size]} shrink-0 items-center justify-center ${GAP[size]} whitespace-nowrap ${round ? "rounded-full" : "rounded-lg"} ${PAD_X[size]} text-sm font-medium transition-colors`;
 }
 
 export function buttonClass(
   variant: ControlVariant = "ghost",
   size: ControlSize = "sm",
 ): string {
-  return `${controlClass(size)} ${VARIANT[variant]} ${FOCUS_BUTTON} ${DISABLED}`;
+  return `${controlClass(size, variant === "pill")} ${VARIANT[variant]} ${FOCUS_BUTTON} ${DISABLED}`;
 }
 
 // A square button with no label: a × that removes a row, a kebab. Same height
@@ -119,7 +135,7 @@ export function iconButtonClass(
   size: ControlSize = "sm",
 ): string {
   const box = { xs: "h-7 w-7", sm: "h-8 w-8", md: "h-9 w-9" }[size];
-  return `inline-flex ${box} shrink-0 items-center justify-center rounded-lg text-sm transition-colors ${VARIANT[variant]} ${FOCUS_BUTTON} ${DISABLED}`;
+  return `inline-flex ${box} shrink-0 items-center justify-center ${variant === "pill" ? "rounded-full" : "rounded-lg"} text-sm transition-colors ${VARIANT[variant]} ${FOCUS_BUTTON} ${DISABLED}`;
 }
 
 // Inputs, selects, textareas, and a button that stands in for a field (a

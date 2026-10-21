@@ -13,6 +13,7 @@ import {
 } from "@/lib/datetime";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { staffSwatch, staffSwatchInk } from "@/lib/staffTint";
+import { buttonClass } from "./Control";
 import { addMonths, startOfMonth } from "./MonthGrid";
 import { StaffColorPicker } from "./StaffColorPicker";
 
@@ -385,7 +386,7 @@ export function FilterPicker({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={toggle}
-        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--border)] px-4 text-sm font-medium transition-colors hover:bg-[var(--control-hover)]"
+        className={buttonClass("pill", "sm")}
       >
         <span className="max-w-[10rem] truncate">{label}</span>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
