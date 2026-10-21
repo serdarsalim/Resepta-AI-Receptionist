@@ -96,7 +96,10 @@ export function CallRecording({
         type="button"
         onClick={toggle}
         aria-label={playing ? t("calls.pauseRecording") : t("calls.playRecording")}
-        className={iconButtonClass("quiet", "xs")}
+        // Nudge's raised square (its `secondary`, Resepta's `outline` since
+        // the controls took Nudge's depth): a ring and a soft drop, not a
+        // border, so the one control on the player reads as one.
+        className={iconButtonClass("outline", "xs")}
       >
         {playing ? (
           <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden>
