@@ -533,7 +533,8 @@ sentence, is refused in a Meta parameter, and collapses to a space in HTML.
    `createTranslator(pageLanguage)`. Deliberately NOT next-intl: no
    locale-prefixed routes and no SEO surface in a logged-in app. A future
    PUBLIC booking page can adopt next-intl on its own without touching this.
-   The signed-in app follows `orgs.language`; the sign-in screen falls back to
+   The signed-in app follows the person's own language, else the business's
+   (`me.language ?? orgs.language`); the sign-in screen falls back to
    localStorage then the browser language.
 
 ## The demo org
@@ -585,8 +586,7 @@ viewports rather than eyeballed. The rules it left behind:
   rows, not forms). Card content is 446px of a 500px viewport; don't spend it.
 - **Phone rows are grids with FIXED tracks, never wrapping flex lines.** Each
   row is its own grid container, so columns align across rows only by asking
-  for the same widths (services: `SERVICE_ROW_GRID`, reminders:
-  `RULE_COLUMNS`). Every track must hold its value AND its unit at the 16px
+  for the same widths (services: `SERVICE_ROW_GRID`). Every track must hold its value AND its unit at the 16px
   edit size — a too-narrow track must overflow visibly (whitespace-nowrap),
   never stack a number vertically.
 - **The phone tab bar is not the sidebar.** It renders `navTabs` minus

@@ -23,9 +23,9 @@ import { InfoTip } from "./InfoTip";
 // language select clear across a 48rem card — the control announcing itself as
 // far more important than the label, and a text field wide enough to look like
 // it wants an essay. 24rem is what the WIDEST rows need — seven day chips on
-// one line, a pair of time pickers — so the column stays there; a row whose
-// value is a short string caps its own control tighter (sm:max-w-72 on the
-// General card's inputs) instead of shrinking every row to the narrowest one.
+// one line, a pair of time pickers — so the column stays there. A settings
+// card's fields all take that one width (Serdar, 2026-10-21: "all the input
+// fields should be same length"), rather than each capping itself to its text.
 //
 // The grid string lives HERE, next to the comment that documents it. It used to
 // be a local const copy-pasted into SettingsView, BusinessView and AccountView,

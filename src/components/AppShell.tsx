@@ -426,11 +426,6 @@ const ChevronsUpDownIcon = makeIcon(
   </>,
 );
 
-// lucide panel-left. One definition, used by the desktop collapse toggle and
-// by the phone menu button, and it is the SAME glyph in both states: the icon
-// names the sidebar, it does not point anywhere. Chevrons and hamburgers are
-// both out of the design language here. Stroke 1.5 like the nav glyphs it
-// sits above: it is sidebar chrome.
 // The fold toggle's glyphs, Nudge's (Serdar, 2026-10-21: "that's how I use
 // it in Nudge"): the arrow points where the rail will go, left to fold it,
 // right to open it again.
