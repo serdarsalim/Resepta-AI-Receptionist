@@ -9,6 +9,7 @@ import { resolveSiteUrl } from "@/lib/siteUrl";
 import { useQuery } from "convex/react";
 import { CallDetail, CallOutcomePill } from "./CallDetail";
 import { AGENT_TAB_PARAM, VoiceAgentPage } from "./VoiceAgentPage";
+import { REVIEW_PARAM } from "./AgentNotes";
 import { VoiceCard } from "./VoiceCard";
 import { NumberRequestCard } from "./NumberRequestCard";
 
@@ -183,8 +184,10 @@ export function VoiceView() {
     const url = new URL(window.location.href);
     if (next) url.searchParams.set("agent", next);
     else url.searchParams.delete("agent");
-    // The agent page's tab belongs to the agent that was open, not the next.
+    // The agent page's tab, and a review open on it, belong to the agent
+    // that was open, not the next.
     url.searchParams.delete(AGENT_TAB_PARAM);
+    url.searchParams.delete(REVIEW_PARAM);
     window.history.replaceState(null, "", url);
   };
 

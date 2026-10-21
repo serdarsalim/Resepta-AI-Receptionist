@@ -11,6 +11,7 @@
 import type * as activity from "../activity.js";
 import type * as agentAppointments from "../agentAppointments.js";
 import type * as agentReports from "../agentReports.js";
+import type * as agentReviews from "../agentReviews.js";
 import type * as agentTests from "../agentTests.js";
 import type * as agentTools from "../agentTools.js";
 import type * as appointments from "../appointments.js";
@@ -166,6 +167,7 @@ declare const fullApi: ApiFromModules<{
   activity: typeof activity;
   agentAppointments: typeof agentAppointments;
   agentReports: typeof agentReports;
+  agentReviews: typeof agentReviews;
   agentTests: typeof agentTests;
   agentTools: typeof agentTools;
   appointments: typeof appointments;

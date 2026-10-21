@@ -49,25 +49,33 @@ export function CustomerPickField({
     else close();
   }, [hasResults, show, close]);
 
+  // The pick stays INSIDE the field's box, with an × to clear it: the
+  // combobox shape (a picked value sits in the control that picked it), so a
+  // row of fields keeps its shape whether or not someone is chosen (Nudge's
+  // test panel, 2026-09-20). The × goes while the field is disabled, which on
+  // the browser test is a call in progress.
   if (value) {
     return (
-      <div className="flex min-h-8 min-w-0 items-center gap-2 text-sm">
-        <span className="truncate">{value.name || value.phone}</span>
-        <span className="shrink-0 text-xs text-[var(--muted)] tabular-nums">{value.phone}</span>
-        <HoverTip text={clearLabel} className="ml-auto inline-flex shrink-0">
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => {
-            onChange(null);
-            setQuery("");
-          }}
-          aria-label={clearLabel}
-          className="ml-auto shrink-0 rounded px-1.5 text-[var(--muted)] hover:bg-[var(--control-hover)] hover:text-[var(--foreground)]"
-        >
-          ×
-        </button>
-        </HoverTip>
+      <div className={`${fieldClass("sm")} flex w-full min-w-0 items-center gap-2`}>
+        <span className="min-w-0 flex-1 truncate">{value.name || value.phone}</span>
+        {value.name && (
+          <span className="shrink-0 text-xs text-[var(--muted)] tabular-nums">{value.phone}</span>
+        )}
+        {!disabled && (
+          <HoverTip text={clearLabel} className="inline-flex shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                onChange(null);
+                setQuery("");
+              }}
+              aria-label={clearLabel}
+              className="-mr-1 shrink-0 rounded px-1 text-base leading-none text-[var(--muted)] hover:text-[var(--foreground)]"
+            >
+              ×
+            </button>
+          </HoverTip>
+        )}
       </div>
     );
   }
