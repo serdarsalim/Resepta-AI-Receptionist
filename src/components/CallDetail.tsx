@@ -117,6 +117,13 @@ export function CallOutcomePill({
         : "neutral";
   return (
     <span
+      // When the word is the line's, the agent's own verdict is the colour;
+      // the hover says it in words.
+      title={
+        line && successful !== null
+          ? t(successful ? "calls.successful" : "calls.unsuccessful")
+          : undefined
+      }
       // The border is on every tone, transparent on the filled ones, so a
       // pill is one size whatever it says.
       className={`inline-block shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${
