@@ -12,6 +12,8 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { Card } from "./Card";
+import { buttonClass } from "./Control";
+import { InfoTip } from "./InfoTip";
 import { Sheet } from "./Sheet";
 import { InlineEditValue } from "./RecordField";
 import { useConfirm } from "./ConfirmDialog";
@@ -33,29 +35,28 @@ export function KnowledgeCard({ isOwner }: { isOwner: boolean }) {
   if (!isOwner && rows !== undefined && rows.length === 0) return null;
 
   return (
-    <Card
-      title={t("knowledge.title")}
-      tip={t("knowledge.hint")}
-      disabled={!isOwner}
-      // Top right, like every other add in the app. This one sat at the
-      // BOTTOM LEFT, under however many knowledge blocks the salon has
-      // written — the worst of both, since each block is a full rich-text
-      // editor and three of them push the button clean off the screen.
-      //
-      // Gated on isOwner here rather than by the fieldset: a Card's action
-      // renders outside it.
-      action={
-        isOwner ? (
+    <section className="space-y-2">
+      {/* The title and its add sit ABOVE the card, and the card holds the
+          blocks and nothing else (Nudge 13bcfad1; Serdar, 2026-10-21: "we
+          don't put a button inside a list"). The row keeps its height for a
+          member, who gets no add, so the card's edge sits where it does for
+          an owner. */}
+      <div className="flex min-h-8 items-center justify-between gap-3">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+          {t("knowledge.title")}
+          <InfoTip text={t("knowledge.hint")} />
+        </h2>
+        {isOwner && (
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="card-action"
+            className={buttonClass("outline", "sm")}
           >
             {t("knowledge.add")}
           </button>
-        ) : undefined
-      }
-    >
+        )}
+      </div>
+    <Card disabled={!isOwner}>
       {confirmDialog}
       <div className="space-y-4">
         {rows !== undefined && rows.length === 0 && (
@@ -86,6 +87,7 @@ export function KnowledgeCard({ isOwner }: { isOwner: boolean }) {
       </div>
       {adding && <AddKnowledgeSheet onClose={() => setAdding(false)} onCreate={create} />}
     </Card>
+    </section>
   );
 }
 
