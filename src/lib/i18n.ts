@@ -4053,6 +4053,23 @@ const dictionary = {
     en: "Voicemail",
     de: "Mailbox",
   },
+  "voiceDetail.noteSummaryLanguage": {
+    tr: "Özet dili",
+    en: "Summary language",
+    de: "Sprache der Zusammenfassung",
+  },
+  // The language call summaries are written in (2026-10-21). Starts as the
+  // business's language; the hint says so and that old summaries stay put.
+  "voiceDetail.summaryLanguage": {
+    tr: "Özet dili",
+    en: "Summary language",
+    de: "Sprache der Zusammenfassung",
+  },
+  "voiceDetail.summaryLanguageHint": {
+    tr: "Arama özetlerinin yazıldığı dil. Asistan hangi dilde konuşursa konuşsun, işletmenizin diliyle başlar. Değişiklik yayınladıktan sonraki aramalarda geçerli olur; eski özetler olduğu gibi kalır.",
+    en: "The language call summaries are written in. It starts as your business's language, whatever language the agent speaks. A change applies to calls after you publish; earlier summaries stay as they are.",
+    de: "Die Sprache, in der Anrufzusammenfassungen geschrieben werden. Sie beginnt mit der Sprache Ihres Betriebs, egal welche Sprache der Agent spricht. Eine Änderung gilt für Anrufe nach dem Veröffentlichen; frühere Zusammenfassungen bleiben, wie sie sind.",
+  },
   // Voicemail (Nudge 8782af94): one dropdown naming every answer, because a
   // switch beside a second choice was four answers drawn as two controls.
   "voiceDetail.voicemail": {

@@ -923,6 +923,13 @@ export default defineSchema({
         text: v.optional(v.string()),
       }),
     ),
+    // The language this agent's call summaries are written in, as chosen on
+    // the agent page (2026-10-21). Unset follows the business's language
+    // (lib/voiceAgentTemplate.summaryLanguageFor), which is what a Turkish
+    // business's staff want to read whatever language the agent was created
+    // in. Written only after the provider accepted the publish, like
+    // voicemail, and read back by syncTemplate so Update keeps the choice.
+    summaryLanguage: v.optional(v.union(v.literal("tr"), v.literal("en"), v.literal("de"))),
     // Variables staged on the provider's draft and not yet live (P8/P9: a
     // browser test stages the page's edits before dialling). The registry
     // (voiceAgentVariables) describes what callers hear, so it moves only

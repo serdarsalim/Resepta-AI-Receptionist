@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
-import type { TranslationKey } from "@/lib/i18n";
+import { LANGUAGES, type Language, type TranslationKey } from "@/lib/i18n";
 import { VoicePicker } from "./VoicePicker";
 import { InfoTip } from "./InfoTip";
 import { useConfirm } from "./ConfirmDialog";
@@ -73,6 +73,10 @@ type Detail = {
   // What callers hear; equals `version` unless a draft sits above it.
   liveVersion: number | null;
   voicemail: Voicemail;
+  // The language call summaries are written in: the agent's own choice, else
+  // the business's, which is `businessLanguage`.
+  summaryLanguage: Language;
+  businessLanguage: Language;
   voiceId: string | null;
   voices: {
     id: string;
@@ -138,6 +142,7 @@ type StoredDraft = {
   persona?: string;
   openers?: Openers;
   voicemail?: Voicemail;
+  summaryLanguage?: Language;
   rows?: VoiceVariable[];
 };
 
@@ -272,6 +277,7 @@ export function VoiceAgentPage({
   const [openers, setOpeners] = useState<Openers>(openersOf(null));
   const [voice, setVoice] = useState("");
   const [voicemail, setVoicemail] = useState<Voicemail>({ action: "hangup" });
+  const [summaryLanguage, setSummaryLanguage] = useState<Language | null>(null);
   // Only one preview plays at a time — clicking down the list otherwise leaves
   // four voices talking over each other.
   const previewRef = useRef<HTMLAudioElement | null>(null);
@@ -328,6 +334,7 @@ export function VoiceAgentPage({
         setBegin(detail.prompt?.beginMessage ?? "");
         setVoice(detail.voiceId ?? "");
         setVoicemail(detail.voicemail);
+        setSummaryLanguage(detail.summaryLanguage);
         setPersona(detail.personaName ?? "");
         setOpeners(openersOf(detail.openers));
         // A draft left behind on this browser wins over what the server says,
@@ -341,6 +348,7 @@ export function VoiceAgentPage({
           if (stored.persona !== undefined) setPersona(stored.persona);
           if (stored.openers !== undefined) setOpeners(openersOf(stored.openers));
           if (stored.voicemail !== undefined) setVoicemail(stored.voicemail);
+          if (stored.summaryLanguage !== undefined) setSummaryLanguage(stored.summaryLanguage);
           setSeed(stored.rows ?? null);
         }
         setRestored(true);
@@ -367,6 +375,8 @@ export function VoiceAgentPage({
   const personaDirty = !!detail && persona.trim() !== (detail.personaName ?? "");
   const openersDirty = !!detail && !sameOpeners(openers, openersOf(detail.openers));
   const voicemailDirty = !!detail && !sameVoicemail(voicemail, detail.voicemail);
+  const summaryDirty =
+    !!detail && summaryLanguage !== null && summaryLanguage !== detail.summaryLanguage;
   const instructionsDirty = !!detail?.prompt && draft !== detail.prompt.general;
   const openingDirty = !!detail?.prompt && begin !== detail.prompt.beginMessage;
   const promptDirty =
@@ -375,7 +385,8 @@ export function VoiceAgentPage({
     voiceDirty ||
     personaDirty ||
     openersDirty ||
-    voicemailDirty;
+    voicemailDirty ||
+    summaryDirty;
   const dirty = promptDirty || !!varsState?.dirty;
   // A draft at the provider the page did not make in this session: a publish
   // that stopped half way, or an edit from the provider's console.
@@ -396,12 +407,25 @@ export function VoiceAgentPage({
         persona,
         openers,
         voicemail,
+        summaryLanguage: summaryLanguage ?? undefined,
         rows: varsState?.rows,
       });
     } else {
       clearDraft(agentId);
     }
-  }, [restored, dirty, agentId, draft, begin, voice, persona, openers, voicemail, varsState?.rows]);
+  }, [
+    restored,
+    dirty,
+    agentId,
+    draft,
+    begin,
+    voice,
+    persona,
+    openers,
+    voicemail,
+    summaryLanguage,
+    varsState?.rows,
+  ]);
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(true);
@@ -429,6 +453,7 @@ export function VoiceAgentPage({
     // a restore back over a voice somebody picked since.
     ...(voiceDirty ? { voiceId: voice } : {}),
     ...(voicemailDirty ? { voicemail } : {}),
+    ...(summaryDirty && summaryLanguage ? { summaryLanguage } : {}),
     ...(varsState?.dirty
       ? {
           variables: varsState.rows.map((row) => ({
@@ -455,6 +480,7 @@ export function VoiceAgentPage({
       voiceDirty && t("voiceDetail.noteVoice"),
       varsDirty && t("voiceDetail.noteVariables"),
       voicemailDirty && t("voiceDetail.noteVoicemail"),
+      summaryDirty && t("voiceDetail.noteSummaryLanguage"),
     ].filter((part): part is string => typeof part === "string");
     if (changed.length === 0) return;
     void run(t("voiceDetail.publishing"), async () => {
@@ -470,7 +496,12 @@ export function VoiceAgentPage({
   };
 
   const providerChanges =
-    instructionsDirty || openingDirty || voiceDirty || voicemailDirty || !!varsState?.dirty;
+    instructionsDirty ||
+    openingDirty ||
+    voiceDirty ||
+    voicemailDirty ||
+    summaryDirty ||
+    !!varsState?.dirty;
 
   const saveAll = () => {
     // Separate from the provider publish on purpose: the name and the first
@@ -519,6 +550,7 @@ export function VoiceAgentPage({
     setPersona(detail?.personaName ?? "");
     setOpeners(openersOf(detail?.openers));
     if (detail) setVoicemail(detail.voicemail);
+    if (detail) setSummaryLanguage(detail.summaryLanguage);
     clearDraft(agentId);
     setStatus(null);
     setNotice(null);
@@ -1052,6 +1084,31 @@ export function VoiceAgentPage({
                       />
                     )}
                   </div>
+
+                  {/* Which language the call summaries are written in. Starts
+                      as the business's language, whatever the agent speaks,
+                      and rides Publish like the voicemail answer: the
+                      instruction lives in the agent's analysis at the
+                      provider. */}
+                  <label
+                    htmlFor="agent-summary-language"
+                    className="flex items-center gap-1.5 text-xs font-medium"
+                  >
+                    {t("voiceDetail.summaryLanguage")}
+                    <InfoTip text={t("voiceDetail.summaryLanguageHint")} />
+                  </label>
+                  <select
+                    id="agent-summary-language"
+                    value={summaryLanguage ?? detail.summaryLanguage}
+                    onChange={(event) => setSummaryLanguage(event.target.value as Language)}
+                    className={`${fieldClass("sm")} w-full`}
+                  >
+                    {LANGUAGES.map((entry) => (
+                      <option key={entry.code} value={entry.code}>
+                        {entry.label}
+                      </option>
+                    ))}
+                  </select>
 
                   <span className="flex items-center gap-1.5 text-xs font-medium">
                     {t("voiceDetail.canEndCall")}

@@ -130,6 +130,13 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 // caller said "Abdülkadir Çelik" to an agent whose own script never mentioned
 // saving details and whose First name switch was off, and the card stayed a
 // phone number.
+//
+// Folded into the same v17 before it shipped: the summary is written in the
+// agent's SUMMARY language (summaryLanguageFor: the owner's choice on the
+// agent page, else the business's language) instead of the language the
+// agent speaks. The same agent, born English and switched to Turkish in the
+// provider's dashboard, had kept writing English summaries. An analysis
+// field, so Update brings an existing agent onto its business's language.
 export const VOICE_AGENT_TEMPLATE_VERSION = 17;
 
 // The longest one call may run before the provider ends it. Ten minutes,
@@ -430,13 +437,16 @@ export function codePrompt(language: VoiceAgentLanguage): VoiceAgentPrompt {
 // produce "summary".
 export const VOICE_SUMMARY_FIELD = "resepta_call_summary";
 
-// Summarised in the language the CALL was held in, not the dashboard's. A
-// summary is worth reading because it carries the caller's own words for what
-// they wanted, and translating those into a second language loses the exact
-// phrasing that makes it evidence. A Turkish salon reads a Turkish dashboard
-// anyway, so the two only diverge for a business taking calls in a language it
-// does not administer in — and there the call's language is still the honest
-// one for a quote.
+// Written in the agent's SUMMARY language (summaryLanguageFor below): the
+// business's language unless the owner picked another on the agent page. It
+// followed the language the agent SPEAKS until 2026-10-21, on the theory that
+// a quote is most honest in the call's own language. Two things broke that.
+// The people reading summaries are the business's staff, and a Turkish
+// business wants Turkish summaries whatever its agent was created in
+// (Serdar). And the agent's language was compiled in here at publish time, so
+// Estate Emlak's agent, born English and switched to Turkish in the provider's
+// dashboard, kept writing English. The caller's exact words are still in the
+// transcript beside it.
 export function summaryAnalysisField(language: string) {
   const key = (language ?? "").toLowerCase().slice(0, 2);
   const name =
@@ -451,6 +461,23 @@ export function summaryAnalysisField(language: string) {
       `If nothing was settled, say what was missing.`,
     ].join(" "),
   };
+}
+
+// The languages a summary can be written in, the app's three.
+export type SummaryLanguage = "tr" | "en" | "de";
+export const SUMMARY_LANGUAGES: readonly SummaryLanguage[] = ["tr", "en", "de"];
+
+// An agent's summary language: its own choice (retellAgents.summaryLanguage),
+// else the business's language, else English. Every path that compiles the
+// summary field resolves it here, so birth, Update and the agent page's
+// Publish cannot disagree about which language an agent writes in.
+export function summaryLanguageFor(
+  choice: SummaryLanguage | null | undefined,
+  businessLanguage: string | null | undefined,
+): SummaryLanguage {
+  if (choice) return choice;
+  const key = (businessLanguage ?? "").toLowerCase().slice(0, 2);
+  return (SUMMARY_LANGUAGES as readonly string[]).includes(key) ? (key as SummaryLanguage) : "en";
 }
 
 // "Don't call me again", asked for by name (customers.noAiCallsAt). A BOOLEAN,
@@ -562,9 +589,11 @@ export const TEMPLATE_ANALYSIS_FIELDS: ReadonlySet<string> = new Set([
   CALLER_LAST_NAME_FIELD,
 ]);
 
-export function templateAnalysisFields(language: string) {
+// `summaryLanguage` is the agent's summary language (summaryLanguageFor),
+// never the language it speaks.
+export function templateAnalysisFields(summaryLanguage: string) {
   return [
-    summaryAnalysisField(language),
+    summaryAnalysisField(summaryLanguage),
     noAiCallsAnalysisField(),
     callbackTimeAnalysisField(),
     ...callerNameAnalysisFields(),
@@ -721,6 +750,9 @@ export function appointmentReceptionistTemplate(args: {
   // agent that already exists. Prompt text reaches new agents only — the rule
   // at the top of this file, now enforced by which caller bothers to resolve.
   prompt?: VoiceAgentPrompt;
+  // The language summaries are written in (summaryLanguageFor). Every caller
+  // that knows the business passes it; absent, the agent's own language.
+  summaryLanguage?: SummaryLanguage;
 }) {
   const prompt = args.prompt ?? codePrompt(args.language);
   const empty = { type: "object" as const, properties: {} };
@@ -902,7 +934,7 @@ export function appointmentReceptionistTemplate(args: {
       // so new agents are born with it and syncTemplate's PATCH carries it to
       // existing ones.
       max_call_duration_ms: MAX_CALL_DURATION_MS,
-      post_call_analysis_data: templateAnalysisFields(args.language),
+      post_call_analysis_data: templateAnalysisFields(args.summaryLanguage ?? args.language),
     },
   };
 }

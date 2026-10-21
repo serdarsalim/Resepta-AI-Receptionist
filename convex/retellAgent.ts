@@ -30,11 +30,13 @@ import { enginePatchFor } from "./lib/voiceModels";
 import {
   appointmentReceptionistTemplate,
   saveCustomerDetailsTool,
+  summaryLanguageFor,
   templateAnalysisFields,
   DEFAULT_VOICE_IDS,
   END_CALL_TOOL_NAME,
   TEMPLATE_ANALYSIS_FIELDS,
   VOICE_AGENT_TEMPLATE_VERSION,
+  type SummaryLanguage,
   type VoiceAgentLanguage,
 } from "./lib/voiceAgentTemplate";
 import { mergeBoostedKeywords } from "./lib/boostedKeywords";
@@ -130,6 +132,9 @@ type EditorContext = {
   // not the agent.
   orgId: Id<"orgs">;
   orgName: string;
+  // The business's language ("tr"), returned all along and declared now that
+  // the summary language falls back to it.
+  language: string;
   demoMode: boolean;
   apiKey: string | null;
   variables: Array<VoiceVariableInput & { order: number }>;
@@ -142,6 +147,8 @@ type EditorContext = {
   canEndCall: boolean;
   // The voicemail choice made on the agent page; null = the template's.
   voicemail: VoicemailChoice | null;
+  // The summary language chosen on the agent page; null = the business's.
+  summaryLanguage: SummaryLanguage | null;
   llmModel: string | null;
   llmHighPriority: boolean | null;
   // The fleet defaults, already validated by agentEditorContext. Each sits
@@ -172,6 +179,12 @@ type EditorContext = {
 };
 
 type KeywordPlan = { ours: string[]; previous: string[] | null };
+
+// The language this agent's summaries are written in: its own choice, else
+// the business's (lib/voiceAgentTemplate.summaryLanguageFor).
+function summaryLanguageOf(context: EditorContext): SummaryLanguage {
+  return summaryLanguageFor(context.summaryLanguage, context.language);
+}
 
 // The boosted_keywords a publish sends: this org's words merged over the ones
 // somebody else placed on the agent (lib/boostedKeywords). Every publish that
@@ -534,6 +547,11 @@ export const read = action({
             )
           : (agent.version ?? null),
       voicemail: voicemailChoiceOf(agent),
+      // Resepta's record of the choice, not read back off the provider's
+      // field: the instruction there is prose, and the business's language
+      // is what an agent that never chose follows.
+      summaryLanguage: summaryLanguageOf(context),
+      businessLanguage: summaryLanguageFor(null, context.language),
       voiceId: agent.voice_id ?? null,
       voices,
       language: agent.language ?? null,
@@ -707,6 +725,7 @@ type AgentEdits = {
   voiceId?: string;
   variables?: VariableRow[];
   voicemail?: VoicemailChoice;
+  summaryLanguage?: SummaryLanguage;
   // The version the editor read. A different latest version means somebody
   // changed the agent in the meantime, and publishing over it would undo them.
   baseVersion?: number;
@@ -755,8 +774,11 @@ async function applyAgentEdits(
     if (edits.beginMessage !== undefined) llmPatch.begin_message = edits.beginMessage;
     llmPatch.general_tools = withRuntimeSaveTool(liveLlm?.general_tools);
   }
+  // The summary language this publish leaves live: the edit's, else the one
+  // already chosen, else the business's.
+  const summaryLanguage = edits.summaryLanguage ?? summaryLanguageOf(context);
   if (edits.variables) {
-    const plan = planVariables(context, edits.variables, live, liveLlm);
+    const plan = planVariables(context, edits.variables, live, liveLlm, summaryLanguage);
     if (llmId) {
       llmPatch.default_dynamic_variables = plan.defaultDynamicVariables;
       // The variables' tool list already starts from the live tools and keeps
@@ -765,6 +787,15 @@ async function applyAgentEdits(
     }
     agentPatch.post_call_analysis_data = plan.postCallAnalysis;
     nextVariables = plan.next;
+  } else if (edits.summaryLanguage) {
+    // Only our fields are rewritten, in the new language; everything else
+    // the analysis list carries stays as it is (the merge syncTemplate makes).
+    agentPatch.post_call_analysis_data = [
+      ...(live.post_call_analysis_data ?? []).filter(
+        (item) => !TEMPLATE_ANALYSIS_FIELDS.has(String(item.name ?? "")),
+      ),
+      ...templateAnalysisFields(summaryLanguage),
+    ];
   }
   // {{opener}} is Resepta's to write while the phone rings (P34,
   // lib/opener). The provider's own default for it is the fallback for a ring
@@ -869,6 +900,17 @@ async function applyAgentEdits(
       voicemail: edits.voicemail,
     });
   }
+  if (edits.summaryLanguage) {
+    // Read back by syncTemplate the same way. The business's own language is
+    // stored as no choice, so the agent keeps following the business.
+    await ctx.runMutation(internal.retell.setAgentSummaryLanguage, {
+      retellAgentId: agentId,
+      summaryLanguage:
+        edits.summaryLanguage === summaryLanguageFor(null, context.language)
+          ? null
+          : edits.summaryLanguage,
+    });
+  }
   await stampKeywords(ctx, agentId, boosted.ours);
   return { version: draft.version, published: true, previousPrompt };
 }
@@ -885,6 +927,7 @@ export const publishAgent = action({
     voiceId: v.optional(v.string()),
     variables: v.optional(v.array(voiceVariableInput)),
     voicemail: v.optional(voicemailChoice),
+    summaryLanguage: v.optional(v.union(v.literal("tr"), v.literal("en"), v.literal("de"))),
     versionNote: v.optional(versionNoteValidator),
     stage: v.optional(v.boolean()),
   },
@@ -1373,6 +1416,7 @@ function planVariables(
   variables: VariableRow[],
   live: AgentDoc,
   liveLlm: LlmDoc | null,
+  summaryLanguage: SummaryLanguage,
 ): {
   next: VariableRow[];
   defaultDynamicVariables: Record<string, string>;
@@ -1439,13 +1483,13 @@ function planVariables(
     ...(live.post_call_analysis_data ?? []).filter(
       (item) => item.type === "system-presets",
     ),
-    // Ours, rebuilt from the agent's CURRENT language rather than carried
-    // over from the live copy, so switching an agent to German also switches
-    // the summaries. Also the line that installs them on agents provisioned
-    // before they existed: this list is rewritten in full on every publish,
-    // so the summary and the no-AI-calls flag arrive the next time anything
-    // here saves.
-    ...templateAnalysisFields(live.language ?? "en-US"),
+    // Ours, rebuilt in the agent's summary language rather than carried over
+    // from the live copy, so a new choice (or a business that changed its
+    // language) reaches the summaries. Also the line that installs them on
+    // agents provisioned before they existed: this list is rewritten in full
+    // on every publish, so our fields arrive the next time anything here
+    // saves.
+    ...templateAnalysisFields(summaryLanguage),
     // The abstention rule is appended HERE, not written into the owner's
     // description: analysis is an inference pass over the transcript, and
     // left uninstructed it answers every field it can rationalise — the 20
@@ -1725,6 +1769,7 @@ async function provisionAgent(
     complete: boolean;
     apiKey: string;
     orgName: string;
+    orgLanguage: string;
     platformVoiceModel: string | null;
     platformHighPriority: boolean | null;
     row: {
@@ -1768,6 +1813,10 @@ async function provisionAgent(
       businessName: started.orgName,
       site,
       prompt,
+      // Born summarising in its business's language, whichever language it
+      // speaks: Estate Emlak's agent was created English for a Turkish
+      // business and wrote English summaries.
+      summaryLanguage: summaryLanguageFor(null, started.orgLanguage),
     });
 
     let llmId = started.row.retellLlmId;
@@ -2167,14 +2216,17 @@ export const syncTemplate = action({
     const live = (await (await call(key, "GET", `get-agent/${id}`)).json()) as AgentDoc;
     if (live.version === undefined) throw new Error("Agent has no version to clone.");
 
-    // The template needs a language for the summary field's instruction; an
-    // agent whose language is outside the template's three gets English,
-    // which is at least an instruction rather than a crash.
+    // The template needs a language for its holding lines; an agent whose
+    // language is outside the template's three gets English, which is at
+    // least an instruction rather than a crash. The summary is written in
+    // the agent's SUMMARY language instead (summaryLanguageOf), which is how
+    // Update brings an agent born in another language onto its business's.
     const language = (
       ["tr-TR", "en-US", "de-DE"].includes(live.language ?? "")
         ? live.language
         : "en-US"
     ) as VoiceAgentLanguage;
+    const summaryLanguage = summaryLanguageOf(context);
     const template = appointmentReceptionistTemplate({
       language,
       businessName: context.orgName,
@@ -2183,6 +2235,7 @@ export const syncTemplate = action({
       // default would hand the tool back to a shop that deliberately took it
       // away, every time they clicked Update.
       canEndCall: context.canEndCall,
+      summaryLanguage,
     });
 
     const draft = (await (
@@ -2242,8 +2295,8 @@ export const syncTemplate = action({
     // template.agent, minus what must not follow the template: the agent
     // keeps its own language, and the analysis list is a merge — the live
     // fields stay (system presets, the owner's collected fields), only OUR
-    // fields are replaced (the summary, whose language instruction tracks the
-    // agent, and the no-AI-calls flag).
+    // fields are replaced (the summary in the agent's summary language, the
+    // no-AI-calls flag, the callback time and the caller's name).
     const {
       language: _templateLanguage,
       post_call_analysis_data: _templateAnalysis,
@@ -2280,7 +2333,7 @@ export const syncTemplate = action({
       version: draft.version,
       ...engineering,
       voicemail_option: voicemail,
-      post_call_analysis_data: [...liveAnalysis, ...templateAnalysisFields(language)],
+      post_call_analysis_data: [...liveAnalysis, ...templateAnalysisFields(summaryLanguage)],
       ...boosted.patch,
     });
     await call(key, "POST", `publish-agent-version/${id}`, {

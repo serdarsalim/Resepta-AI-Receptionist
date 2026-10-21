@@ -924,6 +924,7 @@ export const agentEditorContext = internalQuery({
       openers: agent.openers ?? null,
       canEndCall: agent.canEndCall ?? true,
       voicemail: agent.voicemail ?? null,
+      summaryLanguage: agent.summaryLanguage ?? null,
       llmModel: agent.llmModel ?? null,
       llmHighPriority: agent.llmHighPriority ?? null,
       platformVoiceModel: resolvePlatformVoiceModel(await platformValue(ctx, "voiceModel")),
@@ -1019,6 +1020,27 @@ export const setAgentVoicemail = internalMutation({
         ...(voicemail.text?.trim() ? { text: voicemail.text.trim() } : {}),
       },
     });
+    return null;
+  },
+});
+
+// The summary language an agent-page publish just put live (2026-10-21).
+// Null follows the business's language again, which is also what choosing
+// the business's own language stores: an agent that never chose keeps
+// following the business if its language changes.
+export const setAgentSummaryLanguage = internalMutation({
+  args: {
+    retellAgentId: v.string(),
+    summaryLanguage: v.union(v.literal("tr"), v.literal("en"), v.literal("de"), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, { retellAgentId, summaryLanguage }) => {
+    const agent = await ctx.db
+      .query("retellAgents")
+      .withIndex("by_agent", (q) => q.eq("retellAgentId", retellAgentId))
+      .unique();
+    if (!agent) return null;
+    await ctx.db.patch(agent._id, { summaryLanguage: summaryLanguage ?? undefined });
     return null;
   },
 });
