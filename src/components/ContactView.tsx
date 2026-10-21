@@ -108,7 +108,7 @@ export const PANE_DIVIDER =
 // above, because the footer sits at the bottom of the window.
 function MetaLabel({ label, hint }: { label: string; hint: string }) {
   return (
-    <span className="flex items-center gap-2">
+    <span className="flex items-center gap-2 @max-[20rem]:gap-1">
       {label}
       <InfoTip text={hint} placement="above" />
     </span>
@@ -533,26 +533,40 @@ export function ContactView({
                 with it the gate: nothing reads customers.consentAt any more.
                 Added and Last reply moved up into the record as rows.
 
-                THREE EQUAL COLUMNS AT EVERY WIDTH, Nudge's call ("always side
-                by side in a 3 column rather than stack in any resolution"): a
-                2 + 1 reflow strands the third switch on a line of its own,
-                where it reads as a control that failed to load. On a narrow
-                column a two-word label wraps instead, and the footer grows a
-                line. Do not truncate: "No AI c…" on the control that stops
+                THREE COLUMNS AT EVERY WIDTH, equal wherever they fit, Nudge's
+                call ("always side by side in a 3 column rather than stack in
+                any resolution"): a 2 + 1 reflow strands the third switch on a
+                line of its own, where it reads as a control that failed to
+                load. On a narrow column a two-word label wraps instead, and
+                the footer grows a line. Do not truncate: "No AI c…" on the control that stops
                 the machine calling somebody is worse than a wrap.
 
                 8px inside a cell, 16px between cells. The ratio is the point:
                 it is what makes the row read as three pairs rather than six
-                loose things. */}
-            <div className="shrink-0 border-t border-[var(--border)] px-4 py-3">
-              <div className="grid grid-cols-3 items-center gap-x-4 text-xs text-[var(--muted)]">
+                loose things.
+
+                Two departures from Nudge's markup, both measured in Inter
+                (2026-10-21), and neither changes the look on a desktop:
+                - A column never shrinks below its longest word
+                  (minmax(min-content, 1fr), and no min-w-0 on the cells).
+                  Nudge's minmax(0, 1fr) let "Unsubscribe" run 4px into Mute
+                  on a 375px phone and 15px into it at 1024px with the
+                  sidebar open; with the floor, a narrow column takes the
+                  room from its neighbours, whose labels wrap instead.
+                - Under a 20rem footer (a 320px phone, Turkish at 1024px) even
+                  that overflowed the card, so both gaps halve there, 4px and
+                  8px, which keeps the ratio. Every width from 271px up then
+                  fits in all three languages. A longer label moves these
+                  numbers; measure before changing one. */}
+            <div className="@container shrink-0 border-t border-[var(--border)] px-4 py-3">
+              <div className="grid grid-cols-[repeat(3,minmax(min-content,1fr))] items-center gap-x-4 text-xs text-[var(--muted)] @max-[20rem]:gap-x-2">
                 {/* Unsubscribe: no marketing, on any channel (campaigns, bulk
                     messages and calls, win-backs). The customer's own link in
                     a marketing email turns it on; so can whoever hears "stop
                     sending me offers". Turning it OFF puts somebody back on
                     the marketing list, so that direction asks first, with
                     Cancel holding focus. */}
-                <div className="flex min-w-0 items-center gap-2">
+                <div className="flex items-center gap-2 @max-[20rem]:gap-1">
                   <MetaLabel label={t("customers.unsubscribe")} hint={t("customers.unsubscribeHint")} />
                   <SinceTip at={customer.marketingEmailOptOutAt}>
                     <CheckSwitch
@@ -565,7 +579,7 @@ export function ContactView({
                 </div>
                 {/* Mute: what this person may put in front of the business,
                     not what the business may send them. */}
-                <div className="flex min-w-0 items-center gap-2">
+                <div className="flex items-center gap-2 @max-[20rem]:gap-1">
                   <MetaLabel label={t("customers.mute")} hint={t("customers.muteHint")} />
                   <CheckSwitch
                     small
@@ -578,7 +592,7 @@ export function ContactView({
                     robot calls still gets their reminders. On by a person
                     here, or by the phone agent when the caller asks on a
                     call; off only by a person. */}
-                <div className="flex min-w-0 items-center gap-2">
+                <div className="flex items-center gap-2 @max-[20rem]:gap-1">
                   <MetaLabel label={t("customers.noAiCalls")} hint={t("customers.noAiCallsHint")} />
                   <SinceTip at={customer.noAiCallsAt}>
                     <CheckSwitch
