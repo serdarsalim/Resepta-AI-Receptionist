@@ -637,17 +637,19 @@ rather than after what it does.
   at, and `metadataBase` names the marketing apex. robots.txt still keeps
   crawlers off `/appt/`.
 
-- **Services and Products are SEPARATE CARDS in Business settings**, mirroring
-  the booking page's split. A product books no time, holds no chair, and
-  answers a different question in every column the table has; mixed in, the
-  only thing marking it out was an empty Duration cell. That cell is now empty
+- **Services and Products are SEPARATE CARDS** (on the Knowledge tab since
+  2026-08-22), mirroring the booking page's split. A product books no time,
+  holds no chair, and answers a different question in every column the
+  table has; mixed in, the only thing marking it out was an empty Duration
+  cell. That cell is now empty
   for a good — unless it carries a lead time, which is a real fact about the
   row — and a unit never renders without a value to qualify ("— days ahead" and
   a lone "₺" both read as fields that failed rather than fields nobody set).
-  The Products card appears only once a product exists. There is deliberately
-  NO "Add product" button: the Add sheet has had a Service/Product Type switch
-  since before the card existed, and a second button would be a second door
-  onto one form.
+  The Products card appears only once a product exists, and the first one
+  goes in through Add service's Type switch. After that Products has its own
+  Add product (Serdar, 2026-08-21: the click answers Type, so the sheet opens
+  on Product), outlined and above its card since 2026-10-21, because Add
+  service is that page's filled action.
 
 - **`/book/<slug>` is a THREE-STEP WIZARD, not a growing page** (Serdar,
   2026-08-20, reversing this file's own "each answer reveals the next
@@ -771,12 +773,14 @@ rather than after what it does.
     The write never checks the grid. The assistants' nearest free times
     follow the same rule, since they read `freeStarts`.
   - **The business's own terms line** sits above Book when the business set
-    `orgs.termsUrl` and/or `orgs.privacyUrl` (Business → General → Terms and
-    privacy, shown while the page is on; http(s) only, refused as
-    `invalid-url`). Their pages, linked; nothing of ours. Unset, no line.
+    `orgs.termsUrl` and/or `orgs.privacyUrl` (Business → General → Terms page
+    and Privacy page, two rows shown while the page is on; http(s) only,
+    refused as `invalid-url`). Their pages, linked; nothing of ours. Unset,
+    no line.
   - **`orgs.address`** shows beside the time on the booking page, on its
     confirmation and on the manage page, except for a delivery, which goes
-    to the customer's address.
+    to the customer's address. It is stored on up to three lines and shown
+    here on one (`lib/businessAddress.addressOneLine`, AGENTS.md).
   - **Embedding** (P29, Nudge c7459ed2): `/book/<slug>/embed` renders the
     same `BookingFlow` and is the ONE route `next.config.ts` lets another
     site frame (`frame-ancestors *`, X-Frame-Options cleared); the plain page,
@@ -920,6 +924,11 @@ rather than after what it does.
   timing control** (`clampOffset` pins them to 0). A confirmation minutes late
   reads as the booking not having worked — the customer is still holding their
   phone. If a real case appears, it is a suppression rule, not a delay.
+- **The list (2026-10-21; the tab is called Automations now).** Add
+  automation sits above the card, filled, and the card holds the rules and
+  nothing else. When and What we send take half the card each (When was
+  capped at 17rem, so the longest trigger wrapped beside an empty half), and
+  a chevron ends every row from sm to say it opens.
 
 ## Goods (2026-08-15) — services without a duration
 
@@ -1043,6 +1052,19 @@ deals; we sell services, and an appointment is the thing a customer bought.
   to CLEAR a value, which is right for an org field somebody filled in by
   mistake and wrong for a value the record always has. On the status picker it
   was a way to hand the server a status it rejects.
+- **The footer is Nudge's one row** (2026-10-21): Unsubscribe · Mute · No AI
+  calls, each a label with its (i) and a small switch (`CheckSwitch small`),
+  emerald when on, pinned under the field list so it stays in reach on a long
+  record. Unsubscribe and No AI calls say "Since <date>" on hover. Consent
+  left the footer and the product (AGENTS.md, "Consent is not a gate"), and
+  Added and Last reply became the record's last rows (Last reply only for
+  someone who has written). Three columns at every width, never two plus
+  one: each pair takes its natural width (`repeat(3,auto)`) and the row
+  spreads them edge to edge, so a label wraps only when the three cannot
+  share a line (equal thirds wrapped "No AI calls" in a 381px pane); a
+  column never shrinks below its longest word, and both gaps halve under a
+  20rem footer (`@container`), which keeps every width from 271px up clear
+  in all three languages.
 - **Notes are a chat**: bubbles, byline above (author + when), click the bubble
   to edit, delete hover-revealed on the byline. No expand/collapse — a bubble
   shows the whole note, which deleted the ResizeObserver that measured a
@@ -1212,7 +1234,10 @@ deals; we sell services, and an appointment is the thing a customer bought.
     origins at its own element, so a header, a scroller and a composer each
     tiling the doodles put three different phases of the pattern side by side
     and seamed at every boundary. One parent, one continuous sheet.
-- **The opened call is Nudge's layout, ported back.** Everything the call
+- **The opened call is Nudge's layout, ported back.** (The customer's Calls
+  tab no longer opens a call: since P11 each call is a card, rebuilt
+  2026-10-21, see "Call cards" below. This layout is `CallDetail`, which
+  Voice → Calls still opens.) Everything the call
   PRODUCED — summary, how it ended, what it cost, what it collected — is ONE
   raised card on the paper; three separate blocks made the reader assemble that
   themselves. The transcript's bubbles then sit DIRECTLY on the paper with no
@@ -1269,6 +1294,45 @@ deals; we sell services, and an appointment is the thing a customer bought.
     the row that said so.
   - The agent list query is owner-gated server-side, so for staff it resolves to
     undefined and the button never appears rather than appearing and failing.
+
+### Call cards (2026-10-21)
+
+The customer's Calls tab is a column of cards, newest first, one per call
+(`CallCards` in ConversationPanel; Nudge's card, first ported in P11 and
+rebuilt to it on 2026-10-21). `messages.feedForCustomer` hands each call its
+review, its agent's name (this org's `retellAgents` row) and the number it
+rang.
+
+- **The top row** is the status pill and the time (the full date on hover;
+  the day rides the chat's date pill above). The pill's WORD says what
+  happened on the line, read from the disconnect code and the length through
+  `lib/callOutcome` (Completed, No answer, Voicemail, Busy, Declined…; a
+  written outcome wins), and its COLOUR says whether the agent got what it
+  called for: green when the provider judged the call successful, amber when
+  it did not or the line never answered, outlined when nothing is known.
+  When the word is the line's, the hover says the verdict in words. The
+  length shows here only when there is no recording.
+- **One inset panel** (`CALL_INSET`) holds everything else, stacked, and in
+  two columns once the card is 36rem wide (`@xl`). The right column (first
+  when stacked): the Summary, what the call booked (when, which services,
+  "since cancelled") or the callback it asked for, then the Notes
+  (`ReviewNotes` on `calls.setReview`, autosaved, Pass or Miss, signed
+  "Ayşe · edited by Serdar"). The left: the parties line (whoever rang first,
+  an arrow, the other; the customer by name, else by the number, and our
+  side by the agent's name; the hover gives the direction and the number;
+  on a phone it wraps between the names, never inside one), a quiet line
+  with how it ended (unless the pill already says so), who placed it, its
+  bulk run or "requested callback", and the collected values as a
+  label-and-value list (`CollectedList`).
+- **Under the panel** the player (`CallRecording`, ours: it knows the length
+  before a byte loads, and its play button is the raised square), then a
+  Transcript link, closed by default, that opens the words on the card
+  below it. A card reached from the All index opens with its transcript
+  showing.
+- **The All index** marks a judged call with its Pass or Miss
+  (`VerdictMark`) and names a call with no summary by how it ended instead of
+  "Template message". The feed's search matches a call's note as well as its
+  summary and transcript.
 
 ### The inbox arrives with nothing selected (2026-08-17)
 
@@ -1436,6 +1500,16 @@ the same registry from their first publish. Customer destinations still pass
 through `contactFields.source === "voice"`; phone, consent and other reserved
 columns never become writable through variable configuration.
 
+Since template v17 (2026-10-21) the caller's first and last name are
+post-call fields of ours on every agent (`customer_first_name`,
+`customer_last_name`), whatever the registry or the owner's script says, and
+like every analysis value they fill only an empty column. A switched-off
+identity column (`voiceLockedIdentity`) refuses a change but takes a first
+value, in `applyVoiceContactValues` and in the ring-time `{{information}}`
+list alike. The summary is written in the agent's Summary language, the
+business's unless the owner picks another. Both are in
+[`phone-agent.md`](phone-agent.md) → "Template v17".
+
 ### Publishing an agent: one draft, one named version (P7, 2026-10-17)
 
 Every edit the agent page makes goes through `retellAgent.applyAgentEdits`:
@@ -1489,20 +1563,39 @@ before the browser joins and is fatal if it fails.
   debit as a call, plus `usageMonthly.voiceTestCalls/Seconds/BilledMicroUsd`.
 - Deletion: `agentTests` is in `ORG_TABLES` and in the customer `FOOTPRINT`
   (rows run as a customer go with them).
-- The page (P9, tabs since P35): the agent page has two underlined tabs,
-  Setup (the editor) and Testing, both mounted with the idle one hidden, so
-  a call in progress survives a look at the prompt and an unsaved edit
-  survives a look at the tests; `?agentTab=testing` keeps the tab across a
-  reload and the list clears it when it closes the agent. Testing has two
-  modes, In the browser (default, `AgentBrowserTest`) and Ring a phone (the
-  old `testCall`). The browser mode picks a customer to call as (or a new
-  caller), a direction, and shows `browserTestVariables` with every value
-  editable and the first sentence; Start stages the page's edits
-  (`publishAgent` with `stage`) and dials that draft, or a draft already
-  waiting, else the published version. `retell-client-js-sdk` 3.x is
-  imported inside the click. The mode switch is locked while a call is up;
-  leaving the agent hangs up. Past tests list under the test
-  (`AgentTestsLog`), each opening its result.
+- The page (P9, tabs since P35, Nudge's Testing tab since 2026-10-21): the
+  agent page has three underlined tabs, Setup (the editor), Testing and
+  Notes, all mounted with the idle ones hidden, so a call in progress
+  survives a look at the prompt and an unsaved edit survives a look at the
+  tests; `?agentTab=testing|notes` keeps the tab across a reload and the list
+  clears it, and an open review's `review`, when it closes the agent. The
+  draft state ("Draft v{n}, not live"), Discard and Publish ride the end of
+  the tab row on every tab. Testing is two cards in the Setup pane's look
+  (`AGENT_PANE_CARD`):
+  - **Call setup** (`AgentBrowserTest`): Call as (a customer, or a new
+    caller), Direction and Audio on one row. Audio is the microphone and
+    speaker in one `SearchableSelect`, remembered per browser, because the
+    system default input can be a nearby iPhone (Nudge, 2026-09-20). Under
+    it, What the agent knows, a bordered box: the opening line as this
+    caller would hear it, then the values `browserTestVariables` returns,
+    editable for this test only. The values the prompt, opening line or
+    first sentences name are shown (one-line ones two to a line, long ones
+    full width); the empty ones and the ones nothing names fold behind a
+    dotted line each. They are read once per change of customer, direction
+    or first sentences, and only while the tab shows and no call is up.
+    Start test, under both, stages the page's edits (`publishAgent` with
+    `stage`) and dials that draft, or a draft already waiting, else the
+    published version. `retell-client-js-sdk` 3.x is imported inside the
+    click; leaving the page hangs up. "Ring a real phone instead", a link at
+    the foot of the card, opens a number field that calls `testCall`: the
+    published version, a real call.
+  - **Test results** (`AgentTestsLog`): one line per test (who, which way,
+    version, length, when) with its Pass or Miss when set, the running test
+    as the open top row. An opened test (`AgentTestResult`) shows what its
+    tools would have done, then the conversation (the recording and the
+    words as a thread, fetched from the provider, never stored), the
+    summary, what it heard (`CollectedList`) and the owner's review
+    (`ReviewNotes` on `agentTests.setReview`).
 - Staged variables: a stage keeps its validated rows on
   `retellAgents.stagedVariables` with the draft's `stagedVersion`, because
   `voiceAgentVariables` describes what callers hear; `publishDraft` (or the
@@ -1521,6 +1614,50 @@ before the browser joins and is fatal if it fails.
   `usageMonthly` unbilled. The demo org, a suspended business, a missing or
   unpriced model, an exhausted budget and an unselected chat agent refuse
   as they would for a real turn.
+
+### Reviews and the Notes tab (2026-10-21)
+
+A review is a note and a Pass or Miss on one call or one browser test, kept
+on that row (the rules are in AGENTS.md, "A review is the team's").
+
+- **Fields.** `calls` and `agentTests` both carry `note`, `verdict`
+  (`schema.callVerdict`), `noteCreatedBy` / `noteUpdatedBy` /
+  `noteUpdatedAt` (the signature, cleared when the review is emptied), and
+  for the Notes tab `action` with its own three stamps, `doneAt` and
+  `doneBy`. Both tables have `by_org_agent_reviewed` (`orgId`,
+  `retellAgentId`, `noteUpdatedAt`), which is how the tab finds what was
+  reviewed without scanning calls.
+- **Writes.** `calls.setReview` (any member) and `agentTests.setReview`
+  (owner) take whichever half changed; `agentReviews.setAction` (owner)
+  takes What we did and/or done, Reopen clearing `doneAt` and `doneBy`.
+- **`ReviewNotes`** (Nudge's, ported for the call cards) is the one editor
+  for both: autosaved on blur and on every verdict click, Saving… then Saved
+  at the right of its title row, signed "Ayşe · edited by Serdar" with the
+  time on hover. On a call (`verdictOnFocus`) the Pass and Miss pair shows
+  only while the note is open and the pick alone at rest, since most calls
+  are never reviewed; a test shows both at all times. `VerdictMark` is the
+  same chip read-only (the All index, the Test results rows).
+- **The Notes tab** (`AgentNotes`, read once the tab is first shown):
+  `agentReviews.list` returns this agent's reviewed calls and tests, the
+  newest 200 of each, and says when it stopped there. Two switches, Real
+  calls or Test calls, and Misses, Passes or Resolved with counts; a review
+  that is done is Resolved whatever its verdict, and one with a note and no
+  verdict is a Miss. One line each: who, who wrote it, the feedback (or
+  What we did, once resolved), its age. A row opens the review in place of
+  the list (`?review=c:<callId>` or `t:<testId>`, replaceState), the title
+  bar reads `<agent> › <customer>`, and "2 of 6 ‹ ›" walks the list as it
+  stood when the review opened. The review card holds the feedback and What
+  we did side by side, each signed, with Move to Passes or Misses and Mark
+  done (Reopen once done); under it the call or test itself: who called,
+  the number, who placed or ran it, the length, how it ended, a test's kind
+  and version, what it heard, what a test's tools would have done, and the
+  conversation (a call's stored transcript, a test's words fetched from the
+  provider). A customer being deleted takes their reviews off the list at
+  once.
+- **Not ported from Nudge's Analysis tab:** the review number, AI-written
+  reviews, what a call triggered (Resepta's calls fire no rules; bookings
+  do), and the attempt history. Reading is owner-only like the rest of the
+  agent page; Nudge lets members read.
 
 ## The calendar and booking sheet after 2026-08-19 (the Google pass — read this before the 2026-07-29 entry in `journal/2026-07.md`)
 
@@ -1565,7 +1702,11 @@ Meetings tab, measured it against Google side by side, and P5 of the port
   still snap to 15 minutes.
 - **The day header is a small weekday over a 22px date** in a 40px circle
   (today filled accent, its weekday accent), sentence case, and the period
-  heading beside the arrows is 22px regular. Chips read who before when:
+  heading beside the arrows is 22px regular. The week's heading names the
+  month, Google's way (`lib/datetime.formatWeekHeading`, 2026-10-21):
+  "October 2026", "Oct – Nov 2026" across two months, "Dec 2026 – Jan 2027"
+  across two years, since the day columns already carry the dates. Chips
+  read who before when:
   "Ayşe Yılmaz, 10:00" on a short chip, the name over "10:00 – 10:30" on a
   tall one.
 - **Overlaps always render side by side.** The week view's "3 bookings"
@@ -1584,20 +1725,26 @@ Meetings tab, measured it against Google side by side, and P5 of the port
   read "GMT+03" over Malaysian hours. The closed shading is still computed in
   the business's zone and projected onto the viewer's day.
 - **Header order is Google's**: the side panel's ☰, then Today as an
-  always-visible outlined pill (`periodHasToday` is deleted — a pill that
-  vanished made the row twitch), arrows + heading next, the view picker as a
-  matching outlined pill on the right. **There is no "new appointment" button
+  always-visible pill (`periodHasToday` is deleted: a pill that vanished
+  made the row twitch), arrows + heading next, the view picker as a matching
+  pill on the right. Both wear `buttonClass("pill")`, round and raised, since
+  2026-10-21. **There is no "new appointment" button
   — don't reintroduce it.** The grid is the button: click or drag a slot, or
   a month cell. Serdar flip-flopped on this and landed on remove.
 - **The side panel** (`CalendarPanel`, md and up): a small month (today
-  circled, the days on screen banded), the team as a colour-keyed tick list
-  (then anyone deactivated a booking in range names, then Unassigned), and
-  the services. The lists filter every view, the year's dots on the server
-  (`appointments.startsInRange` takes `staffIds` / `serviceIds`). Empty means
-  all; the last ticked row cannot be unticked. ☰ folds the panel away; while
-  it is closed, and on a phone, two toolbar pickers (`FilterPicker`) stand in,
-  so a filter is never out of sight. Panel state per browser, filters per
-  browser per business, both in localStorage. 192px wide, Google's, with a
+  circled, the days on screen banded) and the team as a colour-keyed tick
+  list (then anyone deactivated a booking in range names, then Unassigned).
+  The list filters every view, the year's dots on the server
+  (`appointments.startsInRange` takes `staffIds`; its `serviceIds` is no
+  longer sent). Empty means all; the last ticked row cannot be unticked. ☰
+  folds the panel away; while it is closed, and on a phone, a toolbar picker
+  (`FilterPicker`, a pill) stands in, so a filter is never out of sight.
+  **Team only since 2026-10-21** (Serdar: who is booked is the question a
+  calendar answers): the services list and its picker are gone, and a
+  services filter an earlier build stored is ignored on read, so it cannot
+  hide a booking behind a filter no longer on screen. Panel state per
+  browser, filters per browser per business, both in localStorage. 192px
+  wide, Google's, with a
   compact small month (24px rows, 11px dates, a 12px title); it SLIDES open
   and closed over 200ms, its column animating width and gap to zero while
   the panel inside keeps its width, and ☰'s slot slides with it so Today
@@ -1633,13 +1780,12 @@ Meetings tab, measured it against Google side by side, and P5 of the port
   booking sheet's date, times and team member (`onSlotChange`), and the kind
   switch carries them across.
 - **One customer field, no Existing/New toggle.** It searches as you type;
-  picking a match links that record and shows NOTHING else (no phone/consent
-  readback — the record holds those). No pick means the typed text IS the
+  picking a match links that record and shows NOTHING else (no phone
+  readback: the record holds it). No pick means the typed text IS the
   new customer's name (first word → firstName, rest → lastName) and a phone
   field waits below. The dropdown's last row says so: "+ New customer: …".
-  **Consent is always true for counter-created customers** — the checkbox
-  was removed on Serdar's call; the contact record is where consent is
-  revoked.
+  Nothing about consent is asked or stored (since 2026-10-21 nothing reads
+  it); Unsubscribe and No AI calls are set on the record's footer.
 - **Every popup row is two columns** (`SHEET_ROWS`, `SheetRow`): a label
   column as wide as the longest label with a 5rem floor, which covers every
   label of both sheets in all three languages ("Team member" is 4.97rem), so
@@ -1726,14 +1872,45 @@ Meetings tab, measured it against Google side by side, and P5 of the port
   shown are in the booking sheet's key. Add anything new that changes
   height.
 
+## Business: General, Hours and Team (2026-10-21)
+
+Business is three underlined tabs again, General · Hours · Team, which
+reverses the 2026-08-12 single page: three long cards in one scroll read as
+one endless form. The open tab rides the URL as `?section=hours|team`
+(General leaves it off), read in a layout effect so a link never paints
+General first, written with replaceState, and kept when you switch sidebar
+tabs, so coming back to Business reopens the last one. The name is the one
+the Calendar's old "Edit hours" button linked with; that button is gone, and
+only old links still use it.
+
+- **General** is one untitled card (the strip names it). Every field is the
+  value column's width; Industry and its Reset, and Currency and Show
+  decimals, split that width; the incoming address's @domain and the minimum
+  notice's unit sit inside their field's box (`FIELD_SHELL`, a local copy of
+  Nudge's `fieldShellClass`); Terms page and Privacy page are two rows; the
+  address is a three-line box. Labels are `ControlLabel` (RowLabel.tsx).
+  Upload logo is outlined, Remove and Reset to defaults are quiet, and all
+  three are `data-edit-only`.
+- **Hours** is the hours card, untitled for the same reason
+  (`BusinessHoursCard`, defined in RemindersView), its Timezone row on a
+  `ControlLabel` too.
+- **Team** is "Team (i)" above the roster card with Add member, then Your
+  other businesses titled above its own card the same way, with nothing to
+  add (access is given per person inside).
+- **The header search** lists the matching rows with the tab each lives on
+  (left off when the hit is the tab itself); a pick opens that tab and clears
+  the query, and Your other businesses opens Team and scrolls to its card.
+  The help centre names the Hours and Team tabs.
+
 ## One person, several businesses (2026-08-24)
 
 An owner with more than one business staffs them from one screen. Two surfaces,
 one write:
 
-- **Business → the card under Team.** Lists the OTHER businesses this owner
-  owns, each with the people from this team who already hold a membership there,
-  by name rather than as a count. Expanding one gives every colleague the same
+- **Business → Team tab, under the roster.** Lists the OTHER businesses this
+  owner owns, each with the people from this team who already hold a
+  membership there, by name rather than as a count. Expanding one gives every
+  colleague the same
   three-value control the roster uses — admin, member, no access. Owners only,
   and rendered only when there IS another business.
 - **The add-business wizard's team step.** Conditional: it exists only for a
@@ -1899,9 +2076,13 @@ invites for deleted bookings are not retracted, and a booking cal.com holds
 `sendBackfill.run` rebuild usage counters from rows, so re-running them after
 deletions would undercount.
 
-## How a customer limits contact: No AI calls, marketing email (2026-10-13)
+## How a customer limits contact: No AI calls, Unsubscribe (2026-10-13; Unsubscribe on every channel since 2026-10-21)
 
-The rules are in AGENTS.md; this is how it runs.
+The rules are in AGENTS.md; this is how it runs. There is no consent gate:
+`customers.consentAt` is dead since 2026-10-21 (AGENTS.md, "Consent is not a
+gate"). Mute, the footer's third switch, keeps a customer out of the Inbox
+and its dots and sinks them in the customer list; it never limits what the
+business sends.
 
 **No AI calls** (`customers.noAiCallsAt`, set = asked, the timestamp is when).
 
@@ -1909,7 +2090,8 @@ The rules are in AGENTS.md; this is how it runs.
 |---|---|
 | Record footer switch | `customers.setNoAiCalls` (any member), both directions. Keeps the first time it was asked when switched on again. |
 | Phone agent | Template v15 adds `resepta_no_ai_calls` (boolean) to the post-call analysis, next to the summary. `voiceEvents.process` lifts it out of the analysis bag (so it never becomes a contact field or a "collected" value on the call card) and, on a yes only, runs `retell.markNoAiCallsFromCall`: org from the agent row, customer by the call leg with the org's dial code, never the org's own line, a deleting customer, an erased call or the demo org; creates nobody; writes one `customer_updated` activity row (`detail: "noAiCalls"`, system). |
-| Bulk call run | `bulkRuns.skipReason(customer, "call")` answers `no-ai-calls` (after `customer-deleted` and `no-consent`). Read at launch (the composer's count mirrors it in `BulkActions.canReach`), at fan-out, and again in `claimNextCall` before each dial. The run detail shows "Asked for no AI calls". |
+| Bulk call run | `bulkRuns.skipReason(customer, "call")` answers `no-ai-calls` (after `customer-deleted` and `unsubscribed`, through `reachReason`). Read at launch (the composer's count mirrors it in `BulkActions.canReach`), at fan-out, and again in `claimNextCall` before each dial. The run detail shows "Asked for no AI calls". |
+| Requested callback | `bulkRuns.reachReason(customer, "call")`: `callbacks.requestFromCall` queues nothing for them, and `callbacks.claim` cancels a queued one with `no-ai-calls`. |
 | Place call on the record | The confirm swaps its body for the request, its button for "Call anyway" (red), and puts focus on Cancel (`ConfirmDialog`'s `focusCancel`). Confirmed, it sends `callAnyway: true`. |
 | `retellAgent.testCall` | After `editorContext` (which refuses the demo org and resolves the org from the agent), and before anything reaches Retell, `customers.noAiCallsForNumber` looks the number up in that org; a flagged customer without `callAnyway` throws `no-ai-calls`. The agent page's test call shows a sentence pointing to the record. |
 
@@ -1919,15 +2101,18 @@ the registry publish rebuilds both, and `importVariables` never offers either
 to the owner as a field. An agent gets it at creation, on Update (v15), or the
 next time its variables are published; until then only the switch sets it.
 
-**Marketing email** (`customers.marketingEmailOptOutAt`, set = unsubscribed).
+**Unsubscribe** (`customers.marketingEmailOptOutAt`, set = unsubscribed; the
+name says email because the email link set it first, and it is read through
+`lib/marketing.isUnsubscribed`).
 
 | Piece | How |
 |---|---|
-| Which mail | `lib/email.isMarketingEmailKind`: `email_campaign`, `email_bulk`, `email_winback`. |
+| What it stops | Marketing, on every channel: campaigns, bulk runs (WhatsApp, email and calls) and win-backs, `lib/marketing.isMarketingKind` by message kind (`campaign`, `bulk`, `winback`, and the email kinds from `lib/email.isMarketingEmailKind`). Never a booking message, a reply, the assistants or a requested callback. |
+| Which mail carries the link | `lib/email.isMarketingEmailKind`: `email_campaign`, `email_bulk`, `email_winback`. |
 | The link | `unsubscribeUrl(trackingToken)` → `${SITE_URL}/e/u/<token>`, the app's own origin (`emailLinkOrigin`, falling back to `CONVEX_SITE_URL` when `SITE_URL` is unset); `src/proxy.ts` rewrites it, and `/e/o/<token>`, to the Convex route of the same name (2026-10-13). Mail sent before that links to convex.site directly, which still answers. Bulk and campaign rows mint the token at fan-out; the win-back mints one even when untracked. `withUnsubscribeFooter` appends a small grey "Abonelikten çık" / "Unsubscribe" / "Abmelden" in the customer's language (`customers.language ?? orgs.language`) after the body and before the open pixel; `sendEmail({ unsubscribeUrl })` adds `List-Unsubscribe: <url>` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (Resend `headers`). First sends (`wa.sendAppointmentMessage` for the win-back) and the queue (`delivery.attempt`, which sends every bulk and campaign mail and every retry) both do it. |
 | The routes | `GET /e/u/<token>` renders a confirm page (`lib/unsubscribePage`) and changes nothing; `POST` (the button, or a mail client's one-click) runs `messages.unsubscribeByToken`. Both resolve through `unsubscribeTarget`: the row by `by_tracking_token`, outbound, marketing kind, with a customer in the row's own org and not being deleted. Anything else gets a page naming no business, in the visitor's `Accept-Language` (tr/en/de, else tr). The first unsubscribe stamps the field once and writes one system `customer_updated` activity row (`detail: "marketingEmailOptOut"`). |
-| Respected | Bulk email: `skipReason` → `unsubscribed` (composer mirror `canReach`, run detail "Unsubscribed"). Campaign email: fan-out writes no email row. Win-back: `emailVerdict({ unsubscribed })`, silent on "both", a refusal row on email-only. Queue: `claimForRetry` refuses a queued marketing mail with `unsubscribed`; a bulk item refused that way becomes `skipped`, not failed (`noteBulkItemResult`). `unsubscribed` is a local refusal (permanent), a steady-state failure (no alert) and, like `no-consent`, never shown in the thread (`neverLeftSilently`). |
-| Shown and set by hand | The record footer's Unsubscribed switch (`customers.setMarketingEmailOptOut`, any member), the date on hover. On is immediate (a request made in person); off asks first (`ConfirmDialog` with `focusCancel`) because it puts the customer back on marketing mail. Both write a `customer_updated` activity row with the acting member. |
+| Respected | Bulk runs, every channel: `skipReason` → `unsubscribed`, first after a deletion (composer mirror `canReach`, run detail "Unsubscribed"), at launch, fan-out and every call claim. Campaigns: skipped at the segment and again as each row is written. Win-back: `wa.sendAppointmentMessage` stops the whole send, both channels, with one `unsubscribed` row. Queue: `claimForRetry` refuses any queued marketing row, WhatsApp or email, with `unsubscribed`; a bulk item refused that way becomes `skipped`, not failed (`noteBulkItemResult`). `unsubscribed` is a local refusal (permanent), a steady-state failure (no alert) and, like the old `no-consent`, never shown in the thread (`neverLeftSilently`). |
+| Shown and set by hand | The record footer's Unsubscribe switch (`customers.setMarketingEmailOptOut`, any member), "Since <date>" on hover. On is immediate (a request made in person); off asks first (`ConfirmDialog` with `focusCancel`) because it puts the customer back on marketing. Both write a `customer_updated` activity row with the acting member. The unsubscribe page (`lib/unsubscribePage`, "Contact preferences") names email, WhatsApp and phone. |
 
 ## Bulk call runs: when they ring, who they skip, what they report (2026-10-17)
 
@@ -1954,8 +2139,9 @@ is dialled straight through (P6b of the Nudge port).
   force answers "held" and schedules nothing; the reaper leaves a run alone
   while its hold stands and restarts it after, the net under a lost wake-up;
   `setStatus` clears any hold, so a resume judges the clock afresh.
-- **Who is skipped, at their turn.** First `skipReason` (deleted, no consent,
-  No AI calls, a bad number), read at launch, at fan-out and at the claim.
+- **Who is skipped, at their turn.** First `skipReason` (deleted,
+  unsubscribed, then `reachReason`: No AI calls, a bad number), read at
+  launch, at fan-out and at the claim.
   Then `turnSkipReason`, read only at the claim because "today" is the day
   the phone would ring: `already-booked` (an open booking still ahead of
   them, the booking page's reading of upcoming, an open ASAP order included)
@@ -2019,8 +2205,9 @@ collected value) and hands it to `callbacks.requestFromCall` after
 `recordCall`. That resolves the org from the agent and the customer from the
 calls row, and refuses quietly: the demo org, an erased call, a call nobody
 answered (`outcome === "true"` or a disconnect code that reads answered), a
-customer being deleted, and anyone `bulkRuns.skipReason` would skip for a
-call (no consent, No AI calls). A browser test never reaches it.
+customer being deleted, and anyone the AI may not call
+(`bulkRuns.reachReason`: No AI calls, no usable number; not Unsubscribe,
+since the customer asked for this call). A browser test never reaches it.
 
 **When it rings** is `lib/callbackTime.judgeCallbackTime` (a leaf; node test
 `scripts/callback-time.test.mjs`): the named time, never sooner than five
@@ -2034,8 +2221,8 @@ an older queued one (`replaced`). A retried webhook finds its row through
 
 **Dialling.** `scheduler.runAt(dueAt)` wakes `callbacks.dial`, whose
 `claim` re-reads every guard in one transaction: the row still queued and
-due; the demo org (cancelled); the customer deleted, without consent or with
-No AI calls (cancelled with that reason); the business closed (held to the
+due; the demo org (cancelled); the customer deleted or with No AI calls
+(cancelled with that reason, `reachReason`); the business closed (held to the
 opening, `callWindowAt`); another automated call ringing them (two minutes);
 the operator's limit on automated calls at once, counting bulk items and
 callbacks together (`liveAutomatedCalls`, mirrored in
@@ -2511,7 +2698,7 @@ Facts the next reader should not re-derive:
   that message will land in their WhatsApp conversation, judged by the send
   path's own predicates (`confirmation_sent`; `lib/lifecycleSend`
   `lifecycleReaches`, whose `lifecycleTemplates` / `whatsappVerdict` /
-  `emailVerdict` are what `wa.sendAppointmentMessage` branches on): consent,
+  `emailVerdict` are what `wa.sendAppointmentMessage` branches on):
   suspension, the rule's channel, a lane, words for the shop phone, an
   approved Meta template in the customer's language. Never on "a rule
   exists", and never on a message bound to fail or to go by email only. The
@@ -2785,7 +2972,7 @@ newest inbound is later than that moment (any channel, read off
 the message's `sentAt` or the call's `dialedAt` on a `done` item; everybody
 else is **not reached**. Each bucket is a filter pill on the detail with its
 count, and **Follow up** (owners) hands the people the list shows to the
-composer as a new run's recipients, through the same consent and address
+composer as a new run's recipients, through the same Unsubscribe and address
 checks a selection gets. Nothing about a follow-up is stored on the new run.
 
 Email reply attribution credits the newest email of ours, a bulk mail

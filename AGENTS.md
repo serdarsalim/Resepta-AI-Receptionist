@@ -174,7 +174,7 @@ policy, dead-lettering and the failure alert all have to agree, and one
 function is the only way to guarantee they do. Never alert from a call site.
 
 - Failures are classified in [`lib/sendFailure.ts`](convex/lib/sendFailure.ts).
-  **Permanent** (no consent, no approved template, shut 24h window, bad token,
+  **Permanent** (unsubscribed, no approved template, shut 24h window, bad token,
   any other 4xx) fails terminally. **Transient** (5xx, 429, Meta's rate-limit
   codes, a thrown fetch) backs off ~1m/5m/15m/1h/3h and then dead-letters.
 - **A retrying row keeps status `queued`, not `failed`.** A message still in
@@ -293,18 +293,21 @@ a customer row. How it runs is in `docs/subsystems.md` → "Deleting a customer"
 - **Provider copies are not touched**, as in Nudge: the phone provider keeps
   its recording and transcript, the messaging and email providers keep theirs.
 
-## "No AI calls" is its own fact, never consent (2026-10-13)
+## "No AI calls" is its own fact, never Unsubscribe (2026-10-13)
 
 `customers.noAiCallsAt`: the customer asked not to be called by the AI. It is
-NOT `consentAt` and must never be folded into it: a customer who refuses robot
-calls still wants their reminders, and consent switches every channel off.
+NOT Unsubscribe and must never be folded into it: a customer who refuses robot
+calls may still want offers by message, and Unsubscribe stops marketing on
+every channel, bulk calls included. Neither stops their reminders.
 
 - **Every path where the AI dials out checks it.** Bulk call runs skip them
   through `bulkRuns.skipReason` (launch, fan-out and every `claimNextCall`, so a
-  request made mid-run holds). `retellAgent.testCall`, the one door where a
-  person places an AI call by hand, refuses `no-ai-calls` unless the caller
-  sends `callAnyway`, which the record's Place call does only after the person
-  confirms. A new dial-out path gets the same check before it reaches Retell.
+  request made mid-run holds), and a requested callback is refused or
+  cancelled through `bulkRuns.reachReason`. `retellAgent.testCall`, the one
+  door where a person places an AI call by hand, refuses `no-ai-calls` unless
+  the caller sends `callAnyway`, which the record's Place call does only after
+  the person confirms. A new dial-out path gets the same check before it
+  reaches Retell.
 - **The phone agent can set it and never clear it.** The post-call analysis
   field `resepta_no_ai_calls` (a boolean, template v15) reaches the record only
   as a yes, through `retell.markNoAiCallsFromCall`. Only a person clears it, on
@@ -323,9 +326,9 @@ kept anywhere else is dialled straight through. How it runs is in
   hours with closures cut out, or its send window when it set no hours.
   Closed, the run is HELD on its own row (`heldUntil` / `heldReason`) with
   one wake-up for the minute it opens (`lib/businessHours.nextOpenAt`).
-- **Who is rung is judged at their turn**, not at fan-out: consent and No AI
-  calls, then `turnSkipReason` (an open booking ahead, or a call with them
-  already today). Every skip is a reason the run detail prints.
+- **Who is rung is judged at their turn**, not at fan-out: Unsubscribe and No
+  AI calls (`skipReason`), then `turnSkipReason` (an open booking ahead, or a
+  call with them already today). Every skip is a reason the run detail prints.
 - **A refused dial is not a call.** No free line (429, 5xx, a full pool, the
   provider ending it for want of lines) puts the customer back in line
   through the same hold (`requeueRefusedCall`) instead of failing them, for
@@ -345,12 +348,13 @@ kept anywhere else is dialled straight through. How it runs is in
 in `docs/subsystems.md` → "Requested callbacks"). The post-call analysis
 field `resepta_callback_time` (template v16, the business's wall time)
 becomes ONE `callbacks` row through `callbacks.requestFromCall`, and only
-for an answered call, outside the demo, for a customer a bulk call may ring.
-One queued per customer; a newer request replaces it.
+for an answered call, outside the demo, for a customer the AI may call
+(`bulkRuns.reachReason`). One queued per customer; a newer request replaces it.
 
 - **`callbacks.claim` holds every guard**, in the transaction that claims,
   for the bulk queue's reason: open hours (`bulkRuns.callWindowAt`, held to
-  the opening), consent and No AI calls (`bulkRuns.skipReason`), another
+  the opening), No AI calls and a usable number (`bulkRuns.reachReason`;
+  Unsubscribe never cancels a call the customer asked for), another
   automated call ringing them, the operator's limit (which now counts bulk
   items and callbacks together, both sides), the agent and its line. The
   dial is pinned to the published version (`placeCall`) and a refusal for
@@ -361,7 +365,36 @@ One queued per customer; a newer request replaces it.
   the record's Cancel (any member) and the customer's deletion, each leaving
   its reason on the row. A new dial path a person triggers cancels them too.
 
-## Marketing email carries an unsubscribe, and the opt-out stops only that (2026-10-13)
+## Consent is not a gate; Unsubscribe stops marketing (2026-10-21)
+
+Serdar removed the record's Consent switch and the gate behind it: every
+customer a business reaches out to has already agreed to hear from it, so
+`customers.consentAt` mostly stopped reminders reaching people added by hand
+or imported. Nothing reads or writes it now; it stays in the schema, dead,
+because rows still carry it. Recording marketing consent where the law asks
+for it (İYS) is the business's duty, and the privacy notice says so.
+
+- **Booking messages and replies reach every customer**: confirmations,
+  reminders, follow-ups, cancellation notices, the away reply, the
+  assistants, a person's own message.
+- **Marketing is `lib/marketing`**: campaigns, bulk messages and bulk calls,
+  win-backs (`isMarketingKind`: its own WhatsApp kinds plus the email kinds
+  from `lib/email`; a new marketing kind joins one of the two sets). It skips
+  a customer who unsubscribed (`isUnsubscribed`, on
+  `customers.marketingEmailOptOutAt`, whose name still says email) on every
+  channel: `bulkRuns.skipReason` (launch, fan-out, every call claim),
+  campaigns at the segment and again at each row, `wa.sendAppointmentMessage`
+  for a win-back, and `delivery.claimForRetry`, the backstop every queued
+  message crosses. A new marketing path checks it before the provider. Read
+  the helper, never the field.
+- **A requested callback is not marketing**: `callbacks.ts` asks
+  `bulkRuns.reachReason` (deleted, No AI calls, a usable number), never
+  `skipReason`.
+- `customers.create`, `customers.update` and `schedule.create` still accept a
+  `consent` flag and ignore it, for tabs loaded before 2026-10-21. `no-consent`
+  stays classified (sendFailure, alerts, the thread) for old rows.
+
+## Marketing email carries an unsubscribe link (2026-10-13)
 
 Marketing mail is `lib/email.isMarketingEmailKind`: `email_campaign`,
 `email_bulk`, `email_winback`. It carries a visible "unsubscribe" link and the
@@ -392,16 +425,13 @@ new marketing kind goes into that set.
   retry get it), and the route streams only library images
   (`media.emailImage`), never a storage URL and never a customer's inbound
   file. `media.remove` refuses an image an email template still shows.
-- **`customers.marketingEmailOptOutAt` is respected at every marketing send:**
-  bulk email fan-out (`skipReason` → `unsubscribed`), campaign email fan-out,
-  the win-back's email half (`emailVerdict`), and at claim in
-  `delivery.claimForRetry`, which every queued marketing mail crosses and which
-  is the backstop. A new marketing send path checks it before the provider.
-- **Email only.** WhatsApp marketing is untouched (Meta keeps its own opt-out),
-  and it is not consent. The customer's link sets it, and so does the record's
-  Unsubscribed switch (`customers.setMarketingEmailOptOut`, any member) for a
-  request made in person. Turning the switch OFF puts someone back on marketing
-  mail, so it asks first; both directions write an activity row.
+- **The link and the record's Unsubscribe switch set one fact**
+  (`customers.marketingEmailOptOutAt`), and it stops marketing on every
+  channel ("Consent is not a gate", above). The page says so, naming email,
+  WhatsApp and phone. The switch is any member's
+  (`customers.setMarketingEmailOptOut`), for a request made in person.
+  Turning it OFF puts someone back on marketing, so it asks first; both
+  directions write an activity row.
 
 ## Only the embedded booking page may be framed (2026-10-17)
 
@@ -453,8 +483,19 @@ number is connected. Rule, campaign and bulk email carries an open pixel
 `messages.recordEmailOpen`, 15s prefetch guard); opens surface as a RATE on
 the template row and the campaign row — never as a per-customer "opened"
 badge, because relay prefetch makes the individual fact a guess. The same token is what the unsubscribe link at the
-foot of marketing mail resolves ("Marketing email carries an unsubscribe",
-above).
+foot of marketing mail resolves ("Marketing email carries an unsubscribe
+link", above).
+
+## The business address is three lines stored, one line shown (2026-10-21)
+
+`orgs.address` keeps up to three lines (`lib/businessAddress`,
+`normaliseAddress` on save: blank lines dropped, anything past the third
+folded onto it, 200 characters). Every reader that shows it on one line goes
+through `addressOneLine`, which joins the lines with commas: the ICS LOCATION
+(`lib/ics`), the `[address]` token (`lib/renderTokens`, so every message and
+Meta parameter), and the booking, manage and link-preview queries in
+`booking.ts`. A new one-line reader uses it too: a raw newline breaks a
+sentence, is refused in a Meta parameter, and collapses to a space in HTML.
 
 ## i18n — two layers, don't conflate them
 
@@ -674,10 +715,14 @@ address"); borrow it under short labels like "When" and "Channel" and the
 column is mostly void, with values starting a hand's width from the words
 naming them. Keep the grammar (label left, capped value right, never a control
 stretched across the card) and size the columns to the labels you actually
-have. In the same spirit, cap a control to the text it will ever hold
-(`sm:max-w-72` on a name or an email local part) rather than narrowing the
-shared grid — the wide rows, seven day chips on one line and the open/close
-pickers, need the full 24rem.
+have. In a settings card every field is ONE width, the value column's 24rem
+(Serdar, 2026-10-21, after Nudge's Branding card; capping each box to its own
+text had given the General card five widths). A row that holds two things
+(Industry and its Reset, Currency and Show decimals) splits that width instead
+of adding to it, and a suffix (the incoming address's @domain, the notice's
+unit) sits INSIDE the box, one shell drawing the border and the focus. The
+label is a `ControlLabel` (RowLabel.tsx): on its control's text line from
+sm, and close over its own field on a phone.
 
 **7. Selected state needs a shape, not only a hue.** A coloured pill reads as a
 decorative tag and its unselected sibling as a button nobody has found; put a
@@ -724,8 +769,16 @@ pickers were `absolute` children of their field instead. The hook covers what
 they needed: `prefer: "above"` for a
 drop-up, `gap`, `anchorRect` for a panel hung off the caret, `triggerRef` for
 a component that reads its own trigger, `show()` to open or re-place, `room`
-for a list that shrinks to fit, and it re-places a panel whose size changes
+for a list that shrinks to fit, `minWidth` for a trigger-wide panel that
+needs a floor (2026-10-21), and it re-places a panel whose size changes
 while open. A ⋯ of verbs is `RowMenu`, not a new copy.
+
+**A short pick list is `SearchableSelect`, not a native select or a copy**
+(2026-10-21): `searchable={false}` drops the search box for a handful of
+options, an option's `group` draws a heading, and `values` + `triggerLabel`
+hold one pick per group in one menu that stays open (the Testing tab's
+Audio). `menuWidth="trigger"` with `menuMinWidth` keeps a list of long names
+from being narrower than they need.
 
 ## A hover label is one look (2026-10-17)
 
@@ -733,10 +786,10 @@ A LABEL a control wears on hover is `HoverTip` (`src/components/HoverTip.tsx`,
 Nudge's, P20 of the port): a dark chip (`TOOLTIP_LOOK`), instant, centred
 under the control and clamped by its measured width, through a portal like
 every popover. `side="right"` is the folded sidebar's: every row, the
-business switcher, the account row and the operator chip name themselves
-beside the icon at once. The fold toggle alone waits 500ms, because the
-pointer crosses it on the way into the rail. `ActionTip` wears the same chip
-(`TOOLTIP_CHIP`, which may wrap).
+account row and the operator chip name themselves beside the icon at once
+(folded, the rail has no business switcher since 2026-10-21). The fold
+toggle alone waits 500ms, because the pointer crosses it on the way into the
+rail. `ActionTip` wears the same chip (`TOOLTIP_CHIP`, which may wrap).
 
 - **Never a native `title` on an icon-only control.** It waits about a
   second and wears the operating system's look. Wrap the control in
@@ -774,12 +827,17 @@ like a strip (the message-channel pills in Reminders, feed filters) are NOT
 tabs and keep their own treatment.
 
 **A one-of-N choice drawn as a track is `SegmentedControl`, never a copy**
-(2026-10-13). Eight hand-made ones were folded into it, and every one drew its
-track with `--muted-bg`, which in dark IS `--card`: the track vanished and the
-picked cell was near-black on near-black. It runs on its own token pair
-(`--segment-track` / `--segment-thumb`), keeps every cell font-medium so a
-click never changes a cell's width, and says what it is through `semantics`
-(radio, tabs that swap content, or menuitemradio inside a menu).
+(2026-10-13; Nudge's sliding pill since 2026-10-21). Eight hand-made ones were
+folded into it, and every one drew its track with `--muted-bg`, which in dark
+IS `--card`: the track vanished and the picked cell was near-black on
+near-black. It runs on its own tokens: a round track (`--segment-track`,
+light `#efeff1`) and ONE thumb (`--segment-thumb`, white with
+`--segment-thumb-shadow`) MEASURED from the picked cell, never placed by
+index, which slides to a new pick; a stacked row with icons (the theme row)
+uses `rounded-xl` cells. Every cell stays font-medium so a click never
+changes a cell's width, `semantics` says what it is (radio, tabs that swap
+content, or menuitemradio inside a menu), and a radio group keyboards like
+native radios: one tab stop on the pick, arrows to move it.
 
 ## Every scrolling page ends with room below the last card
 
@@ -887,12 +945,17 @@ Geist (a column sized to its labels) wants re-measuring before it is trusted.
 
 ## Borders only when absolutely necessary (Serdar's design language)
 
-Borders belong to CONTAINERS (cards, inputs, dropdown panels) — never to
-buttons. Secondary/ghost buttons are text + hover wash
-(`text-muted hover:bg-muted-bg`), primary buttons are solid accent fill.
-A bordered chip where a ghost button belongs reads as sloppy; check every
-new control against this before shipping it. The wash is `--control-hover`
-now, not `--muted-bg`, which in dark IS `--card` and hovered to nothing.
+Borders belong to CONTAINERS (cards, inputs, dropdown panels), never to
+buttons. A button that needs an edge gets DEPTH instead (Nudge 2026-10-20,
+Serdar after Attio; here 2026-10-21): the filled primary is crisp
+(`--primary-bg`, `--solid-shadow`: a darker edge and a faint light line along
+its top, `--primary-hover` darkening it), a secondary is RAISED (`--raised`,
+`--raised-shadow`: white, a hairline ring, a soft drop; dark lifts with a
+lighter surface and a top highlight, since a drop shadow vanishes on black).
+Rings, never borders, so a button keeps its declared box. Ghost buttons stay
+text on a hover wash, `--control-hover`, not `--muted-bg`, which in dark IS
+`--card` and hovered to nothing. A bordered chip where a ghost button belongs
+reads as sloppy; check every new control against this before shipping it.
 
 ## Controls have three heights, and the height is declared (2026-10-13)
 
@@ -906,26 +969,36 @@ built from padding and line-height drifts the moment the type changes, and a
 native `<select>` ignores line-height altogether, which is how the Business
 card's inputs and selects came out 34px and ~31px from the same classes. One
 type size, `text-sm`; below sm the iOS rule in globals.css still wins.
-Variants keep the border rule above: `ghost` and `quiet` have none, `outline`
-is `.card-action`'s look for the two outlined tiers, `danger` is muted until
-hovered. `FIELD` (RowLabel) is `fieldClass("sm")`. Take a size from here for
-any new button or field, and never stack a colour utility on a variant: two
-utilities at one specificity are decided by Tailwind's order, not the class
-string.
+Variants keep the border rule above: `ghost` and `quiet` have none, `primary`
+is crisp and `outline` raised (both rings; `.card-action` in globals.css is
+`outline` at sm and must agree with it), `pill` is a VIEW control, the
+switch's thumb as a round raised button (the calendar's Today, its view menu
+and team picker, a table's Columns), `danger` is muted until hovered. Shape
+carries meaning: `rounded-lg` does work, `rounded-full` chooses what you see,
+which is why `SegmentedControl` and the header search are round too. `FIELD`
+(RowLabel) is `fieldClass("sm")`. Take a size from here for any new button or
+field, and never stack a colour utility on a variant: two utilities at one
+specificity are decided by Tailwind's order, not the class string.
 
-## The shell is flush; the cards are the paper (2026-10-13)
+## The shell is one frame; the cards are the paper (2026-10-13, joined 2026-10-21)
 
-Nudge's shell (607c9708, 2026-10-12, which Serdar kept there and asked for
-here). The sidebar rail and the content plane both meet the window edge: no
-shell padding, no gap, no rounded sheet, and one hairline where they meet, the
-rail's `md:border-r` in plain `--border` (within a shade of what Nudge's 70%
-mix of its darker `--border` lands on). `.app-pane` is flat, the top stop of
-the gradient it wore while it floated. Every view already puts its content in
-cards, so the inset sheet was a card holding cards: don't bring it back
-without taking the cards out first. The shell root carries `data-app-shell`,
-which hands back the document's reserved scrollbar track (globals.css): the
-shell never scrolls the document, and with classic scrollbars the track was a
-15px strip of `--background` at the right edge.
+Nudge's shell (flush 607c9708, joined frame 5668cdfd; here 2026-10-13 and
+2026-10-21). The frame meets the window edge: no shell padding, no gap, no
+rounded sheet. The sidebar rail and a fixed 48px top bar (`h-12`) are ONE
+frame in one flat fill, `.app-pane` (light `#f8f8f9`, dark the `#25272b`
+charcoal, lighter than the near-black workspace and the cards so the frame
+reads as its own plane). `main` is the workspace: the `--content-bg` wash
+(`bg-fixed`, so it stays put while the cards scroll; the calendar ground
+drops it for plain `--pane`), a 12px upper-left corner from md
+(`md:rounded-tl-xl`), and `.workspace-boundary`, one line at half `--border`
+along its top and, from md, its left. The rail draws no edge of its own: the
+line follows the corner instead of cutting through the band the rail and the
+bar share. Every view already puts its content in cards, so an inset sheet
+would be a card holding cards: don't bring one back without taking the cards
+out first. The shell root carries `data-app-shell`, which hands back the
+document's reserved scrollbar track (globals.css): the shell never scrolls the
+document, and with classic scrollbars the track was a 15px strip of
+`--background` at the right edge.
 
 **Sidebar glyphs are 16px at stroke 1.5** (`makeIcon`, Nudge 451ab041);
 normalise a borrowed glyph at its call site rather than draw it heavier than
@@ -935,10 +1008,23 @@ font-medium throughout, and the wash, the darker tier and the glyph at full
 strength say "selected". Each tab keeps its one hue; Nudge tried monochrome
 and Serdar kept the hues, because they make a row findable without reading it.
 
-**The product name sits on the page title's line.** The rail's product row is
-h-9 under the same pt-3 as the header, so both centre 1.875rem down in any
-base font; with the panes flush the top of the window reads as one band. Keep
-the two in step if either moves (the header's min-h-13 floor included).
+**No product mark inside the app; the rail's top row is the fold arrow**
+(Serdar, 2026-10-21). The rail's first row is `h-12`, level with the top bar,
+and holds only the fold toggle at its right end, Nudge's chevron (it points
+where the rail will go: left to fold, right to open). The business switcher
+is its own row under it. No Resepta logo or wordmark: the top-left belongs to
+the business, and the brand stays on sign-in, the onboarding wizard and the
+pages customers see. Folded, the rail shows the arrow and no mark, and
+switching business waits for the rail to open. Keep the rail's first row and
+the top bar one height if either moves.
+
+**The header search is one round field** (Nudge's, 2026-10-21). `SearchInput`
+(DataTable.tsx), shared by the shell header and the operator console:
+`rounded-full`, `h-8`, the `--card` fill so it reads raised on the frame, and a
+fixed narrow width (`w-40`, `lg:w-48`), never sized to its text: a box that
+grew with the typed value re-laid the header on every keystroke. It is chrome,
+like an address bar, so it is the one round field; a field inside a card
+stays boxed. Only the phone's expanded search fills the row.
 
 **`main` is `relative`** (Nudge cbbacbcc), so it is the containing block for
 every absolutely positioned box in a view. Keep it so, and keep anything
@@ -966,7 +1052,9 @@ inside the same card, and the phone still runs edge to edge.
 **The rail's two menu controls look alike**: the business switcher at the top
 and the account row at the foot wear `--pane-field` at rest with the up/down
 chevron, so each reads as a button rather than a caption (Nudge's account row
-took a 4% ink tint for this; ink on this pane read as a pressed row here). The
+took a 4% ink tint for this; ink on this pane read as a pressed row here). In
+dark `--pane-field` steps UP from the charcoal rail (`#303237`, hover
+`#393b41`); the old `#232323` sat below it and read as a hole. The
 account row is always titled name · address, and shows the person's Google
 photo with the initials as the fallback.
 
@@ -1025,9 +1113,38 @@ calls row, thread entry or customer field comes of it. It is metered like a
 call into `usageMonthly.voiceTest*`, a share of the voice totals, never an
 addition. A new write in the functions route checks `isTest` first; a marked
 call with no row of this org is still a test. The test lives on the agent page's
-Testing tab, mounted beside Setup and only hidden (P35), so never move it
-back into a sheet or anything that unmounts it: closing the sheet ended the
-call.
+Testing tab, mounted beside Setup and Notes and only hidden (P35), so never
+move it back into a sheet or anything that unmounts it: closing the sheet
+ended the call. The tab is Nudge's (2026-10-21): ONE Call setup card (Call as,
+Direction and Audio on one row; the microphone and speaker are one picker,
+remembered per browser), What the agent knows in a bordered box inside it
+(the opening line, then every value the call carries, editable for this test
+only), Start test under both. A value is READ when the prompt, the opening
+line or a first sentence on screen names it in braces (`{{when}}` is the
+openers' own word, not a value); values with nothing in them fold behind "N
+more it doesn't know", values nothing names behind "N more sent along, not
+read by this agent". The values are read only while the tab shows and no call
+is up. Test results holds the running test as its open top row. The draft
+state, Discard and Publish ride the end of the tab row on every tab. Ringing
+a real phone stays a link at the foot of Call setup: it rings the PUBLISHED
+version, so it proves the line, never the draft.
+
+**A review is the team's, one per call or test, kept on its row**
+(2026-10-21, Nudge's call reviews). A note and a Pass or Miss live on the
+`calls` row, written by any member through `calls.setReview` (`requireOrg`,
+the call's own org, refused while its customer is being deleted), and on the
+`agentTests` row through the owner-only `agentTests.setReview`, same contract:
+whichever half changed, `verdict: null` takes it back, the `note*` stamps sign
+it and go when it is emptied. What was done about it, and whether that is
+done, sit beside it (`action`, `doneAt`; `agentReviews.setAction`,
+owner-only). So a review goes with its row: deleting the customer deletes
+it, and no table needs a place in the sweep. The call card and the opened
+test both draw it with `ReviewNotes`. The agent page's Notes tab
+(`agentReviews.list`, owner-only) is the work queue over them: Misses first,
+where a note with no verdict counts as a Miss, and no charts or rates, since
+reviewed calls are a hand-picked sample. Never put a review in front of the
+chat or phone agent: it is the team's talk about a call, not something the
+customer said.
 
 **A person's dial says who placed it** (2026-10-17, P11). `testCall` (the
 record's Place call and the agent page's test call) puts the caller's user id
@@ -1080,8 +1197,15 @@ context as read-only rows that mirror `beforeCallContext`'s dynamicVariables
 key for key; if the runtime gains a variable it must appear there or the
 table is lying. Identity (name, email) and the booking's own questions need
 NO registry rows and NO prompt paragraphs: identity keys are always writable
-through save_customer_details, and the template + booking tools force the
-asks. The registry exists ONLY to teach the post-call analysis about
+through save_customer_details, whose own description names them (template
+v17), and the template + booking tools force the asks. The caller's first and
+last name are analysis fields of OURS on every agent
+(`callerNameAnalysisFields`, under the identity keys), so a name the caller
+said reaches an EMPTY card whatever the owner's script or the matrix switches
+say. A switched-off identity column (`voiceLockedIdentity`) means the agent
+never CHANGES a saved value, never that it may not fill an empty one:
+`applyVoiceContactValues` and the ring-time `{{information}}` list both read
+it that way. The registry exists ONLY to teach the post-call analysis about
 org-specific fields. An empty Sorar is the healthy default, not a gap.
 
 **A non-answer is not an answer** (2026-10-13). "Belirtilmedi", "Not
@@ -1094,6 +1218,18 @@ the ring-time injection and `builtinAgentVariables` treat a stored one as an
 empty field. "Yok", "None" and "Keine" count only where a name is expected;
 in a custom field, "no allergies" is the answer a clinic needs. Any new path
 that saves what an agent collected goes through those two functions.
+
+**A call summary is in the business's language** (2026-10-21, template v17).
+`resepta_call_summary` is written in the agent's SUMMARY language: the agent
+page's Summary language (`retellAgents.summaryLanguage`, part of its one
+Publish; picking the business's own language stores unset), else the
+business's language (`lib/voiceAgentTemplate.summaryLanguageFor`), never the
+language the agent speaks. It used to be compiled from the agent's language
+at publish time, so Estate Emlak's agent, born English and switched to Turkish
+in the provider's dashboard, wrote English summaries for a Turkish business.
+Birth, Update, a variables publish and a summary-language publish all resolve
+it there, and a new path that writes the analysis list does too. The app's UI
+language never changes it, and a summary already written stays as written.
 
 **Confirmations vs. late emails.** The agent asks for e-posta AFTER booking
 (a booking must not wait on spelling), so booking-time confirmations can
@@ -1196,40 +1332,58 @@ Nudge's `meetingTools.ts`; do not grow a second path.
   the rate limit or the inbox. Its cost counts toward the month like a shadow
   turn; it is not billed.
 
-## An action belongs to the card it acts on (2026-08-21)
+## A list's add sits above its card (2026-08-21; above the card since 2026-10-21)
 
-`Card` takes an **`action`** node, rendered hard right on the title line. Add
-message, Add member, Add field, Add sale, Add product and Add knowledge all
-sit there now (Add customer and Add agent moved to their page's toolbar
-above the card with P32, below); before this they floated above their card,
-sat at the foot of a list, or were shared between two cards.
+Every list carries its title, its (i) and its creating action in a row ABOVE
+its card, and the card holds the list and nothing else (Serdar, 2026-10-21:
+"we don't put a button inside a list"; Nudge 13bcfad1 and e07ff7ae).
+Customers and the Voice agents table moved first (P32); Automations,
+Knowledge, Services, Products, Team and Contact fields followed on 2026-10-21
+(`ListHead` in BusinessView, the same markup in `KnowledgeCard`). From
+2026-08-21 until then these adds sat on their card's title line through
+`Card`'s `action`, which no view passes now; before that they floated above
+their card, sat at the foot of a list or were shared between two cards.
 
-- **Two tiers, and they are different jobs.** A CARD's own action lives in the
-  card header, with no `+`, and wears `.card-action` — OUTLINED, no fill. A
-  SECTION's action inside a card is outlined and keeps its `+`; the contact
-  record's "+ Add appointment" is the reference.
-  **AMENDED 2026-08-25.** The card action was filled accent until Serdar said
-  it was too strong ("should we do sort of secondary button that's sort of no
-  bg for these type of cards"). The original reasoning below still holds and
-  is exactly what broke: filling a SECTION action would make it the loudest
-  thing on the contact page, competing with the page's real primary. Putting a
-  card's action in its header multiplied that by however many cards a page
-  stacks, so Voice opened on three solid blue buttons down one edge and Business
-  on more. One loud thing per screen is the budget. A filled button now means
-  the single action a screen is FOR: the sheet's confirm, the composer's Send,
-  the Customers toolbar's Add customer and the Voice agents toolbar's Add
-  agent (each page IS the list it adds to).
-  **"No bg" means the FILL, not the outline** — a first pass dropped both and
-  Serdar corrected it ("i said remove bg from secondary buttons not the border
-  line"). The border is what keeps it reading as a button at rest; the fill
-  was the only part shouting. So the two tiers now differ by the `+` and by
-  where they sit, not by weight.
-- **The header carries `min-h-8`**, so a card with an action and one without
-  keep the same header height, and an action that hides itself (Contact
-  fields' button, while its form is open) moves nothing.
-- **`action` renders OUTSIDE the fieldset.** `Card`'s `disabled` cannot reach
-  it, so an action on a card that can go read-only must gate itself —
-  every current caller does (`isOwner ? … : undefined`).
+- **The row.** `min-h-8`, 8px over its card, lists a card gap (1rem) apart,
+  so a title reads as the head of the card under it and not as the foot of
+  the one above. A page-level list's row holds view controls left and the add
+  right (Customers' Columns; the Voice agents' Refresh and Try the WhatsApp
+  assistant; Automations' add alone, since the tab names the list); a titled
+  list's row holds the title and its (i) left. One row at every width. Every
+  menu in it portals, so leaving the card clips nothing. A selection's verbs
+  replace the whole row while it stands (Customers' bulk bar), never sit
+  beside Add.
+- **It does not wait on the list.** Drawn before the rows arrive and when
+  there are none, so the first row arriving moves nothing and Add is on
+  screen in the EMPTY state, the one state where it is the only way forward;
+  the card says "none yet" inside. Two exceptions: Products appears once a
+  product exists (the first goes in through Add service's Type), and
+  Automations' whole page waits on its data, so there the row arrives with
+  the list.
+- **One loud thing per screen.** The add is filled where the list is what
+  the screen is for (Customers, Voice agents, Automations, Team, Contact
+  fields, and Services on Knowledge) and outlined for a further list on a
+  screen that already has its filled one (Products and Knowledge, under
+  Services). Filling every card's add once put three solid blue buttons down
+  Voice and more down Business (Serdar, 2026-08-25: "secondary button that's
+  sort of no bg"): a filled button means the single action a screen is FOR,
+  as the sheet's confirm and the composer's Send do. The outlined one keeps
+  an edge at rest, now the raised ring (Serdar, the same day: remove the
+  fill, "not the border line").
+- **Adding opens a sheet**; a form never unfolds inside the card. Contact
+  fields' inline form became `NewFieldSheet`, since under a button above the
+  card it would have opened a list's length away from it.
+- **A form card has no such row.** General and Hours hold settings, not a
+  list, and under a tab of the same name they carry no title either. Team
+  keeps "Team (i)" above its card under the Team tab, because that (i) is
+  the one explanation of logins against bookable people.
+- **A SECTION's action inside a card stays inside**, outlined and keeping its
+  `+`: the record's "+ Add sale" (`buttonClass("outline", "xs")`). Revenue's
+  history keeps its row inside too: it adds nothing, and its select-all sits
+  in the checkbox column, where the position is the label.
+- **The add sits outside the card's fieldset**, so `Card`'s `disabled` cannot
+  reach it: an add a member may not use gates itself
+  (`isOwner ? … : undefined`).
 - **Read-only reads as facts, not a dimmed form** (2026-10-17, P12; Serdar
   chose Nudge's way 2026-10-14). `Card`'s `disabled` puts `.readonly-form` on
   its fieldset, not `opacity-70`: fields, switches and inline values
@@ -1238,27 +1392,6 @@ sat at the foot of a list, or were shared between two cards.
   changes something carries `data-edit-only` and is gone. The page says
   "View only" once (`ViewOnlyPill`). A new row ×, add or remove control on a
   card a member can read carries `data-edit-only`.
-- **A list page's toolbar sits ABOVE the card, outside it** (P32,
-  2026-10-17, Nudge e07ff7ae; this replaced "a card that is the PAGE keeps
-  its toolbar row inside"). View controls left, the creating action right,
-  and the card is the table and nothing else: alone inside, the row was an
-  empty strip over the table with one button in it. Customers and the Voice
-  agents table do this. One row at every width, rendered before the list
-  loads and whether or not it has rows, so the first row arriving moves
-  nothing and the add button is there in the EMPTY state, where it matters
-  most; the card itself is gated on LOADED and says "none yet" inside.
-  Every menu in the row portals, so leaving the card clips nothing. The
-  creating action is filled: the page IS the list it adds to, so it is the
-  one action the screen is for. A selection's verbs replace the whole row
-  while it stands (Customers' bulk bar), never sit beside Add.
-  **Scope: a page-level list, not a titled card.** A `Card` with a title
-  keeps its `action` on the title line: the title already fills that row, so
-  the empty strip this fixes never forms, and moving every titled card's
-  title out of its card is a different change nobody asked for. Nudge also
-  lifted its channel-settings cards' titles out (13bcfad1); Resepta's
-  equivalents are titled Cards and stay so. Revenue's history keeps its row
-  inside too: its select-all sits in the checkbox column, and that position
-  is the label.
 - **Never park an add at the foot of a list.** It puts the primary action
   below however many rows the business happens to have, and it is the branch
   that loses the button in the EMPTY state — the state where you need it most.
@@ -1342,8 +1475,10 @@ underneath — two headings, the higher one wrong, ~60px between them.
   opened message rule, a bulk run call `useHeaderTrail`
   (`src/lib/headerTrail.tsx`) with their name, their close handler and, when
   the tab's title is not the list's name, a `backLabel` (`Bulk › <run>`
-  inside Customers). They draw NO back control of their own. A new drill-in
-  uses the hook, never an arrow. The slot holds one trail; a customer record
+  inside Customers). They draw NO back control of their own. An opened
+  review on an agent's Notes tab swaps the agent's trail for
+  `<agent> › <customer>` (2026-10-21). A new drill-in uses the hook, never an
+  arrow. The slot holds one trail; a customer record
   replaces the tab's view (`AppHome`), so a trail and a customer never stack.
   Exceptions: the Inbox's phone back from a thread to the list, and a sheet's
   own step back (the booking sheet).
@@ -1466,11 +1601,12 @@ Two more deliberate omissions: it never calls
 `scheduleConfirmationIfConfigured` (these appointments exist already and the
 customer knows), and it never touches cal.com (300 rows are not 300 provider
 calls; the absent `externalUid` is what every reader already treats as "ours
-alone"). Customers are never minted here — `create_customers` is the door that
-asks about KVKK consent. Unplaceable rows are reported with their number and
-the reason, never dropped. Undo deletes what it created that is still as it
-wrote it: an appointment the business has since moved, cancelled, re-staffed or
-otherwise changed stays, and so does one the customer has been messaged about.
+alone"). Customers are never minted here: `create_customers` is the door
+that takes a name and a number and dedupes on the number. Unplaceable rows
+are reported with their number and the reason, never dropped. Undo deletes
+what it created that is still as it wrote it: an appointment the business has
+since moved, cancelled, re-staffed or otherwise changed stays, and so does one
+the customer has been messaged about.
 The journal records what each row was written as (since 2026-10-13), and the
 hourly auto-completion of a past booking is not a change; an import journalled
 earlier is judged by the activity feed alone. Undoing `create_customers` keeps
