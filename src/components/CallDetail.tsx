@@ -159,8 +159,10 @@ export function CallPartiesLine({
   className?: string;
 }) {
   return (
+    // Wraps between the parties, never inside a name: on a phone the second
+    // name drops to its own line whole rather than both breaking mid-name.
     <div
-      className={`flex min-w-0 items-center gap-1.5 text-xs text-[var(--foreground)] ${className}`}
+      className={`flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-[var(--foreground)] ${className}`}
       title={title}
     >
       <span className="min-w-0 break-words">{from}</span>
