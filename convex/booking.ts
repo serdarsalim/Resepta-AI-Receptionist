@@ -874,9 +874,6 @@ export const book = mutation({
         ...(named.lastName ? { lastName: named.lastName } : {}),
         phone,
         ...(email ? { email } : {}),
-        // Booking an appointment and asking to hear about it IS consent,
-        // dated — the same reasoning as the request form.
-        consentAt: Date.now(),
       });
       await syncCustomerSearch(ctx, customerId);
       await recordCustomerCreated(ctx, {

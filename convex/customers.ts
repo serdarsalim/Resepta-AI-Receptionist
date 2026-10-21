@@ -36,6 +36,7 @@ const customerFields = {
   // Learned from the customer's own reply or call (schema customers.languageLearnedAt).
   languageLearnedAt: v.optional(v.number()),
   notes: v.optional(v.string()),
+  // Dead since 2026-10-21 (schema customers.consentAt), still on older rows.
   consentAt: v.optional(v.number()),
   lastInboundAt: v.optional(v.number()),
   custom: v.optional(v.record(v.string(), v.string())),
@@ -47,7 +48,7 @@ const customerFields = {
   mutedAt: v.optional(v.number()),
   // Asked not to be called by the AI (schema customers.noAiCallsAt).
   noAiCallsAt: v.optional(v.number()),
-  // Unsubscribed from marketing email (schema customers.marketingEmailOptOutAt).
+  // Unsubscribed from marketing, every channel (schema customers.marketingEmailOptOutAt).
   marketingEmailOptOutAt: v.optional(v.number()),
   // Chat-agent takeover stamp (docs/chat-agent.md §5) — when a human took
   // this conversation over. Display only now; agentModeOverride decides.
@@ -271,11 +272,6 @@ export const pickerSearch = query({
       firstName: v.string(),
       lastName: v.optional(v.string()),
       phone: v.string(),
-      // Whether they can be messaged at all. Booking somebody without consent
-      // is allowed and sometimes right, but under KVKK it means they will get
-      // no reminder and no confirmation, so the sheet says it at the moment
-      // the choice is made rather than leaving it to be discovered later.
-      consented: v.boolean(),
     }),
   ),
   handler: async (ctx, { q }) => {
@@ -296,7 +292,6 @@ export const pickerSearch = query({
         firstName: row.firstName,
         lastName: row.lastName,
         phone: row.phone,
-        consented: row.consentAt !== undefined,
       }));
   },
 });
@@ -308,7 +303,10 @@ export const create = mutation({
     phone: v.string(),
     email: v.optional(v.string()),
     notes: v.optional(v.string()),
-    consent: v.boolean(),
+    // Ignored since 2026-10-21, when consent stopped gating sends. Accepted
+    // so a tab loaded before that deploy can still add a customer; drop it
+    // once no client sends it.
+    consent: v.optional(v.boolean()),
   },
   returns: v.id("customers"),
   handler: async (ctx, args) => {
@@ -328,7 +326,6 @@ export const create = mutation({
       phone,
       email: args.email?.trim() || undefined,
       notes: args.notes?.trim() || undefined,
-      consentAt: args.consent ? Date.now() : undefined,
     });
     await syncCustomerSearch(ctx, customerId);
     await recordCustomerCreated(ctx, { orgId, customerId, source: "staff" });
@@ -344,6 +341,8 @@ export const update = mutation({
     phone: v.optional(v.string()),
     email: v.optional(v.string()),
     notes: v.optional(v.string()),
+    // Ignored since 2026-10-21, like create's: the record's Consent switch
+    // that sent it is gone, and a tab loaded before then must not fail.
     consent: v.optional(v.boolean()),
     // "" goes back to the business's language; otherwise one of the three
     // languages Resepta writes to customers in.
@@ -373,10 +372,6 @@ export const update = mutation({
         if (dupe) throw new Error("phone-exists");
         patch.phone = phone;
       }
-    }
-    if (args.consent !== undefined) {
-      // Re-consenting refreshes the stamp; revoking clears it and blocks sends.
-      patch.consentAt = args.consent ? (customer.consentAt ?? Date.now()) : undefined;
     }
     if (args.language !== undefined) {
       const language = args.language.trim();

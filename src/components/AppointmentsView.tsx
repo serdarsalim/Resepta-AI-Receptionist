@@ -977,11 +977,6 @@ export function AppointmentsView({
                       .join(" · ")}
                   </span>
                 </span>
-                {appointment.customer && !appointment.customer.consented && (
-                  <span className="rounded-full px-2 py-0.5 text-xs text-red-600 dark:text-red-400">
-                    {t("customers.noConsent")}
-                  </span>
-                )}
                 <span
                   className={`rounded-full px-2 py-0.5 text-xs ${STATUS_STYLE[appointment.status]}`}
                 >

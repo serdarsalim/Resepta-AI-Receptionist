@@ -237,8 +237,6 @@ export const handleCalcomEvent = internalMutation({
         phone: attendeePhone,
         email: attendee.email,
         language: attendee.language,
-        // Booking through the salon's own cal.com page IS the opt-in moment.
-        consentAt: Date.now(),
       });
       await syncCustomerSearch(ctx, customerId);
       await recordCustomerCreated(ctx, {

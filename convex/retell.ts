@@ -2841,9 +2841,6 @@ export async function agentBookTx(
       firstName: firstName || phone,
       lastName: rest.join(" ") || undefined,
       phone,
-      // Booking by calling the salon IS the opt-in moment (same reasoning
-      // as the cal.com page).
-      consentAt: Date.now(),
     });
     await syncCustomerSearch(ctx, customerId);
     await recordCustomerCreated(ctx, {
@@ -2879,20 +2876,6 @@ export async function agentBookTx(
     }
   }
   if (!customer) throw new Error("customer-failed");
-  // Consent, on the branch that was missing it. The insert above stamps it
-  // because booking by calling the salon IS the opt-in moment — and that is
-  // just as true of a caller who ALREADY has a record. On a real call they
-  // always do: save_customer_details creates them from the number before
-  // the booking, with no consent on it, so every voice booking by an
-  // agent that collects details first landed here unconsented.
-  //
-  // wa.ts gates EVERY channel on consentAt, so the confirmation did not
-  // fail on its way out — it never left. It was logged as a bodyless
-  // no-consent failure, which reads in the feed as a template message that
-  // simply did nothing.
-  if (customer.consentAt === undefined) {
-    await ctx.db.patch(customer._id, { consentAt: Date.now() });
-  }
   const appointmentId = await ctx.db.insert("appointments", {
     orgId: args.orgId,
     customerId: customer._id,
@@ -3179,8 +3162,8 @@ export const callerOfCall = internalQuery({
 // changes nothing, which is what keeps this flexible without being clever.
 
 // Built-in columns are off limits to this path. A phone number misheard
-// mid-call must never overwrite the number we dialled, and consent is a KVKK
-// record with its own moment, not a value an agent infers from a chat.
+// mid-call must never overwrite the number we dialled, and a consent key is
+// never a value an agent infers from a chat.
 // RESERVED_CONTACT_KEYS moved to lib/keys.ts — contactFields validates
 // user-declared keys against the same list this write gate enforces.
 

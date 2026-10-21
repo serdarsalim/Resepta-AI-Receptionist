@@ -326,7 +326,8 @@ export const prepareCreate = internalMutation({
         firstName: v.string(),
         lastName: v.optional(v.string()),
         phone: v.string(),
-        consent: v.boolean(),
+        // Passed through from create below, and ignored there too.
+        consent: v.optional(v.boolean()),
       }),
     ),
     lines: v.optional(v.array(lineInput)),
@@ -389,7 +390,6 @@ export const prepareCreate = internalMutation({
         firstName: fresh.firstName.trim() || phone,
         lastName: fresh.lastName?.trim() || undefined,
         phone,
-        consentAt: fresh.consent ? Date.now() : undefined,
       });
       await syncCustomerSearch(ctx, customerId);
       // Typed into the booking sheet by somebody who is looking at it.
@@ -486,7 +486,10 @@ export const create = action({
         firstName: v.string(),
         lastName: v.optional(v.string()),
         phone: v.string(),
-        consent: v.boolean(),
+        // Ignored since 2026-10-21, when consent stopped gating sends.
+        // Accepted so a tab loaded before that deploy can still book a new
+        // customer; drop it once no client sends it.
+        consent: v.optional(v.boolean()),
       }),
     ),
     lines: v.optional(v.array(lineInput)),

@@ -128,7 +128,6 @@ const enrichedAppointment = v.object({
       firstName: v.string(),
       lastName: v.optional(v.string()),
       phone: v.string(),
-      consented: v.boolean(),
     }),
     v.null(),
   ),
@@ -235,7 +234,6 @@ export const listRange = query({
               firstName: customer.firstName,
               lastName: customer.lastName,
               phone: customer.phone,
-              consented: customer.consentAt !== undefined,
             }
           : null,
         serviceName: itemsLabel(row.items),

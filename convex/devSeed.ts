@@ -206,7 +206,9 @@ export const seed = internalMutation({
       const lastName = LAST_NAMES[(i * 7) % LAST_NAMES.length];
       // Ofcom reserves +44 7700 900xxx for fictional use.
       const phone = `+447700900${String(100 + i).slice(-3)}`;
-      const consented = i % 5 !== 4; // 4 of 20 without consent — the pill shows
+      // 4 of 20 unsubscribed from marketing, so the record's switch shows
+      // on somebody. They still get every booking message.
+      const unsubscribed = i % 5 === 4;
       const customerId = await ctx.db.insert("customers", {
         orgId: org._id,
         firstName,
@@ -218,7 +220,7 @@ export const seed = internalMutation({
         // the contact card has to draw, and a seed where everybody is
         // reachable never shows it.
         ...(i % 10 === 9 ? {} : { email: `${firstName}.${lastName}@example.com`.toLowerCase() }),
-        consentAt: consented ? now - (i + 1) * DAY : undefined,
+        marketingEmailOptOutAt: unsubscribed ? now - (i + 1) * DAY : undefined,
         lastInboundAt: i % 3 === 0 ? now - (i % 5) * HOUR : undefined,
       });
       await syncCustomerSearch(ctx, customerId);
@@ -243,7 +245,7 @@ export const seed = internalMutation({
             : i % 4 === 1
               ? ("cancelled" as const)
               : ("completed" as const);
-        const reminded = upcoming && startAt - now < DAY && consented;
+        const reminded = upcoming && startAt - now < DAY;
         const appointmentId = await ctx.db.insert("appointments", {
           orgId: org._id,
           customerId,
@@ -256,68 +258,66 @@ export const seed = internalMutation({
           status,
           source: i % 4 === 0 ? "calcom" : "manual",
           reminderSentOffsets: reminded ? [24] : undefined,
-          confirmationSentAt: consented ? startAt - 2 * DAY : undefined,
+          confirmationSentAt: startAt - 2 * DAY,
         });
         await syncAppointmentSchedule(ctx, appointmentId);
         appointmentCount++;
 
-        // Message history for consented customers.
-        if (consented) {
+        // Message history: every customer got their confirmation.
+        await ctx.db.insert("messages", {
+          orgId: org._id,
+          customerId,
+          appointmentId,
+          direction: "out",
+          kind: "confirmation",
+          templateName: "appointment_confirmation",
+          body: `Hello ${firstName}! Your appointment at ${org.name || "the salon"} is booked.`,
+          // WITHOUT this every seeded row shares one _creationTime — the
+          // whole seed lands in a single transaction — so the inbox had no
+          // order to sort by and drew twenty conversations all stamped the
+          // same minute. Clamped below `now` because an appointment two
+          // weeks out would otherwise stamp its confirmation in the future.
+          occurredAt: Math.min(startAt - 2 * DAY, now - (i + 3) * HOUR),
+          status: i % 6 === 5 ? "failed" : i % 2 === 0 ? "read" : "delivered",
+          error: i % 6 === 5 ? "wa-not-configured" : undefined,
+          wamid: `wamid.seed.${i}.${r}.conf`,
+          // Some customers answer a confirmation with an emoji instead of a
+          // word. Seeded because the reaction pill hangs off a bubble corner
+          // and overlaps its neighbours' spacing — a state you cannot check
+          // by reading the JSX, only by looking at a thread that has one.
+          ...(i % 3 === 0 ? { reactionEmoji: "👍" } : {}),
+        });
+        messageCount++;
+        if (reminded) {
           await ctx.db.insert("messages", {
             orgId: org._id,
             customerId,
             appointmentId,
             direction: "out",
-            kind: "confirmation",
-            templateName: "appointment_confirmation",
-            body: `Hello ${firstName}! Your appointment at ${org.name || "the salon"} is booked.`,
-            // WITHOUT this every seeded row shares one _creationTime — the
-            // whole seed lands in a single transaction — so the inbox had no
-            // order to sort by and drew twenty conversations all stamped the
-            // same minute. Clamped below `now` because an appointment two
-            // weeks out would otherwise stamp its confirmation in the future.
-            occurredAt: Math.min(startAt - 2 * DAY, now - (i + 3) * HOUR),
-            status: i % 6 === 5 ? "failed" : i % 2 === 0 ? "read" : "delivered",
-            error: i % 6 === 5 ? "wa-not-configured" : undefined,
-            wamid: `wamid.seed.${i}.${r}.conf`,
-            // Some customers answer a confirmation with an emoji instead of a
-            // word. Seeded because the reaction pill hangs off a bubble corner
-            // and overlaps its neighbours' spacing — a state you cannot check
-            // by reading the JSX, only by looking at a thread that has one.
-            ...(i % 3 === 0 ? { reactionEmoji: "👍" } : {}),
+            kind: "reminder_24h",
+            templateName: "appointment_reminder",
+            body: `Hello ${firstName}! Just a reminder about your appointment tomorrow.`,
+            occurredAt: Math.min(startAt - DAY, now - (i + 2) * HOUR),
+            status: "delivered",
+            wamid: `wamid.seed.${i}.${r}.rem`,
           });
           messageCount++;
-          if (reminded) {
-            await ctx.db.insert("messages", {
-              orgId: org._id,
-              customerId,
-              appointmentId,
-              direction: "out",
-              kind: "reminder_24h",
-              templateName: "appointment_reminder",
-              body: `Hello ${firstName}! Just a reminder about your appointment tomorrow.`,
-              occurredAt: Math.min(startAt - DAY, now - (i + 2) * HOUR),
-              status: "delivered",
-              wamid: `wamid.seed.${i}.${r}.rem`,
-            });
-            messageCount++;
-          }
-          if (status === "confirmed") {
-            await ctx.db.insert("messages", {
-              orgId: org._id,
-              customerId,
-              direction: "in",
-              kind: "reply",
-              body: "Yes, I’ll be there 👍",
-              occurredAt: Math.min(startAt - DAY + HOUR, now - (i + 1) * HOUR),
-              status: "received",
-              wamid: `wamid.seed.${i}.${r}.in`,
-              // The other direction: the salon acknowledging with an emoji
-              // rather than spending a message on "great, see you then".
-              ...(i % 4 === 1 ? { reactionEmoji: "❤️" } : {}),
-            });
-            messageCount++;
-          }
+        }
+        if (status === "confirmed") {
+          await ctx.db.insert("messages", {
+            orgId: org._id,
+            customerId,
+            direction: "in",
+            kind: "reply",
+            body: "Yes, I’ll be there 👍",
+            occurredAt: Math.min(startAt - DAY + HOUR, now - (i + 1) * HOUR),
+            status: "received",
+            wamid: `wamid.seed.${i}.${r}.in`,
+            // The other direction: the salon acknowledging with an emoji
+            // rather than spending a message on "great, see you then".
+            ...(i % 4 === 1 ? { reactionEmoji: "❤️" } : {}),
+          });
+          messageCount++;
         }
       }
 
@@ -479,7 +479,6 @@ export const seedWhatsappThreads = internalMutation({
           lastName: person.lastName,
           phone: person.phone,
           language: "tr",
-          consentAt: now - 30 * DAY,
         });
         await syncCustomerSearch(ctx, id);
         customer = await ctx.db.get(id);
@@ -571,9 +570,10 @@ export const seedWhatsappThreads = internalMutation({
 // made entirely of the org's own setup state. The logging is fixed; this
 // clears what the old behaviour left behind.
 //
-// Scoped to that one cause on purpose. no-consent rows are the KVKK record
-// that we correctly did not message somebody and must survive; delivered and
-// received messages are the actual history.
+// Scoped to that one cause on purpose. unsubscribed rows (and the no-consent
+// rows from before 2026-10-21) are the record that we correctly did not
+// message somebody and must survive; delivered and received messages are the
+// actual history.
 export const clearSetupFailures = internalMutation({
   args: {},
   returns: v.number(),

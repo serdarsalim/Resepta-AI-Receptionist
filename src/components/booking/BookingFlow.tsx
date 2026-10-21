@@ -315,8 +315,8 @@ export function BookingFlow({
             </a>
           </p>
         )}
-        {/* Only what is really coming: the backend judged the rules, the
-            consent and the channels (booking.book's confirmBy). */}
+        {/* Only what is really coming: the backend judged the rules and the
+            channels (booking.book's confirmBy). */}
         {done.confirmBy && (
           <p className="mt-2 text-xs text-[var(--muted)]">
             {t(CONFIRMATION_LINE[done.confirmBy])}

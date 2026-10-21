@@ -845,11 +845,6 @@ const dictionary = {
     en: "{n} selected",
     de: "{n} ausgewählt",
   },
-  "bulk.noConsentCount": {
-    tr: "{n} kişinin izni yok",
-    en: "{n} without consent",
-    de: "{n} ohne Einwilligung",
-  },
   "bulk.clear": { tr: "Seçimi bırak", en: "Clear", de: "Aufheben" },
   "bulk.email": { tr: "E-posta", en: "Email", de: "E-Mail" },
   "bulk.whatsapp": { tr: "WhatsApp", en: "WhatsApp", de: "WhatsApp" },
@@ -1163,23 +1158,6 @@ const dictionary = {
     en: "Learned from their own WhatsApp reply or an answered call. Change it here and your choice stays.",
     de: "Aus der eigenen WhatsApp-Antwort oder einem angenommenen Anruf gelernt. Ändern Sie sie hier, bleibt Ihre Wahl bestehen.",
   },
-  // Short enough to sit on one line in a record label column; the KVKK detail
-  // lives in the hint next to it.
-  "customers.consent": {
-    tr: "İletişim izni",
-    en: "Messaging consent",
-    de: "Einwilligung",
-  },
-  // Says exactly what consent gates, because "no channel sends anything" was
-  // false: the away reply and the assistant's answers reply to a message the
-  // customer just sent and go without it (wa.sendAwayReply,
-  // email.sendOutOfHoursReply, the assistant's auto-send). legal.ts makes the
-  // same split in its consent section; keep the two in step.
-  "customers.consentHint": {
-    tr: "Müşterinin KVKK kapsamındaki izni. İzin yoksa randevu onayları, hatırlatmalar, kampanyalar, toplu mesaj ve aramalar ona gitmez; ekibiniz de ona WhatsApp'tan yazamaz. Kapalıyken otomatik yanıt ve asistanın cevapları yine gider, çünkü müşterinin az önce gönderdiği mesaja yanıt verirler.",
-    en: "The customer's KVKK consent. Without it they get no confirmations, reminders, campaigns or bulk messages and calls, and your team can't write to them on WhatsApp. The away reply and the assistant's answers still go, because they answer a message the customer just sent.",
-    de: "Die Einwilligung des Kunden nach DSGVO. Ohne sie bekommt er keine Terminbestätigungen, Erinnerungen, Kampagnen oder Sammelaktionen per Nachricht oder Anruf, und Ihr Team kann ihm nicht per WhatsApp schreiben. Die Abwesenheitsantwort und die Antworten des Assistenten gehen trotzdem raus, weil sie auf eine Nachricht antworten, die er gerade geschickt hat.",
-  },
   // "Stumm", not "Stummschalten": this is a label on a switch in the record
   // footer's one row of three, and the extra eight characters were the widest
   // single thing in the German layout. The switch itself supplies the verb.
@@ -1328,18 +1306,6 @@ const dictionary = {
     en: "Could not delete. Try again.",
     de: "Löschen fehlgeschlagen. Bitte erneut versuchen.",
   },
-  "customers.noConsent": {
-    tr: "İzin yok",
-    en: "No consent",
-    de: "Keine Einwilligung",
-  },
-  // The consent funnel needs a name for the other half. The cell itself stays
-  // blank when consent is on file: only the missing one is worth a word.
-  "customers.consentGiven": {
-    tr: "İzin var",
-    en: "Consent on file",
-    de: "Einwilligung liegt vor",
-  },
   // One column header for the whole identity, since the table shows first and
   // last name together.
   "customers.name": { tr: "Ad soyad", en: "Name", de: "Name" },
@@ -1368,11 +1334,6 @@ const dictionary = {
     tr: "Henüz kimse bakmadı. Bakıldı olarak işaretle",
     en: "Nobody has looked at this yet. Mark as handled",
     de: "Noch niemand hat sich das angesehen. Als erledigt markieren",
-  },
-  "customers.cannotBeMessaged": {
-    tr: "Bu müşteriye mesaj izni verilmediği için onay, hatırlatma ve geri kazanım mesajlarının hiçbiri gitmiyor. İzni müşteri kartından işaretleyebilirsiniz.",
-    en: "No messaging consent on file, so confirmations, reminders and win-backs all skip this customer. You can record consent on their profile.",
-    de: "Keine Einwilligung hinterlegt, daher entfallen Bestätigungen, Erinnerungen und Rückgewinnungen für diese Person. Sie können die Einwilligung im Kundenprofil eintragen.",
   },
   "customers.added": { tr: "Eklendi", en: "Added", de: "Angelegt" },
   // "Last reply", not "Last activity": activity is ambiguous in an app where a
@@ -1915,7 +1876,7 @@ const dictionary = {
   // channel the confirmation is really coming by (booking.book /
   // booking.reschedule return it as confirmBy, from the send path's own
   // predicates). Nothing is shown when none is coming: no live booking rule,
-  // no consent on record, or no channel that can carry it. The single line
+  // or no channel that can carry it. The single line
   // these replaced promised "WhatsApp or email" in every one of those cases.
   "booking.confirmationWhatsApp": {
     tr: "Onay mesajınız WhatsApp ile geliyor.",
@@ -2113,6 +2074,7 @@ const dictionary = {
     en: "WhatsApp not connected",
     de: "WhatsApp nicht verbunden",
   },
+  // Only on rows from before 2026-10-21, when every send needed consent.
   "error.no-consent": {
     tr: "Müşteri izni yok",
     en: "No consent from customer",
@@ -6443,14 +6405,14 @@ const dictionary = {
     de: "Personen erhalten dies",
   },
   "campaign.noRecipients": {
-    tr: "Bu filtreye uyan, izni olan müşteri yok.",
-    en: "Nobody with consent matches this.",
-    de: "Niemand mit Einwilligung passt darauf.",
+    tr: "Bu filtreye uyan müşteri yok.",
+    en: "Nobody matches this.",
+    de: "Niemand passt darauf.",
   },
-  "campaign.consentNote": {
-    tr: "Yalnızca WhatsApp izni vermiş müşterilere gönderilir.",
-    en: "Only customers who gave WhatsApp consent are included.",
-    de: "Nur Kunden mit WhatsApp-Einwilligung werden einbezogen.",
+  "campaign.unsubscribedNote": {
+    tr: "Abonelikten çıkmış müşterilere gönderilmez.",
+    en: "Customers who unsubscribed are left out.",
+    de: "Abgemeldete Kunden werden nicht einbezogen.",
   },
   "campaign.send": { tr: "Gönder", en: "Send", de: "Senden" },
   "campaign.sendConfirm": {
