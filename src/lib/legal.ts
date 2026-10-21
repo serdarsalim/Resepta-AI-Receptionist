@@ -78,20 +78,21 @@ export const LEGAL_UI: Record<
 // with what the page itself says or the claim is worthless. Six `updated`
 // strings below (three languages, two documents) and this constant move
 // together or not at all.
-export const LEGAL_UPDATED_ISO = "2026-10-13";
+export const LEGAL_UPDATED_ISO = "2026-10-21";
 
 // Every fact below was checked against the code on 2026-10-13, not carried
-// over from the previous text. Where each one lives, for the next check:
+// over from the previous text, and the messages section again on 2026-10-21.
+// Where each one lives, for the next check:
 //   - the sub-processor list: every place the backend or the browser sends
 //     personal data out (convex/lib/llm.ts, waCloud.ts, email.ts,
 //     emailInbound.ts, evolution.ts, retellAgent.ts, wallet.ts, the Google
 //     provider in convex/auth.ts, src/lib/detectCountry.ts). A new one goes
 //     on the list in the same change, in all three languages.
-//   - consent: wa.ts sendAppointmentMessage and sendSession require
-//     customers.consentAt, sendAwayReply and the assistant's auto-send do not
-//     (chatAgent.fireAutoSend); bulkRuns.skipReason and campaigns.ts skip
-//     anyone without it; booking.book stamps it for a new customer and
-//     retell.agentBookTx for anyone an assistant books.
+//   - messages: no send reads customers.consentAt since 2026-10-21, and
+//     nothing writes it. Marketing (lib/marketing isMarketingKind) skips the
+//     unsubscribed (isUnsubscribed): bulkRuns.skipReason, campaigns.ts,
+//     wa.sendAppointmentMessage for a win-back, delivery.claimForRetry. A
+//     requested callback is not marketing (bulkRuns.reachReason).
 //   - deletion: customers.remove (owners, convex/customerDeletion.ts) and
 //     platform.deleteOrg (the operator, purge starts at once, no restore).
 //   - fees: wallet.ts, lib/foundOrg.ts (trial credit), retell.meterCall,
@@ -101,7 +102,7 @@ export const LEGAL_UPDATED_ISO = "2026-10-13";
 export const PRIVACY: Record<Language, LegalDoc> = {
   tr: {
     title: "Gizlilik politikası",
-    updated: "13 Ekim 2026",
+    updated: "21 Ekim 2026",
     intro: [
       "Resepta, randevuyla çalışan işletmeler için bir yazılımdır. İşletmenin takvimini ve müşteri kayıtlarını tutar, ona bir randevu sayfası verir, müşterilerine WhatsApp ve e-postayla onay ve hatırlatma gönderir, aramaları ve WhatsApp mesajlarını yapay zekâ asistanlarıyla yanıtlar. Bu sayfa hangi verileri tuttuğumuzu, neden tuttuğumuzu ve başka kimlerin işlediğini anlatır.",
       "Burada iki ayrı rol var ve aradaki fark önemli. Resepta'yı kullanan kişilerin hesap bilgileri için veri sorumlusu biziz. Bir işletmenin müşteri kayıtları için veri sorumlusu işletmenin kendisidir; biz yalnızca onun talimatıyla veri işleyen tarafız.",
@@ -129,17 +130,16 @@ export const PRIVACY: Record<Language, LegalDoc> = {
           "Telefon asistanıyla yapılan gelen ve giden aramalar: kimin kimi ne zaman aradığı, konuşmanın dökümü, özeti ve toplanan yanıtlar. Ses kaydı telefon sağlayıcısında kalır ve oradan dinletilir.",
           "WhatsApp asistanının taslakları ve yanıtları, yaptığı ya da önerdiği değişiklikler",
           "İşletmenin tanımladığı ek alanlar, serbest notlar ve müşterilerin online randevu alırken bıraktığı notlar",
-          "Mesaj izninin kaydedildiği tarih; müşterinin yapay zekâ araması istemediği ya da pazarlama e-postalarından çıktığı bilgisi",
+          "Müşterinin yapay zekâ araması istemediği ya da pazarlamadan çıktığı bilgisi; 21 Ekim 2026'dan önce eklenen müşterilerde mesaj izninin kaydedildiği tarih",
           "Müşterilerde ve randevularda yapılan değişikliklerin ve bunları kimin yaptığının kaydı",
         ],
       },
       {
-        heading: "İşletmenin başlattığı mesajlar izin ister",
+        heading: "Kime hangi mesaj gider",
         body: [
-          "Resepta onayları, hatırlatmaları, iptal bildirimlerini, takip ve geri kazanım mesajlarını, kampanyaları, toplu mesajları ve toplu aramaları yalnızca kaydında izin tarihi olan müşterilere gönderir. İşletme çalışanlarının yazdığı WhatsApp mesajları için de bu tarih gerekir. Bu bir ayar değil, kodun içindeki bir kontroldür.",
-          "Yanıtlar farklıdır. İşletme kapalıyken giden otomatik yanıt ve WhatsApp asistanının cevapları, müşterinin az önce gönderdiği bir mesaja karşılık verir; bu yüzden izin tarihi aranmadan gider.",
-          "Yeni bir müşteri randevu sayfasından randevu aldığında ve herhangi bir müşteri telefon asistanından ya da WhatsApp asistanından randevu aldığında izin tarihini Resepta kendisi kaydeder. Bunun dışında izni almak ve kaydetmek işletmenin sorumluluğundadır.",
-          "Yapay zekâ araması istemeyen müşteri otomatik aramalara alınmaz. Pazarlama e-postalarından çıkan müşteriye artık kampanya, toplu ve geri kazanım e-postası gitmez. İkisi de onay ve hatırlatmaları durdurmaz.",
+          "Onaylar, hatırlatmalar, iptal bildirimleri ve takip mesajları müşterinin aldığı bir randevuyla ilgilidir; Resepta bunları işletmenin bütün müşterilerine gönderir. İşletme kapalıyken giden otomatik yanıt, WhatsApp asistanının cevapları ve işletme çalışanlarının yazdığı mesajlar da öyle.",
+          "Kampanyalar, toplu mesajlar, toplu aramalar ve geri kazanım mesajları pazarlamadır. Pazarlama e-postasındaki bağlantıyla ya da işletmeye söyleyerek abonelikten çıkan müşteriyi Resepta bunların hepsinin dışında bırakır; WhatsApp'ta, e-postada ve telefonda aynı şekilde. Yapay zekâ araması istemeyen müşteri otomatik aramalara alınmaz. İkisi de onay ve hatırlatmaları durdurmaz.",
+          "Resepta pazarlama iznini kaydetmez. Bu izni almak ve yasanın istediği yerde kaydetmek (Türkiye'de İYS'de) işletmenin sorumluluğundadır.",
         ],
       },
       {
@@ -200,7 +200,7 @@ export const PRIVACY: Record<Language, LegalDoc> = {
   },
   en: {
     title: "Privacy policy",
-    updated: "13 October 2026",
+    updated: "21 October 2026",
     intro: [
       "Resepta is software for businesses that work by appointment. It keeps a business's calendar and customer records, gives it a booking page, sends its customers confirmations and reminders by WhatsApp and email, and answers calls and WhatsApp messages with AI assistants. This page explains what we store, why, and who else handles it.",
       "There are two roles here, and the difference matters. For the account details of the people who use Resepta, we are the data controller. For a business's customer records, the business is the controller and we are a processor acting on its instructions.",
@@ -228,17 +228,16 @@ export const PRIVACY: Record<Language, LegalDoc> = {
           "Calls with the phone agent in both directions: who called whom and when, a transcript, a summary and the answers collected. The recording stays with the voice provider and plays from there.",
           "The WhatsApp assistant's drafts and replies, and the changes it made or proposed",
           "Fields the business defines, free-text notes, and notes customers leave when they book online",
-          "The date consent to messages was recorded, and whether the customer asked for no AI calls or unsubscribed from marketing email",
+          "Whether the customer asked for no AI calls or unsubscribed from marketing, and, for customers added before 21 October 2026, the date consent to messages was recorded",
           "A record of changes to customers and appointments, and who made them",
         ],
       },
       {
-        heading: "Messages a business starts need consent",
+        heading: "Who gets which messages",
         body: [
-          "Resepta sends confirmations, reminders, cancellation notices, follow-ups, win-back messages, campaigns, bulk messages and bulk calls only to customers whose record carries a consent date. WhatsApp messages the business's staff write need it too. This is a check in the code, not a setting.",
-          "Replies are different. The automatic reply sent while the business is closed, and the WhatsApp assistant's answers, respond to a message the customer has just sent, so they go out without a consent date.",
-          "Resepta records the consent date itself when a new customer books on the booking page, and when any customer books with the phone agent or the WhatsApp assistant. Beyond that, collecting and recording consent is the business's responsibility.",
-          "A customer who asked for no AI calls is left out of automated calls. One who unsubscribed from marketing email gets no more campaign, bulk or win-back emails. Neither stops their confirmations or reminders.",
+          "Confirmations, reminders, cancellation notices and follow-ups are about a booking the customer made, and Resepta sends them to every customer of the business. So do the automatic reply sent while the business is closed, the WhatsApp assistant's answers, and the messages the business's staff write.",
+          "Campaigns, bulk messages, bulk calls and win-back messages are marketing. Resepta leaves out every customer who unsubscribed, by the link in a marketing email or by asking the business, on WhatsApp, by email and by phone alike. A customer who asked for no AI calls is left out of automated calls. Neither stops their confirmations or reminders.",
+          "Resepta does not record marketing consent. Collecting it, and recording it where the law asks for it (in Türkiye, in the İYS register), is the business's responsibility.",
         ],
       },
       {
@@ -297,7 +296,7 @@ export const PRIVACY: Record<Language, LegalDoc> = {
   },
   de: {
     title: "Datenschutzerklärung",
-    updated: "13. Oktober 2026",
+    updated: "21. Oktober 2026",
     intro: [
       "Resepta ist eine Software für Betriebe, die mit Terminen arbeiten. Sie führt den Kalender und die Kundendaten eines Betriebs, stellt ihm eine Buchungsseite bereit, schickt seinen Kunden Bestätigungen und Erinnerungen per WhatsApp und E-Mail und beantwortet Anrufe und WhatsApp-Nachrichten mit KI-Assistenten. Diese Seite erklärt, welche Daten wir speichern, warum, und wer sie noch verarbeitet.",
       "Es gibt hier zwei Rollen, und der Unterschied ist wichtig. Für die Kontodaten der Menschen, die Resepta nutzen, sind wir Verantwortlicher. Für die Kundendaten eines Betriebs ist der Betrieb der Verantwortliche, und wir sind Auftragsverarbeiter nach seinen Weisungen.",
@@ -325,17 +324,16 @@ export const PRIVACY: Record<Language, LegalDoc> = {
           "Anrufe mit dem Telefonassistenten in beide Richtungen: wer wen wann angerufen hat, ein Transkript, eine Zusammenfassung und die erfassten Antworten. Die Aufnahme bleibt beim Telefonie-Anbieter und wird von dort abgespielt.",
           "Entwürfe und Antworten des WhatsApp-Assistenten und die Änderungen, die er vorgenommen oder vorgeschlagen hat",
           "Eigene Felder des Betriebs, freie Notizen und Notizen, die Kunden bei der Online-Buchung hinterlassen",
-          "Das Datum, an dem die Einwilligung in Nachrichten erfasst wurde, und ob der Kunde keine KI-Anrufe möchte oder Werbe-E-Mails abbestellt hat",
+          "Ob der Kunde keine KI-Anrufe möchte oder Werbung abbestellt hat, und bei Kunden, die vor dem 21. Oktober 2026 angelegt wurden, das Datum, an dem die Einwilligung in Nachrichten erfasst wurde",
           "Ein Protokoll der Änderungen an Kunden und Terminen und wer sie vorgenommen hat",
         ],
       },
       {
-        heading: "Nachrichten, die ein Betrieb beginnt, brauchen eine Einwilligung",
+        heading: "Wer welche Nachrichten bekommt",
         body: [
-          "Resepta schickt Bestätigungen, Erinnerungen, Stornohinweise, Nachfass- und Rückgewinnungsnachrichten, Kampagnen, Sammelnachrichten und Sammelanrufe nur an Kunden, in deren Datensatz ein Einwilligungsdatum steht. Auch WhatsApp-Nachrichten, die das Personal des Betriebs schreibt, brauchen dieses Datum. Das ist eine Prüfung im Code, keine Einstellung.",
-          "Bei Antworten ist es anders. Die automatische Antwort, während der Betrieb geschlossen ist, und die Antworten des WhatsApp-Assistenten reagieren auf eine Nachricht, die der Kunde gerade geschickt hat. Sie gehen deshalb ohne Einwilligungsdatum hinaus.",
-          "Das Einwilligungsdatum trägt Resepta selbst ein, wenn ein neuer Kunde über die Buchungsseite bucht und wenn ein Kunde beim Telefonassistenten oder beim WhatsApp-Assistenten bucht. Darüber hinaus ist es Sache des Betriebs, die Einwilligung einzuholen und festzuhalten.",
-          "Wer keine KI-Anrufe möchte, wird bei automatischen Anrufen übersprungen. Wer Werbe-E-Mails abbestellt hat, bekommt keine Kampagnen-, Sammel- oder Rückgewinnungs-E-Mails mehr. Bestätigungen und Erinnerungen laufen in beiden Fällen weiter.",
+          "Bestätigungen, Erinnerungen, Stornohinweise und Nachfassnachrichten betreffen eine Buchung des Kunden, und Resepta schickt sie an alle Kunden des Betriebs. Das gilt auch für die automatische Antwort, während der Betrieb geschlossen ist, für die Antworten des WhatsApp-Assistenten und für Nachrichten, die das Personal des Betriebs schreibt.",
+          "Kampagnen, Sammelnachrichten, Sammelanrufe und Rückgewinnungsnachrichten sind Werbung. Resepta lässt jeden Kunden aus, der sich abgemeldet hat, über den Link in einer Werbe-E-Mail oder beim Betrieb selbst, per WhatsApp, E-Mail und Telefon gleichermaßen. Wer keine KI-Anrufe möchte, wird bei automatischen Anrufen übersprungen. Bestätigungen und Erinnerungen laufen in beiden Fällen weiter.",
+          "Resepta erfasst keine Werbeeinwilligung. Sie einzuholen und dort festzuhalten, wo das Gesetz es verlangt (in der Türkei im İYS-Register), ist Sache des Betriebs.",
         ],
       },
       {
@@ -399,7 +397,7 @@ export const PRIVACY: Record<Language, LegalDoc> = {
 export const TERMS: Record<Language, LegalDoc> = {
   tr: {
     title: "Kullanım koşulları",
-    updated: "13 Ekim 2026",
+    updated: "21 Ekim 2026",
     intro: [
       "Resepta'yı kullanarak bu koşulları kabul etmiş olursunuz. Kısa tutmaya çalıştık.",
     ],
@@ -483,7 +481,7 @@ export const TERMS: Record<Language, LegalDoc> = {
   },
   en: {
     title: "Terms of service",
-    updated: "13 October 2026",
+    updated: "21 October 2026",
     intro: ["By using Resepta you agree to these terms. We have kept them short."],
     sections: [
       {
@@ -565,7 +563,7 @@ export const TERMS: Record<Language, LegalDoc> = {
   },
   de: {
     title: "Nutzungsbedingungen",
-    updated: "13. Oktober 2026",
+    updated: "21. Oktober 2026",
     intro: [
       "Mit der Nutzung von Resepta stimmen Sie diesen Bedingungen zu. Wir haben sie kurz gehalten.",
     ],
