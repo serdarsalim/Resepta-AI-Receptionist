@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type Ref } from "react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -47,38 +47,40 @@ import { embedSnippet } from "@/lib/embed";
 // a garage: services and contact fields are org data, so the vertical's own
 // vocabulary (plate number, last cleaning, insurance) never needs a schema
 // change or a second deployment.
-// Details, services and contact fields are all "set the salon up once" —
-// splitting them across three tabs turns setup into a scavenger hunt, and each
-// card already carries its own heading, so one scroll reads fine. They share
-// the first chip.
+// Three tabs, General · Hours · Team, the underlined strip Nudge's Settings
+// page wears (Serdar, 2026-10-21). From 2026-08-12 to then this was ONE page
+// with the three cards stacked, argued for because hours and capacity are two
+// halves of one calculation (getAvailableSlots reads the business hours AND
+// the count of active staff). Serdar overruled that: three long cards in one
+// scroll read as one endless form, and a tab says what each part is before you
+// read it. Your other businesses lives under Team, the same people seen from
+// the other businesses they could work in.
 //
-// The other two earn their own because neither is setup. People is what you
-// come back to when somebody is hired or leaves. Activity is what you open
-// when something looks wrong and you need to know who did it — a question, not
-// a configuration, and burying it under a setup scroll would mean nobody ever
-// finds it at the moment they need it.
-// One chip, one job. They used to be three, with the first holding identity,
-// the service catalogue and the contact fields — three things an owner opens
-// on completely different schedules, stacked into one scroll, which is how
-// Services ended up below the fold on the screen it is most edited from.
+// Services and contact fields have their own homes (Knowledge, and Customers'
+// Contact fields tab): a price list is a body of content you maintain, not a
+// setting, and the voice agent and booking page both read it at call time.
+// Their cards still live in this file and are exported.
+type BusinessSection = "general" | "hours" | "team";
 
-// Which card each row lives on. Business is ONE page now: General, Hours and
-// Team stacked, no chip strip. The strip went away because it had shrunk to
-// three entries whose contents all answer "what is this business", and because
-// hours and capacity are two halves of one calculation (getAvailableSlots
-// reads the business hours AND orgCapacity, the count of active staff) that a
-// chip boundary kept apart.
-//
-// Services and contact fields left for their own sidebar destination the same
-// day: a price list is a body of content you maintain, not a setting, and the
-// voice agent and booking page both read it at call time.
-//
-// The old objection to stacking these (recorded twice: General carried nine
-// rows across three unrelated jobs, so an open/close grid appended to it landed
-// under the fold) is answered rather than ignored. General shed Timezone to
-// Hours, and the header search now SCROLLS to a card instead of switching
-// sections, so "where do I change opening times" is one query rather than a
-// scroll hunt.
+const SECTIONS: BusinessSection[] = ["general", "hours", "team"];
+
+const SECTION_LABEL: Record<BusinessSection, TranslationKey> = {
+  general: "settings.general",
+  hours: "settings.hours",
+  team: "staff.title",
+};
+
+// The open tab lives in the URL as ?section=, so a refresh comes back to it and
+// the address bar is a link to it. General is the default and leaves the
+// parameter off. The name is the one the Calendar's old "Edit hours" button
+// linked with, so a ?section=hours link still opens Hours.
+const SECTION_PARAM = "section";
+
+function isSection(value: string | null): value is BusinessSection {
+  return SECTIONS.some((section) => section === value);
+}
+
+// Which card each searchable row lives on; a hit opens the card's tab.
 //
 // Hand-maintained, same as Account's: the rows live in card bodies with no
 // runtime register to enumerate, so add a line when you add a row. Forgetting
@@ -93,7 +95,8 @@ const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
   { card: "general", key: "settings.language" },
   { card: "general", key: "settings.industry" },
   { card: "general", key: "settings.bookingPage" },
-  { card: "general", key: "settings.legalLinks" },
+  { card: "general", key: "settings.termsUrl" },
+  { card: "general", key: "settings.privacyUrl" },
   { card: "general", key: "settings.minNotice" },
   { card: "general", key: "settings.currency" },
   { card: "general", key: "settings.priceDecimals" },
@@ -109,11 +112,11 @@ const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
 
 type BusinessCard = "general" | "hours" | "team" | "businesses";
 
-const CARD_LABEL: Record<BusinessCard, TranslationKey> = {
-  general: "settings.general",
-  hours: "settings.hours",
-  team: "staff.title",
-  businesses: "share.title",
+const CARD_SECTION: Record<BusinessCard, BusinessSection> = {
+  general: "general",
+  hours: "hours",
+  team: "team",
+  businesses: "team",
 };
 
 
@@ -136,35 +139,40 @@ export function BusinessView() {
   // Claims the header's box, same component and same corner as Customers and
   // Inbox. The shell owns the input; a view only says what it should say.
   const search = useHeaderSearch(t("common.search"));
-  const cardRefs = useRef<Record<BusinessCard, HTMLDivElement | null>>({
-    general: null,
-    hours: null,
-    team: null,
-    businesses: null,
-  });
-  // Held in state and consumed by an effect rather than scrolled on the click.
-  // Clearing the query remounts the cards, so at click time every ref is null,
-  // and one requestAnimationFrame does not cover React's re-render plus the ref
-  // callbacks. Same mechanism AccountView uses, and the same reason.
-  const [pendingScroll, setPendingScroll] = useState<BusinessCard | null>(null);
+  const [section, setSection] = useState<BusinessSection>("general");
+
+  // A layout effect, so a link to Hours never paints General for a frame
+  // first. Read after mount like the shell's own ?tab=, never during render:
+  // initialising state from window there is a hydration mismatch.
+  useLayoutEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get(SECTION_PARAM);
+    if (isSection(wanted)) setSection(wanted);
+  }, []);
+
+  // replaceState, not push, for the shell's reason: switching tabs is not
+  // history, and Back should still mean "the page before this one".
+  const openSection = (next: BusinessSection) => {
+    setSection(next);
+    const url = new URL(window.location.href);
+    if (next === "general") url.searchParams.delete(SECTION_PARAM);
+    else url.searchParams.set(SECTION_PARAM, next);
+    window.history.replaceState(null, "", url);
+  };
+
+  // A hit on Your other businesses opens Team and then scrolls to that card,
+  // the second one on the tab. Held in state and consumed by an effect rather
+  // than scrolled on the click: clearing the query renders the tab, so at
+  // click time the card is not on the page yet. Same mechanism AccountView
+  // uses, and the same reason.
+  const businessesRef = useRef<HTMLDivElement | null>(null);
+  const [pendingScroll, setPendingScroll] = useState(false);
   useEffect(() => {
     if (!pendingScroll) return;
     // No behavior: "smooth". It silently does nothing on this shell's `main`,
     // measured, so asking for it costs the scroll it was meant to prettify.
-    cardRefs.current[pendingScroll]?.scrollIntoView({ block: "start" });
-    setPendingScroll(null);
+    businessesRef.current?.scrollIntoView({ block: "start" });
+    setPendingScroll(false);
   }, [pendingScroll]);
-
-  // The Calendar's "Edit hours" button still deep-links here with
-  // ?section=hours. There are no sections left to switch to, so the param now
-  // means "scroll to that card" — the destination it always meant, expressed
-  // against a page instead of a chip strip. Read once on mount.
-  useEffect(() => {
-    const wanted = new URLSearchParams(window.location.search).get("section");
-    if (wanted === "hours" || wanted === "team" || wanted === "general") {
-      setPendingScroll(wanted);
-    }
-  }, []);
 
   const hits = search.active
     ? SEARCH_INDEX.filter((entry) => search.matches(t(entry.key)))
@@ -177,7 +185,7 @@ export function BusinessView() {
 
   // Searching replaces the page body with a list of places to go, and picking
   // one clears the query, because the search is done the moment it has taken
-  // you somewhere. It scrolls rather than switches now that this is one page.
+  // you somewhere: to the tab that holds the row.
   if (search.active) {
     return (
       <div className="mx-auto max-w-3xl space-y-4 page-stack">
@@ -185,24 +193,32 @@ export function BusinessView() {
           <p className="text-sm text-[var(--muted)]">{t("table.noMatches")}</p>
         ) : (
           <div className="overflow-hidden rounded-lg border border-[var(--border)]">
-            {hits.map((entry, i) => (
-              <button
-                key={`${entry.card}:${entry.key}`}
-                type="button"
-                onClick={() => {
-                  search.setQuery("");
-                  setPendingScroll(entry.card);
-                }}
-                className={`flex w-full items-baseline justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--muted-bg)] ${
-                  i > 0 ? "border-t border-[var(--border)]" : ""
-                }`}
-              >
-                <span className="text-sm">{t(entry.key)}</span>
-                <span className="shrink-0 text-xs text-[var(--muted)]">
-                  {t(CARD_LABEL[entry.card])}
-                </span>
-              </button>
-            ))}
+            {hits.map((entry, i) => {
+              const target = CARD_SECTION[entry.card];
+              const label = t(entry.key);
+              const tabLabel = t(SECTION_LABEL[target]);
+              return (
+                <button
+                  key={`${entry.card}:${entry.key}`}
+                  type="button"
+                  onClick={() => {
+                    search.setQuery("");
+                    openSection(target);
+                    if (entry.card === "businesses") setPendingScroll(true);
+                  }}
+                  className={`flex w-full items-baseline justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--control-hover)] ${
+                    i > 0 ? "border-t border-[var(--border)]" : ""
+                  }`}
+                >
+                  <span className="text-sm">{label}</span>
+                  {/* Where the hit lands. Left off when the hit IS the tab
+                      ("Hours … Hours" said one thing twice). */}
+                  {label !== tabLabel && (
+                    <span className="shrink-0 text-xs text-[var(--muted)]">{tabLabel}</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -211,35 +227,46 @@ export function BusinessView() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 page-stack">
-      {!isOwner && (
-        <div className="flex justify-end">
-          <ViewOnlyPill title={t("settings.ownerOnly")} />
+      {/* Underline tabs, VoiceView's strip: the hairline belongs to the STRIP
+          and each tab overlaps it with -mb-px, so the active underline
+          replaces that segment of the rule, and the weight never changes
+          between states. A member's View only pill rides the strip's right
+          end rather than taking a row of its own above it. */}
+      <div className="flex flex-wrap items-center gap-5 border-b border-[var(--border)]">
+        {SECTIONS.map((id) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => openSection(id)}
+            aria-current={section === id ? "page" : undefined}
+            className={`-mb-px border-b-2 px-0.5 py-2.5 text-sm transition-colors ${
+              section === id
+                ? "border-[var(--foreground)] text-[var(--foreground)]"
+                : "border-transparent text-[var(--muted-strong)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            {t(SECTION_LABEL[id])}
+          </button>
+        ))}
+        {!isOwner && (
+          <span className="ml-auto">
+            <ViewOnlyPill title={t("settings.ownerOnly")} />
+          </span>
+        )}
+      </div>
+
+      {section === "general" && <DetailsCard isOwner={isOwner} />}
+      {/* No Closures card: blocked time is drawn on the calendar, where the
+          owner already lives (BlockSheet). Hours keeps only the standing
+          week. */}
+      {section === "hours" && <HoursCard isOwner={isOwner} org={settings.org} />}
+      {section === "team" && (
+        <div className="space-y-8">
+          <PeopleCard isOwner={isOwner} />
+          {/* Renders only for an owner who has a second business. */}
+          <OtherBusinessesCard isOwner={isOwner} ref={businessesRef} />
         </div>
       )}
-      <div ref={(node) => void (cardRefs.current.general = node)}>
-        <DetailsCard isOwner={isOwner} />
-      </div>
-      {/* Hours and Team are adjacent because they are the two inputs to one
-          calculation: getAvailableSlots reads the business hours AND
-          orgCapacity, the count of active staff. A chip boundary between them
-          meant changing capacity took you off the screen showing when you are
-          open. */}
-      {/* No Closures card any more: blocked time is drawn on the calendar,
-          where the owner already lives — the grid's create popup asks
-          Appointment or Blocked time (see BlockSheet). Settings keep only
-          the standing week. */}
-      <div ref={(node) => void (cardRefs.current.hours = node)}>
-        <HoursCard isOwner={isOwner} org={settings.org} />
-      </div>
-      <div ref={(node) => void (cardRefs.current.team = node)}>
-        <PeopleCard isOwner={isOwner} />
-      </div>
-      {/* Under Team, and renders only for an owner who has a second business.
-          It reads as a footnote to the roster above it — the same people, seen
-          from the other businesses they could be working in. */}
-      <div ref={(node) => void (cardRefs.current.businesses = node)}>
-        <OtherBusinessesCard isOwner={isOwner} />
-      </div>
     </div>
   );
 }
@@ -583,7 +610,8 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
   );
 
   return (
-    <Card title={t("settings.general")} disabled={!isOwner}>
+    // Untitled: the General tab right above it already names it.
+    <Card disabled={!isOwner}>
       {confirmDialog}
       {settings === undefined ? (
         <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
@@ -2741,7 +2769,14 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
 // account is a row on this org's rota; there is nothing to grant them
 // elsewhere, and copying the rota into another business is a different feature
 // (that one wants their hours and their services too).
-function OtherBusinessesCard({ isOwner }: { isOwner: boolean }) {
+function OtherBusinessesCard({
+  isOwner,
+  ref,
+}: {
+  isOwner: boolean;
+  // The page scrolls here when a search hit names this card.
+  ref?: Ref<HTMLDivElement>;
+}) {
   const { t } = useLanguage();
   // Skipped rather than rendered-and-ignored for staff: both queries are
   // owner-only on the server, so a staff session would spend two failing
@@ -2771,6 +2806,7 @@ function OtherBusinessesCard({ isOwner }: { isOwner: boolean }) {
         : t("roster.noAccess");
 
   return (
+    <div ref={ref}>
     <Card title={t("share.title")} tip={t("share.hint")} disabled={!isOwner}>
       <div className="space-y-1">
         {others.map((business) => {
@@ -2864,6 +2900,7 @@ function OtherBusinessesCard({ isOwner }: { isOwner: boolean }) {
       </div>
       {error && <p className="pt-2 text-xs text-[var(--now-line)]">{error}</p>}
     </Card>
+    </div>
   );
 }
 
