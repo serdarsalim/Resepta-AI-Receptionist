@@ -428,8 +428,22 @@ export function ColumnPicker({
   );
 }
 
-// The search box. Feeds useSearch from @/lib/useTableState; the appointments
-// list and the inbox conversation list can hang off the same pair.
+// The search box: the header's global find, and the operator console's,
+// which shares it so the console does not invent a second one. Feeds
+// useSearch from @/lib/useTableState.
+//
+// Nudge's SearchField, round shape (2026-10-21): chrome, like a browser's
+// address bar, so it is the one ROUND field in the app; a field inside a card
+// stays boxed. The shell draws the border, fill and focus ring and the input
+// is bare, so the magnifier and the clear button are flex siblings instead of
+// overlays fighting the input's padding. --card fill, because it sits ON the
+// frame's fill and has to read as raised; in dark --background is below the
+// frame and the pill read as a well cut into it.
+//
+// Fixed and narrow, never sized to its text. The box used to grow with
+// whichever was longer, the typed value or the placeholder, so the header
+// re-laid itself out on every keystroke and every tab's placeholder had to be
+// one short word.
 export function SearchInput({
   value,
   onChange,
@@ -444,9 +458,8 @@ export function SearchInput({
   onChange: (value: string) => void;
   placeholder: string;
   className?: string;
-  // Fill the container instead of sizing to the text. The phone header's
-  // expanded state wants the whole row; everywhere else the box earns its
-  // width.
+  // Fill the container instead of the fixed width. The phone header's
+  // expanded state wants the whole row.
   fluid?: boolean;
   // The header owns focus for the phone's expand-to-search, so it needs a
   // handle on the field and a say in when the field gives focus back.
@@ -458,7 +471,11 @@ export function SearchInput({
 }) {
   const t = useT();
   return (
-    <div className={`relative ${className}`}>
+    <div
+      className={`flex h-8 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--card)] px-2.5 transition-colors focus-within:outline focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-[var(--accent)] ${
+        fluid ? "w-full" : "w-40 lg:w-48"
+      } ${className}`}
+    >
       <svg
         viewBox="0 0 24 24"
         width="15"
@@ -468,7 +485,7 @@ export function SearchInput({
         strokeWidth="2"
         strokeLinecap="round"
         aria-hidden
-        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+        className="shrink-0 text-[var(--muted)]"
       >
         <circle cx="11" cy="11" r="7" />
         <path d="m20 20-3.5-3.5" />
@@ -483,38 +500,23 @@ export function SearchInput({
         onFocus={onFocus}
         placeholder={placeholder}
         aria-label={placeholder}
-        // Sized to its CONTENT, not to focus: compact at rest, growing as the
-        // query outgrows the placeholder, clamped so it can neither shrink
-        // below legible nor take over the header. Ported from Nudge's
-        // AppHeader. Growth pushes left — the avatar stays right-anchored.
-        //
-        // Only works if the placeholder is short. A 19-character
-        // "Search appointments" pins the box at the clamp ceiling forever,
-        // which is why the placeholder is now just "Ara…".
-        style={
-          fluid
-            ? undefined
-            : {
-                width: `clamp(8rem, ${Math.max(
-                  value.length,
-                  placeholder.length,
-                )}ch + 3.5rem, 20rem)`,
-              }
-        }
-        // 16px floor below sm: iOS Safari zooms the viewport under it.
-        className={`h-9 py-0 pl-9 pr-3 text-[16px] transition-[width] duration-200 sm:text-sm ${
-          fluid ? "w-full" : ""
-        }`}
+        // Bare: the shell above owns the chrome. 16px below sm, where iOS
+        // Safari zooms the viewport under it.
+        className="h-full min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-[16px] text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] focus:outline-none sm:text-sm"
       />
       {value && (
         <button
           type="button"
+          // Keeps focus in the field, so clearing leaves you ready to type
+          // rather than dismissing the jump list the focus was holding open.
+          onMouseDown={(event) => event.preventDefault()}
           onClick={() => onChange("")}
           aria-label={t("common.close")}
-          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
+          className="-mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[var(--muted)] transition-colors hover:bg-[var(--control-hover)] hover:text-[var(--foreground)]"
         >
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
-            <path d="M6 6l12 12M18 6L6 18" />
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+            <path d="M18 6 6 18" />
+            <path d="m6 6 12 12" />
           </svg>
         </button>
       )}
