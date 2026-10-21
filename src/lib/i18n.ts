@@ -2558,8 +2558,6 @@ const dictionary = {
   "vars.staff": { tr: "Personel", en: "Staff", de: "Mitarbeiter" },
   "vars.address": { tr: "İşletme adresi", en: "Business address", de: "Adresse des Betriebs" },
   "settings.address": { tr: "Adres", en: "Address", de: "Adresse" },
-  // The business's own terms and privacy pages, linked above the booking
-  // page's Book button (P29). Two fields on one row: they answer one question.
   // The second glyph beside the booking link: copies the code that puts the
   // page on the business's own website (P29, public/embed.js).
   // The WhatsApp composer's + menu row that puts the booking page's address
@@ -2574,25 +2572,23 @@ const dictionary = {
     en: "Copy the code for your website",
     de: "Code für Ihre Website kopieren",
   },
-  "settings.legalLinks": {
-    tr: "Koşullar ve gizlilik",
-    en: "Terms and privacy",
-    de: "AGB und Datenschutz",
-  },
+  // The business's own terms and privacy pages, linked above the booking
+  // page's Book button (P29). Two rows on the General card, Terms page and
+  // Privacy page, the hint on the first (2026-10-21; Nudge's Branding card).
   "settings.legalLinksHint": {
     tr: "Kendi kullanım koşulları ve gizlilik politikası sayfalarınızın bağlantıları. Randevu sayfası, onay düğmesinin üstünde randevu alan kişinin bunları kabul ettiğini bağlantılarıyla yazar. Boş bırakırsanız böyle bir satır çıkmaz.",
     en: "Links to your own terms and privacy policy pages. The booking page says, above its Book button, that booking agrees to them, with the links. Leave both empty and no such line shows.",
     de: "Links zu Ihren eigenen AGB und Ihrer Datenschutzerklärung. Die Buchungsseite nennt sie über dem Buchen-Knopf, mit Links. Leer gelassen erscheint keine solche Zeile.",
   },
   "settings.termsUrl": {
-    tr: "Koşullar sayfası bağlantısı",
-    en: "Terms page link",
-    de: "Link zu den AGB",
+    tr: "Koşullar sayfası",
+    en: "Terms page",
+    de: "AGB-Seite",
   },
   "settings.privacyUrl": {
-    tr: "Gizlilik sayfası bağlantısı",
-    en: "Privacy page link",
-    de: "Link zum Datenschutz",
+    tr: "Gizlilik sayfası",
+    en: "Privacy page",
+    de: "Datenschutzseite",
   },
   "settings.invalidUrl": {
     tr: "Bu bir web adresine benzemiyor (https:// ile başlamalı).",

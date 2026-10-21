@@ -25,6 +25,7 @@ import { ViewOnlyPill } from "./ViewOnlyPill";
 import { CheckSwitch } from "./CheckSwitch";
 import { StaffColorPicker } from "./StaffColorPicker";
 import { FIELD, ROW_GRID, RowLabel } from "./RowLabel";
+import { buttonClass } from "./Control";
 import { presetLanguage } from "../../convex/lib/industryPresets";
 import { InlineEditValue } from "./RecordField";
 import { TagPillsEditor } from "./TagPillsEditor";
@@ -323,7 +324,7 @@ function BookingRow() {
             prose to read, and Copy is the affordance that matters; a URL
             allowed to wrap took two lines and pushed the button onto a
             third. */}
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2 sm:min-h-8">
           <CheckSwitch
             on={bookingEnabled ?? false}
             label={t("settings.bookingPage")}
@@ -407,59 +408,104 @@ function BookingRow() {
   );
 }
 
+// The General card's grammar (Serdar, 2026-10-21, after Nudge's Branding
+// card): every value is ONE width, the value column's, so the name, the
+// address, the incoming address, every picker and both legal pages end on the
+// same line, and a row that holds two things splits that width rather than
+// adding to it. It replaced boxes capped to their own text (AGENTS.md rule
+// 6), which had given this card five widths.
+//
+// A label is centred on a one-line control: the label cell is a control's
+// height from sm, so its words sit on the field's text line instead of 6px
+// above it, and it lines up with the FIRST line of the address box. On a
+// phone the label stacks on its field, half a row-gap away, so it reads as
+// that field's and not as the end of the row above.
+function FieldLabel({
+  label,
+  hint,
+  className = "",
+}: {
+  label: string;
+  hint?: string;
+  className?: string;
+}) {
+  return (
+    <span className={`flex items-center max-sm:-mb-3 sm:min-h-8 ${className}`}>
+      <RowLabel label={label} hint={hint} />
+    </span>
+  );
+}
+
+// A refusal under the field it is about, in the value column. The empty
+// label cell is gone on a phone, where it would cost a row-gap of its own.
+function FieldError({ text }: { text: string }) {
+  return (
+    <>
+      <span className="max-sm:hidden" />
+      <p className="-mt-3 text-sm text-red-600 dark:text-red-400">{text}</p>
+    </>
+  );
+}
+
+// One box holding a field and its suffix: the incoming address and its
+// @domain, the notice and its unit. The shell draws the border and the focus
+// ring (focus-within, so the box you see is the box that lights), and the
+// control inside draws nothing, so exactly one of the two is the field.
+// Nudge's fieldShellClass, local until Control.tsx has it.
+const FIELD_SHELL =
+  "flex h-8 w-full items-center rounded-md border border-[var(--border)] bg-[var(--background)] focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-[var(--accent)]";
+// The control inside it: no box of its own, and no outline, since the shell
+// draws the focus. h-full so the whole box is the click target.
+const SHELL_CONTROL =
+  "h-full min-w-0 rounded-none border-0 bg-transparent py-0 text-sm outline-none placeholder:text-[var(--muted)]";
+
 // The business's own terms and privacy pages, named with links above the
 // booking page's Book button (P29, Nudge 3afd3e60). Only while the page is on:
-// it is a fact about that page and nothing else reads it. Two fields BESIDE
-// each other on one row, since they answer one question; each saves on blur,
-// and a refusal (not an http(s) address) says so on the line under them and
-// puts the stored value back.
-function LegalLinksRow() {
+// it is a fact about that page and nothing else reads it. Two rows, Terms
+// page and Privacy page, the way Nudge's Branding card has them (2026-10-21;
+// it was two half-width boxes on one row). Each saves on blur, and a refusal
+// (not an http(s) address) says so under that row and puts the stored value
+// back.
+function LegalPageRows() {
   const { t } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
   const update = useMutation(api.orgs.update);
-  const [error, setError] = useState(false);
+  const [failed, setFailed] = useState<"termsUrl" | "privacyUrl" | null>(null);
   const [tick, setTick] = useState(0);
   if (!settings?.org.bookingEnabled) return null;
   const save = (field: "termsUrl" | "privacyUrl", raw: string) => {
     const next = raw.trim();
     if (next === (settings.org[field] ?? "")) return;
-    setError(false);
+    setFailed(null);
     void update({ [field]: next }).catch((err: unknown) => {
-      if (String(err).includes("invalid-url")) setError(true);
+      if (String(err).includes("invalid-url")) setFailed(field);
       setTick((n) => n + 1);
     });
   };
+  const row = (
+    field: "termsUrl" | "privacyUrl",
+    label: TranslationKey,
+    hint?: string,
+  ) => (
+    <>
+      <FieldLabel label={t(label)} hint={hint} />
+      <input
+        key={`${field}-${tick}-${settings.org[field] ?? ""}`}
+        type="url"
+        inputMode="url"
+        className={`${FIELD} w-full`}
+        defaultValue={settings.org[field] ?? ""}
+        placeholder="https://"
+        aria-label={t(label)}
+        onBlur={(e) => save(field, e.target.value)}
+      />
+      {failed === field && <FieldError text={t("settings.invalidUrl")} />}
+    </>
+  );
   return (
     <>
-      <RowLabel label={t("settings.legalLinks")} hint={t("settings.legalLinksHint")} />
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <input
-          key={`terms-${tick}-${settings.org.termsUrl ?? ""}`}
-          type="url"
-          inputMode="url"
-          className={FIELD}
-          defaultValue={settings.org.termsUrl ?? ""}
-          placeholder={t("settings.termsUrl")}
-          aria-label={t("settings.termsUrl")}
-          onBlur={(e) => save("termsUrl", e.target.value)}
-        />
-        <input
-          key={`privacy-${tick}-${settings.org.privacyUrl ?? ""}`}
-          type="url"
-          inputMode="url"
-          className={FIELD}
-          defaultValue={settings.org.privacyUrl ?? ""}
-          placeholder={t("settings.privacyUrl")}
-          aria-label={t("settings.privacyUrl")}
-          onBlur={(e) => save("privacyUrl", e.target.value)}
-        />
-      </div>
-      {error && (
-        <>
-          <span />
-          <p className="text-sm text-red-600 dark:text-red-400">{t("settings.invalidUrl")}</p>
-        </>
-      )}
+      {row("termsUrl", "settings.termsUrl", t("settings.legalLinksHint"))}
+      {row("privacyUrl", "settings.privacyUrl")}
     </>
   );
 }
@@ -470,6 +516,10 @@ function LegalLinksRow() {
 // "2 days"), which is what someone reaching for the other unit means. The
 // value in force shows in the box even when nothing was ever saved: an unset
 // business runs on one hour, and an empty field would say it runs on none.
+//
+// One box at the card's one width, the unit picker inside it at the right
+// end, the way a unit sits inside Nudge's number fields: it reads as "2
+// hours", a value, rather than as a number box and a second control.
 function MinNoticeRow({
   hours,
   unit,
@@ -483,7 +533,7 @@ function MinNoticeRow({
   const shown = unit === "days" ? Math.round(hours / 24) : hours;
   const max = unit === "days" ? MAX_MIN_NOTICE_HOURS / 24 : MAX_MIN_NOTICE_HOURS;
   return (
-    <span className="flex items-center gap-2">
+    <span className={FIELD_SHELL}>
       <input
         // Remounted when the stored value moves, so a clamp on the server
         // (or the other unit) shows what was actually kept.
@@ -494,7 +544,7 @@ function MinNoticeRow({
         step={1}
         inputMode="numeric"
         aria-label={t("settings.minNotice")}
-        className={`${FIELD} w-20`}
+        className={`${SHELL_CONTROL} flex-1 px-3 tabular-nums`}
         defaultValue={shown}
         onKeyDown={(e) => {
           if (e.key === "Enter") e.currentTarget.blur();
@@ -518,7 +568,7 @@ function MinNoticeRow({
       />
       <select
         aria-label={t("settings.minNoticeUnit")}
-        className={`${FIELD} w-auto`}
+        className={`${SHELL_CONTROL} w-auto shrink-0 pr-2 pl-3 text-[var(--muted-strong)]`}
         value={unit}
         onChange={(e) => {
           const next: NoticeUnit = e.target.value === "days" ? "days" : "hours";
@@ -620,22 +670,16 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
           {/* The hint is not decoration: this field now moves the public
               booking link, and an owner tidying up their spelling has no way
               to guess that from a box labelled "Business name". */}
-          <RowLabel
+          <FieldLabel
             label={t("settings.businessName")}
             hint={t("settings.businessNameHint")}
           />
-          {/* Capped per input rather than by narrowing ROW_GRID: the shared
-              column has to stay 24rem for the rows that need it (seven day
-              chips on one line, the open/close pickers). These values are a
-              name, an email local part and two-word selects — a box wider
-              than the text it will ever hold reads as an invitation to write
-              an essay. One cap for every box in this card: the email input
-              used to sit visibly shorter than the rest because its @domain
-              suffix ate into the same 18rem, and a card of five widths reads
-              as five decisions. */}
+          {/* Every box in this card is the value column's width (FieldLabel's
+              note above says why). */}
           <input
             key={`name-${nameTick}-${settings.org.name}`}
-            className={`${FIELD} sm:max-w-56`}
+            className={`${FIELD} w-full`}
+            aria-label={t("settings.businessName")}
             defaultValue={settings.org.name}
             onBlur={(e) => {
               const next = e.target.value;
@@ -651,17 +695,13 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               });
             }}
           />
-          {nameError && (
-            <>
-              <span />
-              <p className="text-sm text-red-600 dark:text-red-400">{nameError}</p>
-            </>
-          )}
+          {nameError && <FieldError text={nameError} />}
 
-          <RowLabel label={t("settings.address")} hint={t("settings.addressHint")} />
+          <FieldLabel label={t("settings.address")} hint={t("settings.addressHint")} />
           <input
             key={`address-${settings.org.address ?? ""}`}
-            className={FIELD}
+            className={`${FIELD} w-full`}
+            aria-label={t("settings.address")}
             defaultValue={settings.org.address ?? ""}
             onBlur={(e) => {
               const next = e.target.value.trim();
@@ -670,7 +710,12 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
             }}
           />
 
-          <RowLabel label={t("settings.logo")} hint={t("settings.logoHint")} />
+          {/* Centred on the 48px picture rather than on a one-line field. */}
+          <FieldLabel
+            label={t("settings.logo")}
+            hint={t("settings.logoHint")}
+            className="sm:self-center"
+          />
           <div className="flex items-center gap-3">
             {settings.org.logoUrl ? (
               /* eslint-disable-next-line @next/next/no-img-element -- a
@@ -685,7 +730,9 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                 {settings.org.name.trim().charAt(0).toUpperCase() || "·"}
               </div>
             )}
-            <label className="cursor-pointer rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium hover:bg-[var(--muted-bg)]">
+            {/* The outlined tier from Control.tsx, so it is the same button
+                as every other secondary action rather than a look of its own. */}
+            <label className={buttonClass("outline", "sm")} data-edit-only>
               {logoBusy ? t("common.saving") : t("settings.logoUpload")}
               <input
                 type="file"
@@ -720,7 +767,8 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               <button
                 type="button"
                 onClick={() => void setLogo({ storageId: null })}
-                className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                data-edit-only
+                className={buttonClass("quiet", "sm")}
               >
                 {t("settings.logoRemove")}
               </button>
@@ -740,8 +788,13 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               the /r page and the booking page were two public channels for
               the same job, and the booking card next door is the one that
               survived. */}
-          <RowLabel label={t("settings.inboundAddress")} hint={t("settings.inboundAddressHint")} />
-          <span className="flex items-center gap-1">
+          <FieldLabel label={t("settings.inboundAddress")} hint={t("settings.inboundAddressHint")} />
+          {/* The domain is INSIDE the box, a muted suffix after what you type
+              (Serdar, 2026-10-21). Hanging to the right of the field it made
+              this row wider than every other, and it read as a second value
+              rather than as the end of the address. Clicking the suffix
+              focuses the input: the whole box is one field. */}
+          <label className={FIELD_SHELL}>
             {/* The salon's OWN name, slugged the way the server will slug it
                 (lib/inboundAddress) — so the placeholder is both an example
                 and a preview of what typing their name would give them. A
@@ -749,7 +802,8 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                 other salon, which reads as someone else's data. */}
             <input
               key={`inbound-${addressTick}`}
-              className={`${FIELD} sm:max-w-56`}
+              className={`${SHELL_CONTROL} flex-1 pl-3`}
+              aria-label={t("settings.inboundAddress")}
               defaultValue={settings.org.inboundAddress ?? ""}
               placeholder={slugifyInboundAddress(settings.org.name) || "randevu"}
               onBlur={(e) => {
@@ -766,18 +820,15 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                 });
               }}
             />
-            <span className="shrink-0 text-sm text-[var(--muted)]">
+            {/* 16px on a phone like the input beside it (globals.css's iOS
+                rule), so the two halves of one address are one size. */}
+            <span className="shrink-0 pr-3 text-sm text-[var(--muted)] max-sm:text-base">
               {settings.org.inboundDomain
                 ? `@${settings.org.inboundDomain}`
                 : t("settings.inboundNoDomain")}
             </span>
-          </span>
-          {addressError && (
-            <>
-              <span />
-              <p className="text-sm text-red-600 dark:text-red-400">{addressError}</p>
-            </>
-          )}
+          </label>
+          {addressError && <FieldError text={addressError} />}
           {/* Operator plumbing, same call as the WhatsApp credentials: sending
               from your own domain means verifying it with the mail provider,
               which the salon cannot do from in here. So the row is absent
@@ -787,16 +838,16 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               from the incoming address above, which needs no setup at all. */}
           {settings.org.emailFrom && (
             <>
-              <RowLabel
+              <FieldLabel
                 label={t("settings.emailFrom")}
                 hint={t("settings.emailFromHint")}
               />
-              <span className="text-sm text-[var(--muted)]">
+              <span className="flex items-center text-sm text-[var(--muted)] sm:min-h-8">
                 {settings.org.emailFrom}
               </span>
             </>
           )}
-          <RowLabel
+          <FieldLabel
             label={t("settings.language")}
             hint={t("settings.languageHint")}
           />
@@ -807,7 +858,8 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               — the same wrong value under an immutable field would have
               needed operator surgery to fix. */}
           <select
-            className={`${FIELD} sm:max-w-56`}
+            className={`${FIELD} w-full`}
+            aria-label={t("settings.language")}
             defaultValue={settings.org.language}
             onChange={(e) => {
               const el = e.target;
@@ -844,13 +896,16 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               is the "start blank, change your mind later" path the wizard
               promises. Fields a voice agent references survive the reset,
               because deleting them would wedge the agent's next publish. */}
-          <RowLabel
+          <FieldLabel
             label={t("settings.industry")}
             hint={t("settings.industryHint")}
           />
-          <div className="flex items-center gap-3">
+          {/* The picker and Reset share the one width: the picker takes what
+              the button leaves. */}
+          <div className="flex items-center gap-2">
             <select
-              className={`${FIELD} w-full sm:max-w-56`}
+              className={`${FIELD} min-w-0 flex-1`}
+              aria-label={t("settings.industry")}
               value={settings.org.industry ?? ""}
               onChange={(e) => {
                 const industry = e.target.value;
@@ -885,7 +940,8 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                     await resetIndustry({});
                   })();
                 }}
-                className="shrink-0 rounded-lg px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                data-edit-only
+                className={buttonClass("quiet", "sm")}
               >
                 {t("settings.industryReset")}
               </button>
@@ -897,7 +953,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               as 40000 is ₺400,00 today and €400.00 tomorrow. That is the
               honest behaviour: we don't know an exchange rate and inventing
               one would silently rewrite what customers were charged. */}
-          <RowLabel label={t("settings.currency")} hint={t("settings.currencyHint")} />
+          <FieldLabel label={t("settings.currency")} hint={t("settings.currencyHint")} />
           {/* Currency and decimals stay on ONE line: they answer the same
               question together — currency picks the symbol, language picks
               the separators, this picks how much of the number to write. A
@@ -906,9 +962,12 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               rejected outright: a picked "option" that toggles a setting and
               snaps the select back is a control lying about its value, and a
               screen reader would offer it as a currency. */}
+          {/* One width again: the picker takes what the switch and its words
+              leave, so "Show decimals" ends where every box above ends. */}
           <div className="flex items-center gap-3">
             <select
-              className={`${FIELD} w-full sm:max-w-56`}
+              className={`${FIELD} min-w-0 flex-1`}
+              aria-label={t("settings.currency")}
               defaultValue={settings.org.currency}
               onChange={(e) => void update({ currency: e.target.value })}
             >
@@ -944,8 +1003,8 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               it unlocks counts in. Off by default: an org that never fills in
               prices would get a nav item leading to three zeroes, which reads
               as broken not unused. */}
-          <RowLabel label={t("settings.revenueEnabled")} hint={t("settings.revenueEnabledHint")} />
-          <span className="flex items-center">
+          <FieldLabel label={t("settings.revenueEnabled")} hint={t("settings.revenueEnabledHint")} />
+          <span className="flex items-center sm:min-h-8">
             <CheckSwitch
               on={settings.org.revenueEnabled ?? false}
               label={t("settings.revenueEnabled")}
@@ -967,17 +1026,17 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               argument survives — the sentence explaining what the page IS was
               the only thing the card's header carried that the row does
               not. */}
-          <RowLabel
+          <FieldLabel
             label={t("settings.bookingPage")}
             hint={t("settings.bookingPageHint")}
           />
           <BookingRow />
-          <LegalLinksRow />
+          <LegalPageRows />
           {/* The minimum notice (lib/minNotice), under the booking page
               because that is the door most customers meet it at. Shown with
               the page off too: the phone agent and the WhatsApp assistant obey
               it as well. */}
-          <RowLabel label={t("settings.minNotice")} hint={t("settings.minNoticeHint")} />
+          <FieldLabel label={t("settings.minNotice")} hint={t("settings.minNoticeHint")} />
           <MinNoticeRow
             hours={settings.org.minNoticeHours}
             unit={settings.org.minNoticeUnit}
@@ -995,11 +1054,11 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               product — so it disables rather than refusing after the tap. */}
           {sellsGoods && (
             <>
-              <RowLabel
+              <FieldLabel
                 label={t("settings.fulfillment")}
                 hint={t("settings.fulfillmentHint")}
               />
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 sm:min-h-8">
                 {(
                   [
                     ["pickupEnabled", "booking.pickup", "deliveryEnabled"],
