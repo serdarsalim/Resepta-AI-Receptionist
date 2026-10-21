@@ -43,6 +43,10 @@ export type AnchoredPanelOptions<T extends HTMLElement = HTMLButtonElement> = {
   // element itself (the prompt editor's textarea). Otherwise the hook makes
   // one and hands it back.
   triggerRef?: RefObject<T | null>;
+  // With "trigger" width: never narrower than this. A list of device names
+  // needs more room than the box that shows the chosen one (the browser
+  // test's Audio picker).
+  minWidth?: number;
 };
 
 export function useAnchoredPanel<T extends HTMLElement = HTMLButtonElement>(
@@ -56,7 +60,7 @@ export function useAnchoredPanel<T extends HTMLElement = HTMLButtonElement>(
   align: "left" | "right" = "left",
   options: AnchoredPanelOptions<T> = {},
 ) {
-  const { prefer = "below", gap = 4, anchorRect } = options;
+  const { prefer = "below", gap = 4, anchorRect, minWidth = 0 } = options;
   const ownTriggerRef = useRef<T | null>(null);
   const triggerRef = options.triggerRef ?? ownTriggerRef;
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -84,7 +88,10 @@ export function useAnchoredPanel<T extends HTMLElement = HTMLButtonElement>(
     const rect =
       anchorRectRef.current?.() ?? triggerRef.current?.getBoundingClientRect() ?? null;
     if (!rect) return null;
-    const panelWidth = width === "trigger" ? rect.width : width;
+    const panelWidth = Math.min(
+      width === "trigger" ? Math.max(rect.width, minWidth) : width,
+      window.innerWidth - 16,
+    );
     const anchored = align === "right" ? rect.right - panelWidth : rect.left;
     const left = Math.max(
       8,
@@ -112,7 +119,7 @@ export function useAnchoredPanel<T extends HTMLElement = HTMLButtonElement>(
     };
     // triggerRef is a ref object, stable for the component's life; listed
     // because it may be the caller's rather than this hook's own.
-  }, [align, gap, maxHeight, prefer, triggerRef, width]);
+  }, [align, gap, maxHeight, minWidth, prefer, triggerRef, width]);
 
   const toggle = useCallback(() => {
     setPlacement((current) => (current ? null : measure()));
