@@ -4328,6 +4328,32 @@ const dictionary = {
     en: "The caller's last name, from their customer card.",
     de: "Der Nachname des Anrufers, aus seiner Kundenkarte.",
   },
+  // The identity rows of the Variables matrix: what the agent is TOLD when it
+  // collects them, which is retellAgent.deriveCaptureRows' stock wording.
+  // The desc* keys above say what it KNOWS before the call; the matrix showed
+  // those until 2026-10-21, so a row the agent asks about read "from their
+  // customer card" and looked like it could never fill an empty one.
+  "voiceVariables.askFirstName": {
+    tr: "Arayanın adı, söylediği gibi.",
+    en: "The caller's first name, exactly as they give it.",
+    de: "Der Vorname des Anrufers, so wie er ihn nennt.",
+  },
+  "voiceVariables.askLastName": {
+    tr: "Arayanın soyadı, söylediği gibi.",
+    en: "The caller's last name, exactly as they give it.",
+    de: "Der Nachname des Anrufers, so wie er ihn nennt.",
+  },
+  "voiceVariables.askEmail": {
+    tr: "Arayanın e-posta adresi, harf harf.",
+    en: "The caller's email address, spelled out.",
+    de: "Die E-Mail-Adresse des Anrufers, buchstabiert.",
+  },
+  // What the identity rows' switch does since 2026-10-21 (template v17).
+  "voiceVariables.nameHint": {
+    tr: "Arayan adını söylerse, anahtarı kapalı olsa bile boş müşteri kartına yazılır. Kapalı anahtar yalnızca kayıtlı bir bilginin değiştirilmesini engeller.",
+    en: "When a caller says their name, it goes onto an empty customer card even with its switch off. Off only stops the agent changing a saved value.",
+    de: "Nennt der Anrufer seinen Namen, kommt er auf eine leere Kundenkarte, auch wenn sein Schalter aus ist. Aus verhindert nur, dass ein gespeicherter Wert geändert wird.",
+  },
   "voiceVariables.descPhone": {
     tr: "Arayanın telefon numarası.",
     en: "The caller's phone number.",

@@ -122,7 +122,15 @@ export const VOICE_AGENT_TEMPLATE_KEY = "appointment_receptionist";
 // call. Sync-deliverable like v15's, so Update reaches existing agents; the
 // prompt's one line asking for a time reaches new agents only, since Update
 // never sends prompt text, and the analysis reads the transcript either way.
-export const VOICE_AGENT_TEMPLATE_VERSION = 16;
+// v17 (2026-10-21): the caller's own first and last name as analysis fields
+// of ours (callerNameAnalysisFields below), on every agent whatever its script
+// and its Variables switches say, and save_customer_details naming the
+// identity keys in its own description. Analysis fields and a tool
+// description, so Update reaches existing agents. Estate Emlak, that day: a
+// caller said "Abdülkadir Çelik" to an agent whose own script never mentioned
+// saving details and whose First name switch was off, and the card stayed a
+// phone number.
+export const VOICE_AGENT_TEMPLATE_VERSION = 17;
 
 // The longest one call may run before the provider ends it. Ten minutes,
 // Nudge's number on the same field (7bf2c681): its median answered call ran
@@ -496,6 +504,52 @@ export function callbackTimeAnalysisField() {
   };
 }
 
+// The caller's own name (template v17), on every agent. A name is not a field
+// the business configures (the variables doctrine): it has to reach an empty
+// card whatever the owner's script says and whatever the Variables matrix
+// switches say, and before this it did neither. Estate Emlak's caller said
+// "Abdülkadir Çelik" to an agent whose script never asked it to save
+// anything and whose First name switch was off, and the card kept only the
+// number.
+//
+// Under the identity keys the ring-time injection and the matrix's derived
+// rows already use, so the value goes where the derived question's answer
+// always went: the call's collected list, then the customer's own column
+// through retell.updateContactFromVoice. An analysis value only ever fills an
+// EMPTY column there (fillOnlyMissing), so this never renames anybody. A
+// derived row of the same key gives way to these (retellAgent.planVariables).
+//
+// The guards are what a real call holds besides the caller's name: the agent
+// introduces itself by name, the business has one, and a caller from a
+// company says the company's. English for every agent, like the fields above.
+export const CALLER_FIRST_NAME_FIELD = "customer_first_name";
+export const CALLER_LAST_NAME_FIELD = "customer_last_name";
+
+export function callerNameAnalysisFields() {
+  const notOthers = "Never the assistant's name, the business's name or a company's name.";
+  return [
+    {
+      type: "string",
+      name: CALLER_FIRST_NAME_FIELD,
+      description: [
+        "The caller's own first (given) name, exactly as they said it on this call.",
+        "If they gave only one name, put it here.",
+        notOthers,
+        "Leave it empty if the caller did not say their name.",
+      ].join(" "),
+    },
+    {
+      type: "string",
+      name: CALLER_LAST_NAME_FIELD,
+      description: [
+        "The caller's own last name (surname), exactly as they said it on this call.",
+        notOthers,
+        "Leave it empty if they gave only one name or did not say their name.",
+      ].join(" "),
+    },
+  ];
+}
+
 // The analysis fields that are ours rather than the salon's. Every publish
 // path replaces exactly these and keeps whatever else the agent carries, and
 // none of them is ever offered to the owner as a field to rename
@@ -504,10 +558,17 @@ export const TEMPLATE_ANALYSIS_FIELDS: ReadonlySet<string> = new Set([
   VOICE_SUMMARY_FIELD,
   NO_AI_CALLS_FIELD,
   CALLBACK_TIME_FIELD,
+  CALLER_FIRST_NAME_FIELD,
+  CALLER_LAST_NAME_FIELD,
 ]);
 
 export function templateAnalysisFields(language: string) {
-  return [summaryAnalysisField(language), noAiCallsAnalysisField(), callbackTimeAnalysisField()];
+  return [
+    summaryAnalysisField(language),
+    noAiCallsAnalysisField(),
+    callbackTimeAnalysisField(),
+    ...callerNameAnalysisFields(),
+  ];
 }
 
 type JsonSchema = {
@@ -598,18 +659,24 @@ function customTool(
 // the template-update banner. The keys it may write are per-business
 // ({{information}} in the prompt), so the schema stays a free object rather
 // than enumerating properties a sync would have to chase.
+//
+// Except the caller's own name and email, named in the description itself
+// since v17: identity keys are always writable (the variables doctrine), and
+// an owner who rewrites the prompt from scratch writes no {{information}}
+// line. Estate Emlak's agent heard "Abdülkadir Çelik", said it had noted it,
+// and called nothing, because nothing it was given said what to save it as.
 export function saveCustomerDetailsTool(site: string) {
   return customTool(
     site,
     "save_customer_details",
-    "Save details the caller provides or explicitly confirms, using only the keys listed in your instructions. Never guess a value. Repeating the same save is safe.",
+    "Save details the caller gives about themselves: their own name under firstname and lastname, their email under email, and anything else only under a key your instructions list. Never guess a value. Repeating the same save is safe.",
     {
       type: "object",
       properties: {
         values: {
           type: "object",
           description:
-            "Configured information keys from your instructions, each set to the caller-confirmed value.",
+            "firstname, lastname, email or a key from your instructions, each set to what the caller said.",
         },
       },
       required: ["values"],

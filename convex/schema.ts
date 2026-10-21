@@ -449,10 +449,13 @@ export default defineSchema({
     // This is a PREFERENCE, unlike the lane selector deliberately absent
     // above: WhatsApp-vs-email is a real decision the salon owns, whereas
     // cloud-vs-shop-phone is plumbing read off what is configured.
-    // Identity columns the voice agent may NOT write, chosen in Business →
-    // Fields. Phone is not listed because it is not a choice: callers are
-    // matched by it. Unset means none locked — a receptionist that can
-    // correct a misspelt name is the default, not the upgrade.
+    // Identity columns the voice agent may NOT change, chosen in Business →
+    // Fields or on the agent's Variables matrix. Phone is not listed because
+    // it is not a choice: callers are matched by it. Unset means none locked —
+    // a receptionist that can correct a misspelt name is the default, not the
+    // upgrade. A locked column that is EMPTY still takes the caller's first
+    // value (retell.applyVoiceContactValues, 2026-10-21): the lock protects
+    // what somebody wrote, and an empty card has nothing to protect.
     voiceLockedIdentity: v.optional(
       v.array(
         v.union(v.literal("firstname"), v.literal("lastname"), v.literal("email")),

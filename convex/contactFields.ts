@@ -45,7 +45,7 @@ export const list = query({
   },
 });
 
-// Which identity columns the voice agent may not write. Its own query rather
+// Which identity columns the voice agent may not change. Its own query rather
 // than a field on list: list's return is the fields array everywhere, and
 // callers that do not render the identity rows should not learn org settings.
 export const identityLocks = query({

@@ -934,7 +934,7 @@ export const agentEditorContext = internalQuery({
       inboundNumber: agent.inboundNumber ?? null,
       signatureRejectedAt: agent.signatureRejectedAt ?? null,
       fields: fields.sort((a, b) => a.order - b.order),
-      // Which identity columns the agent may not write — deriveCaptureRows
+      // Which identity columns the agent may not change — deriveCaptureRows
       // reads this so a locked column is never offered as a question.
       voiceLockedIdentity: org.voiceLockedIdentity ?? [],
       voiceIdentityDescriptions: org.voiceIdentityDescriptions ?? {},
@@ -3378,19 +3378,21 @@ export async function applyVoiceContactValues(
   const byKey = new Map(fields.map((field) => [field.key, field]));
   // Enforced HERE, not in each caller, so the live save and the post-call
   // reconciliation cannot disagree about what locked means.
+  //
+  // Locked means the agent never CHANGES that column, not that it may never
+  // fill it (2026-10-21). The lock exists so a name somebody typed is not
+  // "corrected" by a mishearing; an empty column has nothing to protect, and
+  // refusing it was how a caller who said "Abdülkadir Çelik" stayed a phone
+  // number on a business that had switched Last name off. So a locked column
+  // takes a first value and nothing after it, the post-call rule below.
   const lockedIdentity = new Set(
     (await ctx.db.get(args.orgId))?.voiceLockedIdentity ?? [],
   );
-  if (args.identity) {
-    for (const key of Object.keys(args.identity)) {
-      const canonical = args.identity[key].field === "firstName"
-        ? "firstname"
-        : args.identity[key].field === "lastName"
-          ? "lastname"
-          : "email";
-      if (lockedIdentity.has(canonical)) delete args.identity[key];
-    }
-  }
+  const fillOnlyColumn = (field: "firstName" | "lastName" | "email") =>
+    args.fillOnlyMissing === true ||
+    lockedIdentity.has(
+      field === "firstName" ? "firstname" : field === "lastName" ? "lastname" : "email",
+    );
 
   const custom = { ...(customer.custom ?? {}) };
   const identityPatch: { firstName?: string; lastName?: string; email?: string } = {};
@@ -3423,7 +3425,7 @@ export async function applyVoiceContactValues(
       // returned "" is not.
       if (!value) continue;
       if (target.field === "email") {
-        if (args.fillOnlyMissing && customer.email && !isNonAnswer(customer.email)) continue;
+        if (fillOnlyColumn("email") && customer.email && !isNonAnswer(customer.email)) continue;
         if (!SPOKEN_EMAIL_RE.test(value)) {
           rejected.push(target.label);
           continue;
@@ -3438,7 +3440,7 @@ export async function applyVoiceContactValues(
         const current = target.field === "firstName" ? customer.firstName : customer.lastName;
         // A placeholder stored before the filter existed counts as missing,
         // so the first real answer replaces it (Nudge's mayOverwrite).
-        if (args.fillOnlyMissing && current && !isNonAnswer(current, "name")) continue;
+        if (fillOnlyColumn(target.field) && current && !isNonAnswer(current, "name")) continue;
         identityPatch[target.field] = value;
       }
       updated.push(key);
@@ -3595,6 +3597,14 @@ export const updateContactFromVoice = internalMutation({
       firstname: { field: "firstName", label: "firstname" },
       lastname: { field: "lastName", label: "lastname" },
       email: { field: "email", label: "email" },
+      // And under the keys the ring-time injection and the post-call analysis
+      // use. The caller's name fields are on every agent since template v17
+      // (lib/voiceAgentTemplate.callerNameAnalysisFields), with or without a
+      // derived row below to nominate them, so a switched-off First name no
+      // longer drops a name the caller said on the floor.
+      customer_first_name: { field: "firstName", label: "customer_first_name" },
+      customer_last_name: { field: "lastName", label: "customer_last_name" },
+      customer_email: { field: "email", label: "customer_email" },
     };
     for (const row of rows) {
       if (row.destination === "customer" && row.customerField) {

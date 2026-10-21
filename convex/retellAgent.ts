@@ -1278,6 +1278,12 @@ function validateVariables(context: EditorContext, input: VariableRow[]): Variab
 // is the opt-out, same as everywhere else. Phone is never derived: the caller
 // is MATCHED by it.
 //
+// The opt-out stops the ASK, not the name: since template v17 the post-call
+// analysis carries the caller's first and last name on every agent as fields
+// of ours (lib/voiceAgentTemplate.callerNameAnalysisFields), and a locked
+// column still takes a first value. A derived name row's own post-call half
+// gives way to those in planVariables.
+//
 // What the caller may still author per agent is CONTEXT rows only — static
 // values injected into every call. publishVariableSet filters its input down
 // to those, so an MCP client or a stale editor sending capture rows cannot
@@ -1447,8 +1453,11 @@ function planVariables(
     // and voiceEvents writes these values onto empty contact-card fields.
     // The during-call extraction keeps its own wording above; a live caller
     // stating a value is exactly when the field should be filled.
+    // A derived row under one of OUR keys (the caller's own name, template
+    // v17) gives way to ours: the list must not ask one question twice, and
+    // ours rides every agent whether or not a matrix switch derives the row.
     ...next
-      .filter((variable) => variable.afterCall)
+      .filter((variable) => variable.afterCall && !TEMPLATE_ANALYSIS_FIELDS.has(variable.key))
       .map((variable) => {
         const forRetell = variableForRetell(variable);
         return {
