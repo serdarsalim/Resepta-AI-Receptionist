@@ -1,8 +1,9 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { requireOwner } from "./lib/orgAuth";
 import { isDeleting } from "./lib/customerDeletion";
+import { callVerdict } from "./schema";
 
 // Browser tests of a voice agent (P8 of the Nudge port, 2026-10-17; Nudge's
 // agentTests.ts and the divert in its processCallAnalyzed).
@@ -133,7 +134,7 @@ const testRow = v.object({
   ),
   billedMicroUsd: v.union(v.number(), v.null()),
   note: v.union(v.string(), v.null()),
-  verdict: v.union(v.literal("pass"), v.literal("miss"), v.null()),
+  verdict: v.union(callVerdict, v.null()),
 });
 
 // Every field named, none spread: the row carries columns (the provider's
@@ -165,7 +166,16 @@ function shapeRow(row: Doc<"agentTests">) {
 // agent page, and this org's rows only.
 export const listForAgent = query({
   args: { retellAgentId: v.string() },
-  returns: v.array(v.object({ test: testRow, customerName: v.union(v.string(), v.null()) })),
+  returns: v.array(
+    v.object({
+      test: testRow,
+      customerName: v.union(v.string(), v.null()),
+      // Who signs the review: who wrote it first and, when someone else
+      // changed it since, who did (the call card's signature).
+      noteBy: v.union(v.string(), v.null()),
+      noteEditedBy: v.union(v.string(), v.null()),
+    }),
+  ),
   handler: async (ctx, { retellAgentId }) => {
     const { orgId } = await requireOwner(ctx);
     const rows = await ctx.db
@@ -175,6 +185,15 @@ export const listForAgent = query({
       )
       .order("desc")
       .take(20);
+    const names = new Map<string, string | null>();
+    const nameOf = async (id: Id<"users"> | undefined) => {
+      if (!id) return null;
+      if (!names.has(id)) {
+        const user = await ctx.db.get(id);
+        names.set(id, user?.name ?? user?.email ?? null);
+      }
+      return names.get(id) ?? null;
+    };
     // Who it called as, by name, from this org's own customers. A customer
     // since deleted reads as nobody.
     return await Promise.all(
@@ -184,7 +203,16 @@ export const listForAgent = query({
           customer && customer.orgId === orgId && !isDeleting(customer)
             ? [customer.firstName, customer.lastName].filter(Boolean).join(" ") || customer.phone
             : null;
-        return { test: shapeRow(row), customerName };
+        const reviewed = !!(row.note || row.verdict);
+        return {
+          test: shapeRow(row),
+          customerName,
+          noteBy: reviewed ? await nameOf(row.noteCreatedBy) : null,
+          noteEditedBy:
+            reviewed && row.noteUpdatedBy && row.noteUpdatedBy !== row.noteCreatedBy
+              ? await nameOf(row.noteUpdatedBy)
+              : null,
+        };
       }),
     );
   },
@@ -208,24 +236,39 @@ export const ownedTest = internalQuery({
 });
 
 // The owner's note and verdict on a test, saved as they are typed (on blur)
-// and on every verdict click, from the opened row. Owner-only like the rest
-// of the agent page, and this org's rows only. `verdict: null` clears it; an
-// empty note is stored as no note.
+// and on every verdict click, from the opened row and from the Notes tab.
+// Owner-only like the rest of the agent page, and this org's rows only. The
+// same contract as calls.setReview: whichever half changed, `verdict: null`
+// takes the verdict back, whitespace is not a note, and the note* stamps sign
+// the review (who wrote first, who changed it last) and go when it is
+// emptied.
 export const setReview = mutation({
   args: {
     id: v.id("agentTests"),
     note: v.optional(v.string()),
-    verdict: v.optional(v.union(v.literal("pass"), v.literal("miss"), v.null())),
+    verdict: v.optional(v.union(callVerdict, v.null())),
   },
   returns: v.null(),
-  handler: async (ctx, { id, note, verdict }) => {
-    const { orgId } = await requireOwner(ctx);
+  handler: async (ctx, { id, note: noteArg, verdict: verdictArg }) => {
+    const { orgId, user } = await requireOwner(ctx);
     const row = await ctx.db.get(id);
     if (!row || row.orgId !== orgId) throw new Error("no-such-test");
-    const patch: { note?: string | undefined; verdict?: "pass" | "miss" | undefined } = {};
-    if (note !== undefined) patch.note = note.trim() ? note.slice(0, 4000) : undefined;
-    if (verdict !== undefined) patch.verdict = verdict ?? undefined;
-    if (Object.keys(patch).length > 0) await ctx.db.patch(id, patch);
+    const note = noteArg === undefined ? row.note : noteArg.trim() || undefined;
+    const verdict = verdictArg === undefined ? row.verdict : (verdictArg ?? undefined);
+    if (note === row.note && verdict === row.verdict) return null;
+    // Every field named, the absent ones as an explicit undefined, which in a
+    // patch DELETES the field.
+    const patch: Partial<Doc<"agentTests">> = { note, verdict };
+    if (note === undefined && verdict === undefined) {
+      patch.noteCreatedBy = undefined;
+      patch.noteUpdatedBy = undefined;
+      patch.noteUpdatedAt = undefined;
+    } else {
+      patch.noteUpdatedBy = user._id;
+      patch.noteUpdatedAt = Date.now();
+      if (!row.noteCreatedBy) patch.noteCreatedBy = user._id;
+    }
+    await ctx.db.patch(id, patch);
     return null;
   },
 });

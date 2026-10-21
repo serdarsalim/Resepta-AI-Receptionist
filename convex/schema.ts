@@ -1244,13 +1244,25 @@ export default defineSchema({
     retellCostMicroUsd: v.optional(v.number()),
     // The owner's review of the test (Nudge's ReviewNotes on a test): what
     // should have happened, in their words, and a verdict. Set from the
-    // opened row on the Testing tab (agentTests.setReview).
+    // opened row on the Testing tab (agentTests.setReview), signed and
+    // stamped exactly like a call's review, and followed by the same action
+    // (What we did) from the Notes tab.
     note: v.optional(v.string()),
-    verdict: v.optional(v.union(v.literal("pass"), v.literal("miss"))),
+    verdict: v.optional(callVerdict),
+    noteCreatedBy: v.optional(v.id("users")),
+    noteUpdatedBy: v.optional(v.id("users")),
+    noteUpdatedAt: v.optional(v.number()),
+    action: v.optional(v.string()),
+    actionCreatedBy: v.optional(v.id("users")),
+    actionUpdatedBy: v.optional(v.id("users")),
+    actionUpdatedAt: v.optional(v.number()),
+    doneAt: v.optional(v.number()),
+    doneBy: v.optional(v.id("users")),
   })
     .index("by_org_agent_started", ["orgId", "retellAgentId", "startedAt"])
     .index("by_call", ["callId"])
-    .index("by_org_customer", ["orgId", "customerId"]),
+    .index("by_org_customer", ["orgId", "customerId"])
+    .index("by_org_agent_reviewed", ["orgId", "retellAgentId", "noteUpdatedAt"]),
 
   calls: defineTable({
     orgId: v.id("orgs"),
@@ -1312,6 +1324,17 @@ export default defineSchema({
     noteCreatedBy: v.optional(v.id("users")),
     noteUpdatedBy: v.optional(v.id("users")),
     noteUpdatedAt: v.optional(v.number()),
+    // What the owner did about the review, from the agent page's Notes tab
+    // (2026-10-21, Nudge's review actions): their words, signed like the note
+    // (who wrote first, who changed it last), and whether it is done. On the
+    // call row for the note's reasons: one per call, and it goes with the
+    // call. agentReviews.setAction writes it.
+    action: v.optional(v.string()),
+    actionCreatedBy: v.optional(v.id("users")),
+    actionUpdatedBy: v.optional(v.id("users")),
+    actionUpdatedAt: v.optional(v.number()),
+    doneAt: v.optional(v.number()),
+    doneBy: v.optional(v.id("users")),
     // Call metering — stamped ONCE each, in recordCall, idempotent on the
     // field being unset so the call_ended/call_analyzed double-fire (and any
     // webhook retry) can never double-bill. billedMicroUsd is FROZEN at the
@@ -1326,7 +1349,11 @@ export default defineSchema({
     .index("by_org", ["orgId"])
     .index("by_org_started", ["orgId", "startedAt"])
     .index("by_customer", ["customerId"])
-    .index("by_retell_call", ["retellCallId"]),
+    .index("by_retell_call", ["retellCallId"])
+    // The agent page's Notes tab: this agent's reviewed calls, newest review
+    // first. A call never reviewed has no noteUpdatedAt and sorts below the
+    // range the tab reads.
+    .index("by_org_agent_reviewed", ["orgId", "retellAgentId", "noteUpdatedAt"]),
 
   // Durable inbox for phone-call lifecycle events. The HTTP request only
   // authenticates and stores the payload; processing and customer updates run
