@@ -1167,15 +1167,6 @@ const dictionary = {
     en: "Messaging consent",
     de: "Einwilligung",
   },
-  // The record footer's one-word form. Same fact as customers.consent, in a
-  // grid column narrow enough that "Messaging consent" would wrap and drag the
-  // cell beside it out of shape. Unambiguous where it appears: it sits next to
-  // Mute on a contact record, and there is nothing else it could be consent to.
-  "customers.consentShort": {
-    tr: "İzin",
-    en: "Consent",
-    de: "Einwilligung",
-  },
   // Says exactly what consent gates, because "no channel sends anything" was
   // false: the away reply and the assistant's answers reply to a message the
   // customer just sent and go without it (wa.sendAwayReply,
@@ -1186,9 +1177,9 @@ const dictionary = {
     en: "The customer's KVKK consent. Without it they get no confirmations, reminders, campaigns or bulk messages and calls, and your team can't write to them on WhatsApp. The away reply and the assistant's answers still go, because they answer a message the customer just sent.",
     de: "Die Einwilligung des Kunden nach DSGVO. Ohne sie bekommt er keine Terminbestätigungen, Erinnerungen, Kampagnen oder Sammelaktionen per Nachricht oder Anruf, und Ihr Team kann ihm nicht per WhatsApp schreiben. Die Abwesenheitsantwort und die Antworten des Assistenten gehen trotzdem raus, weil sie auf eine Nachricht antworten, die er gerade geschickt hat.",
   },
-  // "Stumm", not "Stummschalten": this is a label on a switch in a four-column
-  // footer, and the extra eight characters were the widest single thing in the
-  // German layout. The switch itself supplies the verb.
+  // "Stumm", not "Stummschalten": this is a label on a switch in the record
+  // footer's one row of three, and the extra eight characters were the widest
+  // single thing in the German layout. The switch itself supplies the verb.
   "customers.mute": {
     tr: "Sessize al",
     en: "Mute",
@@ -1208,9 +1199,9 @@ const dictionary = {
     de: "Ein stummgeschalteter Kunde erscheint nicht im Posteingang und löst nirgends einen Hinweispunkt aus. Nachrichten sind weiterhin möglich; der Kontakt rutscht ans Ende der Liste.",
   },
   // "No AI calls" (customers.noAiCallsAt), the record footer's switch. Short,
-  // because it shares an auto-width label column with Consent and the footer
-  // must keep four columns at 20rem (ContactView's note); the detail rides the
-  // hint. Nudge's Turkish label for the same switch is "AI aramaz".
+  // because the footer holds three switches in one row at every width
+  // (ContactView's note); the detail rides the hint. Nudge's Turkish label for
+  // the same switch is "AI aramaz".
   "customers.noAiCalls": {
     tr: "AI aramaz",
     en: "No AI calls",
@@ -1221,22 +1212,28 @@ const dictionary = {
     en: "They asked not to be called by the voice agent. Bulk call runs skip them, and placing a call from here asks first. Reminders and messages still go. The voice agent turns this on when a caller asks on a call; only a person can turn it off.",
     de: "Der Kunde möchte nicht vom Sprachassistenten angerufen werden. Sammelaktionen per Anruf überspringen ihn, und ein Anruf von hier fragt vorher nach. Erinnerungen und Nachrichten gehen weiter. Bittet ein Anrufer im Gespräch darum, setzt der Assistent das selbst; aufheben kann es nur ein Mensch.",
   },
-  // The marketing-email opt-out (customers.marketingEmailOptOutAt), the
-  // footer's last switch. On = unsubscribed, the same direction as Mute and
-  // No AI calls beside it. Short for the footer's column (ContactView's 20rem
-  // note): "Abonelikten çıktı" and "Abgemeldet" pushed it over.
-  "customers.unsubscribed": {
-    tr: "Abone değil",
-    en: "Unsubscribed",
-    de: "Abbestellt",
+  // The marketing opt-out (customers.marketingEmailOptOutAt), the footer's
+  // first switch. On = unsubscribed, the same direction as Mute and No AI
+  // calls beside it. Nudge's word in all three languages: one word every CRM
+  // user already knows, with the detail in the hint.
+  "customers.unsubscribe": {
+    tr: "Abonelikten çık",
+    en: "Unsubscribe",
+    de: "Abmelden",
   },
-  "customers.unsubscribedHint": {
+  "customers.unsubscribeHint": {
     tr: "Açıkken müşteriye pazarlama e-postası gitmez: kampanya, toplu işlem ve geri kazanım e-postaları durur. Bu e-postaların altındaki abonelikten çıkma bağlantısı bunu açar; müşteri size söylerse siz de açabilirsiniz. Onaylar, hatırlatmalar ve WhatsApp etkilenmez.",
     en: "On means the customer gets no marketing email from you: campaign, bulk and win-back emails stop. The unsubscribe link at the foot of those emails turns it on, and you can turn it on when they ask you in person. Confirmations, reminders and WhatsApp are not affected.",
     de: "Ist es an, bekommt der Kunde keine Werbe-E-Mails von Ihnen: Kampagnen-, Sammel- und Rückgewinnungs-E-Mails stoppen. Der Abmeldelink am Ende dieser E-Mails schaltet es ein, und Sie können es einschalten, wenn der Kunde Sie darum bittet. Bestätigungen, Erinnerungen und WhatsApp sind nicht betroffen.",
   },
-  // Switching Unsubscribed off puts the customer back on marketing email, so
-  // the switch asks first.
+  // When a footer switch was turned on, on its hover chip.
+  "customers.sinceDate": {
+    tr: "{date} tarihinden beri",
+    en: "Since {date}",
+    de: "Seit {date}",
+  },
+  // Switching Unsubscribe off puts the customer back on marketing, so the
+  // switch asks first.
   "customers.resubscribeTitle": {
     tr: "Pazarlama e-postaları yeniden gönderilsin mi?",
     en: "Send them marketing email again?",

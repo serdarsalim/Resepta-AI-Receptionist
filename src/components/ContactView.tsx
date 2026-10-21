@@ -18,6 +18,7 @@ import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
 import { FeedFilterPills } from "./FeedFilterPills";
 import { DEFAULT_CURRENCY, formatMoney } from "@/lib/money";
 import { FieldRow, InlineEditValue } from "./RecordField";
+import { HoverTip } from "./HoverTip";
 import { InfoTip } from "./InfoTip";
 import { PhoneField } from "./PhoneField";
 import { RowMenu } from "./RowMenu";
@@ -75,9 +76,6 @@ function CustomFieldRow({
   );
 }
 
-// A label in the record footer. Its whole job is to stay on one line: it sits
-// in an `auto` grid column, so a label that wraps does not just look wrong, it
-// sets the column width for the pair beside it too.
 // The two-pane split the customer record and the Inbox share: record or list
 // on the left, the conversation on the right (Nudge 1a6c46ce). 40/60 until the
 // left column reaches 32rem, then it stops and the conversation takes the
@@ -105,12 +103,30 @@ export const JOINED_PANES =
 export const PANE_DIVIDER =
   "lg:border-l lg:border-[var(--border)] lg:dark:border-[color-mix(in_srgb,var(--border)_50%,transparent)]";
 
-function MetaLabel({ label, hint }: { label: string; hint?: string }) {
+// A label in the record footer: short text and an (i) carrying the
+// explanation. It may wrap on a narrow column (see the footer); the tip opens
+// above, because the footer sits at the bottom of the window.
+function MetaLabel({ label, hint }: { label: string; hint: string }) {
   return (
-    <span className="flex items-center gap-1.5 whitespace-nowrap">
+    <span className="flex items-center gap-2">
       {label}
-      {hint && <InfoTip text={hint} />}
+      <InfoTip text={hint} placement="above" />
     </span>
+  );
+}
+
+// When a footer switch was turned on, on hover, while it is on. A label chip
+// rather than a native title: the switch is an icon-only control.
+function SinceTip({ at, children }: { at: number | undefined; children: React.ReactNode }) {
+  const { t, language } = useLanguage();
+  return (
+    <HoverTip
+      side="top"
+      disabled={at === undefined}
+      text={at === undefined ? "" : t("customers.sinceDate", { date: formatDateTime(at, language) })}
+    >
+      {children}
+    </HoverTip>
   );
 }
 
@@ -157,7 +173,7 @@ export function ContactView({
   const setNoAiCalls = useMutation(api.customers.setNoAiCalls);
   const setMarketingEmailOptOut = useMutation(api.customers.setMarketingEmailOptOut);
   const [confirmResubscribe, confirmResubscribeDialog] = useConfirm();
-  // Switching Unsubscribed off sends this person marketing email again, which
+  // Switching Unsubscribe off sends this person marketing again, which
   // is theirs to ask for: the switch asks before doing it. On is immediate.
   const changeUnsubscribed = async (next: boolean) => {
     if (!next) {
@@ -474,178 +490,106 @@ export function ContactView({
                   }
                 />
               ))}
+              {/* When they arrived and when they last wrote: facts, so they
+                  close the record as rows like every other fact on it, and
+                  the footer keeps only the decisions about contacting them
+                  (Nudge, 2026-09-22: "label value design, not a header", then
+                  "put it lower"). Read-only, so a plain value on the same
+                  line box InlineEditValue's dense value draws.
 
+                  Added keeps a date and Last reply takes an age, the split
+                  the Customers table makes: when somebody joined is a fact
+                  you look up, when they last wrote is one you feel. The exact
+                  moment stays on the title, one hover away, and a customer
+                  who never wrote has no Last reply row rather than a blank
+                  one. */}
+              <FieldRow label={t("customers.added")}>
+                <span
+                  className="block py-1 text-xs"
+                  title={formatDateTime(customer._creationTime, language)}
+                >
+                  {formatDay(customer._creationTime, language)}
+                </span>
+              </FieldRow>
+              {customer.lastInboundAt !== undefined && (
+                <FieldRow label={t("customers.lastReply")}>
+                  <span
+                    className="block py-1 text-xs"
+                    title={formatDateTime(customer.lastInboundAt, language)}
+                  >
+                    {formatAge(customer.lastInboundAt, language)}
+                  </span>
+                </FieldRow>
+              )}
             </div>
 
-            {/* Record meta, the way Nudge's contact footer works: when this
-                customer arrived, when they last wrote, their consent, whether
-                they are muted, and the two requests a customer makes about
-                how they are contacted (No AI calls, Unsubscribed; 2026-10-13).
+            {/* The footer: the decisions about contacting this person, and
+                nothing else (Nudge's, 2026-09-22): Unsubscribe, Mute and No AI
+                calls, one row. Pinned under the field list as a sibling of its
+                scroll region, so the switches stay in reach on a long record.
 
-                Two by two, and directly under the last field rather than
-                pinned to the bottom of the panel. Pinned, it floated away from
-                the fields on a tall screen and read as a separate thing the
-                panel happened to be carrying. Sitting where the fields end, it
-                reads as what it is: the last facts on the record.
+                Consent left it on 2026-10-21 (Serdar: everybody a business
+                reaches out to has consented, so the switch was redundant), and
+                with it the gate: nothing reads customers.consentAt any more.
+                Added and Last reply moved up into the record as rows.
 
-                Consent sits HERE rather than up among the identity fields on
-                purpose. It is not a detail somebody types, it is a legal fact
-                about this one customer, and a stray tap next to the email box
-                marks them as having agreed to something they never agreed to.
-                Down here it reads as the record it is, dated, and it cannot
-                move to Settings: one org-wide switch standing in for every
-                customer's consent is the thing KVKK exists to forbid.
+                THREE EQUAL COLUMNS AT EVERY WIDTH, Nudge's call ("always side
+                by side in a 3 column rather than stack in any resolution"): a
+                2 + 1 reflow strands the third switch on a line of its own,
+                where it reads as a control that failed to load. On a narrow
+                column a two-word label wraps instead, and the footer grows a
+                line. Do not truncate: "No AI c…" on the control that stops
+                the machine calling somebody is worse than a wrap.
 
-                Mute sits beside it because they look alike and are not, which
-                is exactly why they belong where the difference is visible: one
-                governs what the salon may send, the other what this person may
-                put in front of the salon.
-
-                NOT built from FieldRow, which is the identity form's row and
-                reserves a 7.5rem label track so every field above lines up. At
-                half width that track is most of the cell, and the values it
-                left behind wrapped: a date broke across three lines to say "26
-                Jul 2026". These pairs FLOW through one 4-column grid with
-                `auto` label columns instead, so each label column sizes to its
-                own widest label and the two halves still line up with each
-                other.
-
-                The fallback to one pair per row is a CONTAINER query, not a
-                viewport one. This panel is the left of a 40/60 split capped
-                at 32rem (TWO_PANE_COLUMNS), so it is narrow on exactly the
-                wide screens a `sm:` breakpoint calls roomy, and stops
-                growing at all past the cap: asking the viewport how much
-                space this grid has is the
-                same mistake that made the values wrap in the first place.
-                20rem is measured, not guessed. Re-measured 2026-10-13 with all
-                six pairs, in the container's content box, Geist at text-xs (the app is Inter since P31: re-measure),
-                the (i) included: German is the widest and needs 19.45rem,
-                English 19.1rem, Turkish 18.4rem (German alone was 19.0rem
-                before the last two pairs). Below 20rem it stacks rather than
-                overflow, and a 375px phone (20.3rem) keeps four columns. The
-                new labels are short for exactly this reason, with their detail
-                in the (i), Nudge's trade for the same footer ("fit in one row
-                rather than be super accurate in wording we can explain in
-                (i)"): "Keine KI-Anrufe" and "Abgemeldet" took German past
-                20rem. A longer label here moves this number; measure first. */}
-            <div className="@container shrink-0 border-t border-[var(--border)] px-4 py-3">
-            <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 text-xs text-[var(--muted)] @min-[20rem]:grid-cols-[auto_1fr_auto_1fr]">
-              {/* Added keeps a date and Last reply takes an age, the same split
-                  the Contacts table already makes. When somebody joined is a
-                  fact you look up; when they last wrote is a fact you feel, and
-                  it stops being interesting long before the date does. */}
-              <MetaLabel label={t("customers.added")} />
-              <span className="whitespace-nowrap" title={formatDateTime(customer._creationTime, language)}>
-                {formatDay(customer._creationTime, language)}
-              </span>
-              {/* An age, not a timestamp. "27 Jul, 22:25" is a precision nobody
-                  reads at a glance and it will not fit half a column anyway;
-                  "2d" answers the question actually being asked. The exact
-                  moment is still one hover away.
-
-                  Blank over zero, never a dash: the cell keeps its place in the
-                  grid, it just has nothing to report yet. */}
-              <MetaLabel label={t("customers.lastReply")} />
-              <span
-                className="whitespace-nowrap"
-                title={
-                  customer.lastInboundAt !== undefined
-                    ? formatDateTime(customer.lastInboundAt, language)
-                    : undefined
-                }
-              >
-                {customer.lastInboundAt !== undefined
-                  ? formatAge(customer.lastInboundAt, language)
-                  : ""}
-              </span>
-              {/* "Consent" here, not the table's "Messaging consent". Two words
-                  set an `auto` label column wide enough to squeeze the date out
-                  of the cell beside it, and down here, next to Mute, there is
-                  nothing else it could be consent TO. */}
-              {/* Both switches render bare, the way Nudge's footer does. The
-                  consent date used to sit beside its toggle, and it was the
-                  single widest thing in the grid: carrying it cost 87px, which
-                  is the difference between this footer fitting the panel in
-                  German and not. It is still on the toggle's title, still a
-                  column in Contacts, and still exported in the CSV, so nothing
-                  about the record got quieter, it just stopped being the reason
-                  the other three cells had nowhere to go. */}
-              <MetaLabel label={t("customers.consentShort")} hint={t("customers.consentHint")} />
-              <span
-                className="flex items-center"
-                title={
-                  customer.consentAt !== undefined
-                    ? formatDateTime(customer.consentAt, language)
-                    : undefined
-                }
-              >
-                {/* CheckSwitch, not the iOS Toggle (Serdar, 2026-08-31):
-                    the check circle is this app's yes/no control everywhere
-                    else, and CheckSwitch's own note listed this footer among
-                    "the parts that have not been converted yet". Converted. */}
-                <CheckSwitch
-                  label={t("customers.consentShort")}
-                  on={customer.consentAt !== undefined}
-                  onChange={(next) => void updateCustomer({ customerId, consent: next })}
-                />
-              </span>
-              <MetaLabel label={t("customers.mute")} hint={t("customers.muteHint")} />
-              <span className="flex items-center">
-                <CheckSwitch
-                  label={t("customers.mute")}
-                  on={customer.mutedAt !== undefined}
-                  onChange={(next) => void setMuted({ customerId, muted: next })}
-                />
-              </span>
-              {/* No AI calls (2026-10-13, Nudge's do-not-call): a decision
-                  about contacting this person, so it sits with consent and
-                  mute, and like them it saves on the tap. Its own switch, not
-                  consent: a customer who refuses robot calls still gets their
-                  reminders. On by a person here, or by the phone agent when
-                  the caller asks on a call; off only by a person. The date it
-                  was asked rides the title, as consent's does. */}
-              <MetaLabel label={t("customers.noAiCalls")} hint={t("customers.noAiCallsHint")} />
-              <span
-                className="flex items-center"
-                title={
-                  customer.noAiCallsAt !== undefined
-                    ? formatDateTime(customer.noAiCallsAt, language)
-                    : undefined
-                }
-              >
-                <CheckSwitch
-                  label={t("customers.noAiCalls")}
-                  on={customer.noAiCallsAt !== undefined}
-                  onChange={(next) => void setNoAiCalls({ customerId, on: next })}
-                />
-              </span>
-              {/* Unsubscribed from marketing email (2026-10-13). The
-                  customer's own link turns it on; so can whoever hears "stop
-                  sending me offers" at the counter, the do-not-call reasoning.
-                  Turning it OFF puts somebody back on the marketing list, so
-                  that direction asks first, with Cancel holding focus, and
-                  both directions land in the activity feed. A switch rather
-                  than a word: "Unsubscribed" as a value overflowed the column
-                  in every language (see the 20rem note above). */}
-              <MetaLabel
-                label={t("customers.unsubscribed")}
-                hint={t("customers.unsubscribedHint")}
-              />
-              <span
-                className="flex items-center"
-                title={
-                  customer.marketingEmailOptOutAt !== undefined
-                    ? formatDateTime(customer.marketingEmailOptOutAt, language)
-                    : undefined
-                }
-              >
-                <CheckSwitch
-                  label={t("customers.unsubscribed")}
-                  on={customer.marketingEmailOptOutAt !== undefined}
-                  onChange={(next) => void changeUnsubscribed(next)}
-                />
-              </span>
-            </div>
+                8px inside a cell, 16px between cells. The ratio is the point:
+                it is what makes the row read as three pairs rather than six
+                loose things. */}
+            <div className="shrink-0 border-t border-[var(--border)] px-4 py-3">
+              <div className="grid grid-cols-3 items-center gap-x-4 text-xs text-[var(--muted)]">
+                {/* Unsubscribe: no marketing, on any channel (campaigns, bulk
+                    messages and calls, win-backs). The customer's own link in
+                    a marketing email turns it on; so can whoever hears "stop
+                    sending me offers". Turning it OFF puts somebody back on
+                    the marketing list, so that direction asks first, with
+                    Cancel holding focus. */}
+                <div className="flex min-w-0 items-center gap-2">
+                  <MetaLabel label={t("customers.unsubscribe")} hint={t("customers.unsubscribeHint")} />
+                  <SinceTip at={customer.marketingEmailOptOutAt}>
+                    <CheckSwitch
+                      small
+                      label={t("customers.unsubscribe")}
+                      on={customer.marketingEmailOptOutAt !== undefined}
+                      onChange={(next) => void changeUnsubscribed(next)}
+                    />
+                  </SinceTip>
+                </div>
+                {/* Mute: what this person may put in front of the business,
+                    not what the business may send them. */}
+                <div className="flex min-w-0 items-center gap-2">
+                  <MetaLabel label={t("customers.mute")} hint={t("customers.muteHint")} />
+                  <CheckSwitch
+                    small
+                    label={t("customers.mute")}
+                    on={customer.mutedAt !== undefined}
+                    onChange={(next) => void setMuted({ customerId, muted: next })}
+                  />
+                </div>
+                {/* No AI calls (Nudge's do-not-call): a customer who refuses
+                    robot calls still gets their reminders. On by a person
+                    here, or by the phone agent when the caller asks on a
+                    call; off only by a person. */}
+                <div className="flex min-w-0 items-center gap-2">
+                  <MetaLabel label={t("customers.noAiCalls")} hint={t("customers.noAiCallsHint")} />
+                  <SinceTip at={customer.noAiCallsAt}>
+                    <CheckSwitch
+                      small
+                      label={t("customers.noAiCalls")}
+                      on={customer.noAiCallsAt !== undefined}
+                      onChange={(next) => void setNoAiCalls({ customerId, on: next })}
+                    />
+                  </SinceTip>
+                </div>
+              </div>
             </div>
           </section>
         </div>
