@@ -5622,14 +5622,20 @@ const dictionary = {
   },
 
   "services.title": { tr: "Hizmetler", en: "Services", de: "Leistungen" },
+  // Inside the Services card while it is empty; Add service sits above it.
+  "services.none": {
+    tr: "Henüz hizmet eklenmedi.",
+    en: "No services yet.",
+    de: "Noch keine Leistungen.",
+  },
   // The other half of what a salon sells, as its own card. "Products" rather
   // than "Goods": it is the word on the shelf, and the one the booking page
   // already shows the customer.
   "services.products": { tr: "Ürünler", en: "Products", de: "Produkte" },
   "services.productsHint": {
-    tr: "Sattığınız, süre almayan şeyler. Takvimde yer kaplamaz ve randevu sayfanızda ayrı listelenir. Eklemek için yukarıdaki butonu kullanıp Tür'ü Ürün seçin.",
-    en: "Things you sell rather than book time for. They take no time on the calendar and list separately on your booking page. To add one, use the button above and set Type to Product.",
-    de: "Was Sie verkaufen, statt Zeit dafür zu buchen. Ohne Dauer im Kalender, auf Ihrer Buchungsseite getrennt gelistet. Zum Hinzufügen die Schaltfläche oben nutzen und Art auf Produkt stellen.",
+    tr: "Sattığınız, süre almayan şeyler. Takvimde yer kaplamaz ve randevu sayfanızda ayrı listelenir.",
+    en: "Things you sell rather than book time for. They take no time on the calendar and list separately on your booking page.",
+    de: "Was Sie verkaufen, statt Zeit dafür zu buchen. Ohne Dauer im Kalender, auf Ihrer Buchungsseite getrennt gelistet.",
   },
   "services.hint": {
     tr: "İşletmenizin sunduğu hizmetler. Randevu açarken bu listeden seçilir ve takvimdeki randevu süresini belirler.",

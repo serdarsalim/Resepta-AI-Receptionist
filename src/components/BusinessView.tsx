@@ -1,12 +1,20 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useId, useLayoutEffect, useRef, useState, type Ref } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { ActionTip } from "./InfoTip";
+import { ActionTip, InfoTip } from "./InfoTip";
 import { useConfirm } from "./ConfirmDialog";
 import { LANGUAGES, type TranslationKey } from "@/lib/i18n";
 import {
@@ -121,6 +129,39 @@ const CARD_SECTION: Record<BusinessCard, BusinessSection> = {
   businesses: "team",
 };
 
+
+// A list's title and its creating action, ABOVE its card (Serdar,
+// 2026-10-21: "all the buttons outside of a list"; Nudge 13bcfad1 and
+// e07ff7ae). The card holds the list and nothing else, and the row renders
+// whether or not the list has anything in it, so Add is on screen in the
+// empty state, the one state where it is the only way forward. The same
+// title, (i) and min-h-8 as Card's own header, so lifting a title out of its
+// card changes where it sits and nothing about how it looks.
+//
+// Filled (LIST_ADD) where the list is what the screen is for: Team, Contact
+// fields, and Services on Knowledge. Outlined (LIST_ADD_SECONDARY) for a
+// second list on a screen that already has its filled one, so a page never
+// stacks solid buttons down one edge (AGENTS.md, one loud thing per screen).
+const LIST_ADD = buttonClass("primary", "sm");
+const LIST_ADD_SECONDARY = buttonClass("outline", "sm");
+
+function ListHead({
+  title,
+  tip,
+  action,
+}: {
+  title: string;
+  tip?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex min-h-8 items-center gap-2">
+      <h2 className="text-sm font-semibold">{title}</h2>
+      {tip && <InfoTip text={tip} />}
+      {action && <div className="ml-auto flex items-center">{action}</div>}
+    </div>
+  );
+}
 
 // Thin wrapper owning the mutation, so the shared card stays a dumb form.
 function HoursCard({
@@ -1368,7 +1409,8 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
   // It was a boolean while one shared button sat above both cards and the
   // sheet asked Type itself.
   const [adding, setAdding] = useState<"service" | "good" | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // A refused delete, said under the list it happened in.
+  const [error, setError] = useState<{ text: string; goods: boolean } | null>(null);
   const [confirm, confirmDialog] = useConfirm();
   // The row being dragged by its six-dot handle (Serdar, 2026-08-28), the
   // contact-fields pattern. One id serves both lists; a drop checks the
@@ -1622,7 +1664,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                         if (!ok) return;
                         setError(null);
                         await remove({ serviceId: service._id }).catch((err) =>
-                          setError(serviceErrorText(err, t)),
+                          setError({ text: serviceErrorText(err, t), goods: goodsList }),
                         );
                       })();
                     }}
@@ -1640,62 +1682,73 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
     </div>
   );
 
-  return (
-    <div className="space-y-2">
-      <Card
-        title={t("services.title")}
-        tip={t("services.hint")}
-        disabled={!isOwner}
-        action={
-          isOwner ? (
-            <button
-              type="button"
-              onClick={() => setAdding("service")}
-              className="card-action"
-            >
-              {t("services.add")}
-            </button>
-          ) : undefined
-        }
-      >
-        {services === undefined ? (
-          <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
-        ) : (
-          serviceList(timed)
-        )}
-      </Card>
-      {/* Only when the salon actually sells something. An empty Products card
-          is a heading over a sentence saying there is nothing under it, on a
-          page most salons will never put a product on.
+  const errorLine = (goodsList: boolean) =>
+    error && error.goods === goodsList ? (
+      <p className="text-sm text-red-600 dark:text-red-400">{error.text}</p>
+    ) : null;
 
-          It has its OWN Add product now (Serdar, 2026-08-21). The old note
-          here argued a second button would be "a second door onto one form",
-          which was right while the sheet asked Type as its first question and
-          one shared button sat above both cards. Two buttons in two card
-          headers is a different shape: the gesture answers Type, so the sheet
-          opens already on the right kind instead of asking a question the
-          click just answered. The switch stays for a mistake. */}
-      {goods.length > 0 && (
-        <Card
-          title={t("services.products")}
-          tip={t("services.productsHint")}
-          disabled={!isOwner}
+  return (
+    // Each list's title and Add sit above its card (ListHead), and the two
+    // lists are a section apart, so a title reads as the head of the card
+    // under it and not as the foot of the one above.
+    <div className="space-y-8">
+      <div className="space-y-3">
+        <ListHead
+          title={t("services.title")}
+          tip={t("services.hint")}
           action={
             isOwner ? (
               <button
                 type="button"
-                onClick={() => setAdding("good")}
-                className="card-action"
+                onClick={() => setAdding("service")}
+                className={LIST_ADD}
               >
-                {t("services.addProduct")}
+                {t("services.add")}
               </button>
             ) : undefined
           }
-        >
-          {serviceList(goods, true)}
+        />
+        <Card disabled={!isOwner}>
+          {services === undefined ? (
+            <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
+          ) : timed.length === 0 ? (
+            <p className="text-sm text-[var(--muted)]">{t("services.none")}</p>
+          ) : (
+            serviceList(timed)
+          )}
         </Card>
+        {errorLine(false)}
+      </div>
+      {/* Only when the salon actually sells something. An empty Products card
+          is a heading over a sentence saying there is nothing under it, on a
+          page most salons will never put a product on. The first one goes in
+          through Add service, whose sheet asks Type first.
+
+          It has its OWN Add product (Serdar, 2026-08-21): the gesture answers
+          Type, so the sheet opens already on the right kind instead of asking
+          a question the click just answered. The switch stays for a mistake.
+          Outlined, because Add service is this page's filled action. */}
+      {goods.length > 0 && (
+        <div className="space-y-3">
+          <ListHead
+            title={t("services.products")}
+            tip={t("services.productsHint")}
+            action={
+              isOwner ? (
+                <button
+                  type="button"
+                  onClick={() => setAdding("good")}
+                  className={LIST_ADD_SECONDARY}
+                >
+                  {t("services.addProduct")}
+                </button>
+              ) : undefined
+            }
+          />
+          <Card disabled={!isOwner}>{serviceList(goods, true)}</Card>
+          {errorLine(true)}
+        </div>
       )}
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       {confirmDialog}
       {adding && (
         <NewServiceSheet initialKind={adding} onClose={() => setAdding(null)} />
@@ -1943,21 +1996,12 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
   const identityLocks = useQuery(api.contactFields.identityLocks, {});
   const setIdentityLock = useMutation(api.contactFields.setIdentityLock);
   const usage = useQuery(api.retell.fieldUsage, {});
-  const createField = useMutation(api.contactFields.create);
   const updateField = useMutation(api.contactFields.update);
   const removeField = useMutation(api.contactFields.remove);
   const [confirm, confirmDialog] = useConfirm();
   const [adding, setAdding] = useState(false);
-  const [type, setType] = useState<"text" | "select" | "number" | "date">("text");
-  const [source, setSource] = useState<FieldSource>("manual");
-  // The key is declared at creation: prefilled from the label as it is typed,
-  // editable until the owner has touched it — after creation it only moves
-  // through the unused-only path in the table.
-  const [labelDraft, setLabelDraft] = useState("");
-  const [keyDraft, setKeyDraft] = useState("");
-  const [keyTouched, setKeyTouched] = useState(false);
+  // A refused rename or delete in the table, said under it.
   const [error, setError] = useState<string | null>(null);
-  const sourceLabelId = useId();
 
   // Unset reads as "manual": fields defined before the voice agent existed are
   // staff-filled by definition.
@@ -1997,30 +2041,24 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
     // explains what a contact field IS. That sentence is worth more to a salon
     // owner than the repetition costs. Moved from the Voice agent's strip to
     // the Customers strip on 2026-08-25; see CustomersView's header for why.
-    <Card
-      title={t("fields.title")}
-      tip={t("fields.hint")}
-      disabled={!isOwner}
-      // Top right, filled, same as Team's Add member and Voice agent's Add
-      // agent. It was a ghost button at the FOOT of the table — the card's one
-      // primary action, wearing the treatment this design language reserves
-      // for secondary controls, parked below however many fields the salon has
-      // collected.
-      //
-      // Still hidden while the form is open, which is what it always did. The
-      // Card header carries min-h-8, so it going away moves nothing.
-      action={
-        isOwner && !adding ? (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="card-action"
-          >
-            {t("fields.add")}
-          </button>
-        ) : undefined
-      }
-    >
+    //
+    // The title and Add field sit ABOVE the card (ListHead), and adding opens
+    // a sheet (2026-10-21). The form used to unfold at the foot of the table,
+    // which with the button above the card would have put the form a list's
+    // length away from the button that opened it.
+    <div className="space-y-3">
+      <ListHead
+        title={t("fields.title")}
+        tip={t("fields.hint")}
+        action={
+          isOwner ? (
+            <button type="button" onClick={() => setAdding(true)} className={LIST_ADD}>
+              {t("fields.add")}
+            </button>
+          ) : undefined
+        }
+      />
+    <Card disabled={!isOwner}>
       {/* One sortable table, ported from Nudge's fields admin: system rows
           are pinned and undeletable, org rows drag to reorder, a List type
           expands into its options editor, and Filled by is the column that
@@ -2145,131 +2183,141 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
           </tbody>
         </table>
       </div>
-      {error && !adding && (
-        <p className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>
-      )}
+    </Card>
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       {confirmDialog}
+      {adding && <NewFieldSheet onClose={() => setAdding(false)} />}
+    </div>
+  );
+}
 
-      {/* Adding appears on demand: a permanently open form charged this card
-          a row of empty inputs on every visit for a task done a few times a
-          year. The trigger is the Card's header action above. */}
-      {isOwner && adding && (
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const formEl = event.currentTarget;
-            const form = new FormData(formEl);
-            setError(null);
-            try {
-              await createField({
-                label: labelDraft,
-                key: keyDraft.trim() || undefined,
-                type,
-                source,
-                options:
-                  type === "select"
-                    ? String(form.get("options") ?? "")
-                        .split(",")
-                        .map((o) => o.trim())
-                        .filter(Boolean)
-                    : undefined,
-              });
-              formEl.reset();
-              setType("text");
-              setSource("manual");
-              setLabelDraft("");
-              setKeyDraft("");
-              setKeyTouched(false);
-              setAdding(false);
-            } catch (err) {
-              setError(fieldErrorText(err, t));
-            }
-          }}
-        >
-          <label className="block text-sm">
-            {t("fields.label")}
-            <input
-              required
-              value={labelDraft}
-              onChange={(e) => {
-                setLabelDraft(e.target.value);
-                if (!keyTouched) setKeyDraft(keyFromLabel(e.target.value));
-              }}
-              className="mt-1 block w-44"
-            />
-          </label>
+// Adding a contact field, as a sheet (2026-10-21), the shape New service has:
+// labels in a column, every control starting at one left edge. It was a form
+// that unfolded under the table, in a row of five boxes that wrapped
+// wherever the card's width ran out.
+function NewFieldSheet({ onClose }: { onClose: () => void }) {
+  const { t } = useLanguage();
+  const createField = useMutation(api.contactFields.create);
+  const [type, setType] = useState<"text" | "select" | "number" | "date">("text");
+  const [source, setSource] = useState<FieldSource>("manual");
+  // The key is declared at creation: prefilled from the label as it is typed,
+  // editable until the owner has touched it — after creation it only moves
+  // through the unused-only path in the table.
+  const [labelDraft, setLabelDraft] = useState("");
+  const [keyDraft, setKeyDraft] = useState("");
+  const [keyTouched, setKeyTouched] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const sourceLabelId = useId();
+
+  return (
+    <Sheet title={t("fields.add")} onClose={onClose}>
+      <form
+        className="space-y-3"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          setPending(true);
+          setError(null);
+          try {
+            await createField({
+              label: labelDraft,
+              key: keyDraft.trim() || undefined,
+              type,
+              source,
+              options:
+                type === "select"
+                  ? String(form.get("options") ?? "")
+                      .split(",")
+                      .map((o) => o.trim())
+                      .filter(Boolean)
+                  : undefined,
+            });
+            onClose();
+          } catch (err) {
+            setError(fieldErrorText(err, t));
+            setPending(false);
+          }
+        }}
+      >
+        <div className="grid grid-cols-[6.5rem_1fr] items-center gap-x-4 gap-y-3 text-sm">
+          <label htmlFor="field-label">{t("fields.label")}</label>
+          <input
+            id="field-label"
+            required
+            data-sheet-autofocus
+            value={labelDraft}
+            onChange={(e) => {
+              setLabelDraft(e.target.value);
+              if (!keyTouched) setKeyDraft(keyFromLabel(e.target.value));
+            }}
+            className="w-56"
+          />
+
           {/* The key, declared at creation: follows the label until touched,
               normalised on blur so what is shown is what will be stored. */}
-          <label className="block text-sm">
-            {t("fields.key")}
-            <input
-              value={keyDraft}
-              onChange={(e) => {
-                setKeyTouched(true);
-                setKeyDraft(e.target.value);
-              }}
-              onBlur={() => setKeyDraft((current) => normaliseKey(current))}
-              className="mt-1 block w-44 font-mono text-xs"
-            />
-          </label>
-          <label className="block text-sm">
-            {t("fields.typeLabel")}
-            <select
-              className="mt-1 block w-auto"
-              value={type}
-              onChange={(e) => setType(e.target.value as typeof type)}
-            >
-              <option value="text">{t("fields.type.text")}</option>
-              <option value="select">{t("fields.type.select")}</option>
-              <option value="number">{t("fields.type.number")}</option>
-              <option value="date">{t("fields.type.date")}</option>
-            </select>
-          </label>
-          <div className="text-sm">
-            <span id={sourceLabelId} className="block">
-              {t("fields.source")}
-            </span>
-            {/* The shared segmented control (this picker is where it was
-                first lifted from). */}
-            <div className="mt-1">
-              <SegmentedControl
-                labelledBy={sourceLabelId}
-                value={source}
-                onChange={setSource}
-                segments={FIELD_SOURCES.map((option) => ({
-                  id: option.id,
-                  label: t(option.key),
-                }))}
-              />
-            </div>
-          </div>
-          {type === "select" && (
-            <label className="block text-sm">
-              {t("fields.options")}
-              <input name="options" className="mt-1 block w-56" />
-            </label>
-          )}
-          <button
-            type="submit"
-            className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
-          >
-            {t("fields.add")}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setAdding(false);
-              setError(null);
+          <label htmlFor="field-key">{t("fields.key")}</label>
+          <input
+            id="field-key"
+            value={keyDraft}
+            onChange={(e) => {
+              setKeyTouched(true);
+              setKeyDraft(e.target.value);
             }}
-            className="rounded-lg px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            onBlur={() => setKeyDraft((current) => normaliseKey(current))}
+            className="w-56 font-mono text-xs"
+          />
+
+          <label htmlFor="field-type">{t("fields.typeLabel")}</label>
+          <select
+            id="field-type"
+            className="w-auto justify-self-start"
+            value={type}
+            onChange={(e) => setType(e.target.value as typeof type)}
           >
+            <option value="text">{t("fields.type.text")}</option>
+            <option value="select">{t("fields.type.select")}</option>
+            <option value="number">{t("fields.type.number")}</option>
+            <option value="date">{t("fields.type.date")}</option>
+          </select>
+
+          {type === "select" && (
+            <>
+              <label htmlFor="field-options">{t("fields.options")}</label>
+              <input id="field-options" name="options" className="w-56" />
+            </>
+          )}
+
+          <span id={sourceLabelId}>{t("fields.source")}</span>
+          {/* The shared segmented control (this picker is where it was first
+              lifted from). */}
+          <div className="justify-self-start">
+            <SegmentedControl
+              labelledBy={sourceLabelId}
+              value={source}
+              onChange={setSource}
+              segments={FIELD_SOURCES.map((option) => ({
+                id: option.id,
+                label: t(option.key),
+              }))}
+            />
+          </div>
+        </div>
+
+        {/* Reserved whether or not it holds anything, so a refused save does
+            not shove the buttons out from under the pointer. */}
+        <p className="min-h-[1.25rem] text-sm text-red-600 dark:text-red-400">{error}</p>
+
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className={buttonClass("quiet", "md")}>
             {t("common.cancel")}
           </button>
-          {error && <p className="w-full text-sm text-red-600 dark:text-red-400">{error}</p>}
-        </form>
-      )}
-    </Card>
+          <button type="submit" disabled={pending} className={buttonClass("primary", "md")}>
+            {t("fields.add")}
+          </button>
+        </div>
+      </form>
+    </Sheet>
   );
 }
 
@@ -2353,8 +2401,34 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
     }
   };
 
+  // Above the card and on screen before the roster loads, so the first row
+  // arriving moves nothing. A button, not a pair of empty inputs living at
+  // the foot of the list forever: adding somebody is a twice-a-year job and
+  // it should not charge rent on every visit. Gated on isOwner here rather
+  // than by the fieldset, which it sits outside of.
+  const head = (
+    <ListHead
+      title={t("staff.title")}
+      tip={t("roster.hint")}
+      action={
+        isOwner ? (
+          <button type="button" onClick={() => setAdding(true)} className={LIST_ADD}>
+            {t("roster.add")}
+          </button>
+        ) : undefined
+      }
+    />
+  );
+
   if (roster === undefined || team === undefined) {
-    return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
+    return (
+      <div className="space-y-3">
+        {head}
+        <Card>
+          <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
+        </Card>
+      </div>
+    );
   }
 
   // Logins nobody has claimed as a bookable person yet, offered on the rows
@@ -2420,35 +2494,9 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
         : t("roster.removeAccess");
 
   return (
-    <>
-    <Card
-      title={t("staff.title")}
-      tip={t("roster.hint")}
-      disabled={!isOwner}
-      // A button, not a pair of empty inputs living at the foot of the list
-      // forever. Adding somebody is a twice-a-year job and it should not
-      // charge rent on every visit.
-      //
-      // Top right of the card, which is where Add agent, Add message and Add
-      // customer all sit. This one sat at the FOOT of the roster, so on a
-      // salon with a dozen chairs the page's primary action moved down the
-      // screen as the team grew, and it was the only add button in the
-      // product you had to scroll a list to reach.
-      //
-      // Gated on isOwner here rather than by the fieldset: a Card's action
-      // renders outside it.
-      action={
-        isOwner ? (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="card-action"
-          >
-            {t("roster.add")}
-          </button>
-        ) : undefined
-      }
-    >
+    <div className="space-y-3">
+    {head}
+    <Card disabled={!isOwner}>
       <div className="space-y-3">
         {/* No "what do you call these people?" input. It was the most
             prominent control in the card and it set ONE string — the field
@@ -2719,7 +2767,7 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
             always-present "Deactivated (0)" is a permanent reminder of a state
             most salons never use.
 
-            Alone on this line now that Add member has gone to the header. It
+            Alone on this line now that Add member sits above the card. It
             keeps the foot of the card because it is history, and history reads
             under the list it belongs to. */}
         {deactivated.length > 0 && (
@@ -2799,25 +2847,22 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
 
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       </div>
-
-      {adding && (
-        <AddPersonSheet onClose={() => setAdding(false)} />
-      )}
-      {inviteFor && (
-        <GrantLoginSheet
-          staffId={inviteFor.staffId}
-          name={inviteFor.name}
-          unclaimed={unclaimed}
-          onLink={(userId) =>
-            guard(() => linkStaff({ staffId: inviteFor.staffId, userId }))
-          }
-          onClose={() => setInviteFor(null)}
-        />
-      )}
     </Card>
 
+    {adding && <AddPersonSheet onClose={() => setAdding(false)} />}
+    {inviteFor && (
+      <GrantLoginSheet
+        staffId={inviteFor.staffId}
+        name={inviteFor.name}
+        unclaimed={unclaimed}
+        onLink={(userId) =>
+          guard(() => linkStaff({ staffId: inviteFor.staffId, userId }))
+        }
+        onClose={() => setInviteFor(null)}
+      />
+    )}
     {confirmDialog}
-    </>
+    </div>
   );
 }
 
@@ -2877,8 +2922,12 @@ function OtherBusinessesCard({
         : t("roster.noAccess");
 
   return (
-    <div ref={ref}>
-    <Card title={t("share.title")} tip={t("share.hint")} disabled={!isOwner}>
+    // Titled above its card like the Team list over it, so the tab reads as
+    // two sections with one grammar. It has nothing to add: access is given
+    // per person inside.
+    <div ref={ref} className="space-y-3">
+    <ListHead title={t("share.title")} tip={t("share.hint")} />
+    <Card disabled={!isOwner}>
       <div className="space-y-1">
         {others.map((business) => {
           const roles = new Map(
