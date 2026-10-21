@@ -7,6 +7,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { InfoTip } from "./InfoTip";
 import { AgentTestResult, type TestResult, type Verdict } from "./AgentTestResult";
+import { VerdictMark } from "./ReviewNotes";
 
 // Test results: the agent's browser tests, newest first (P9; Nudge's
 // AgentTestsCard). One line each: who it called as, which way, which
@@ -30,7 +31,12 @@ export type CurrentTest = {
   status: ReactNode;
   // What the open row shows: the live note while the call is up, the result
   // once it has ended. Handed the row's saved review so the notes open on it.
-  body: (review: { note: string | null; verdict: Verdict | null }) => ReactNode;
+  body: (review: {
+    note: string | null;
+    verdict: Verdict | null;
+    noteBy: string | null;
+    noteEditedBy: string | null;
+  }) => ReactNode;
 };
 
 type Fetched = TestResult | "loading" | "failed";
@@ -165,12 +171,14 @@ export function AgentTestsLog({
                 {current.body({
                   note: currentRow?.test.note ?? null,
                   verdict: currentRow?.test.verdict ?? null,
+                  noteBy: currentRow?.noteBy ?? null,
+                  noteEditedBy: currentRow?.noteEditedBy ?? null,
                 })}
               </div>
             )}
           </li>
         )}
-        {others.map(({ test, customerName }) => {
+        {others.map(({ test, customerName, noteBy, noteEditedBy }) => {
           const open = openId === test._id;
           const got = fetched[test._id];
           const loaded = typeof got === "object" ? got : null;
@@ -205,17 +213,7 @@ export function AgentTestsLog({
                     {duration(result.durationSec)}
                   </span>
                 )}
-                {test.verdict && (
-                  <span
-                    className={
-                      test.verdict === "pass"
-                        ? "text-emerald-700 dark:text-emerald-400"
-                        : "text-red-700 dark:text-red-400"
-                    }
-                  >
-                    {test.verdict === "pass" ? t("agentTest.pass") : t("agentTest.miss")}
-                  </span>
-                )}
+                {test.verdict && <VerdictMark verdict={test.verdict} />}
                 <span className="ml-auto text-[var(--muted)]">{stamp.format(test.startedAt)}</span>
                 <Chevron open={open} />
                 <span className="sr-only">{open ? t("agentTest.hide") : t("agentTest.open")}</span>
@@ -231,7 +229,13 @@ export function AgentTestsLog({
                           ? t("agentTest.noWords")
                           : null
                     }
-                    review={{ testId: test._id, note: test.note, verdict: test.verdict }}
+                    review={{
+                      testId: test._id,
+                      note: test.note,
+                      verdict: test.verdict,
+                      noteBy,
+                      noteEditedBy,
+                    }}
                   />
                 </div>
               )}

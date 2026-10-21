@@ -14,6 +14,7 @@ import { EditorSaveBar } from "./EditorSaveBar";
 import { AgentVersionHistory } from "./AgentVersionHistory";
 import { AgentBrowserTest } from "./AgentBrowserTest";
 import { AGENT_PANE_CARD } from "./AgentTestsLog";
+import { AgentNotes, type ReviewTrail } from "./AgentNotes";
 import { PromptEditor } from "./PromptEditor";
 import { Toggle } from "./Toggle";
 import { useHeaderTrail } from "@/lib/headerTrail";
@@ -162,11 +163,14 @@ const sameOpeners = (a: Openers, b: Openers) =>
 
 // The page's two tabs (P35). The parameter is exported so the list clears it
 // when it closes an agent.
-type AgentTab = "setup" | "testing";
+type AgentTab = "setup" | "testing" | "notes";
 export const AGENT_TAB_PARAM = "agentTab";
 const AGENT_TABS: { id: AgentTab; label: TranslationKey }[] = [
   { id: "setup", label: "voiceDetail.tabSetup" },
   { id: "testing", label: "voiceDetail.tabTesting" },
+  // The reviewed calls and tests, and what was done about each (2026-10-21,
+  // Nudge's Analysis tab, which Nudge's own strip calls Notes).
+  { id: "notes", label: "voiceDetail.tabNotes" },
 ];
 
 const draftKey = (agentId: string) => `randevu.agentDraft.${agentId}`;
@@ -260,7 +264,18 @@ export function VoiceAgentPage({
   const [detail, setDetail] = useState<Detail | null>(null);
   // The title bar names the agent and leads back to the list (P25): this page
   // draws no back button of its own.
-  useHeaderTrail({ title: detail?.name ?? t("settings.voiceAgent"), back: onBack });
+  // A review open on the Notes tab names itself one step further in, with
+  // the agent as the way back to the list (AgentNotes publishes it).
+  const [reviewTrail, setReviewTrail] = useState<ReviewTrail | null>(null);
+  useHeaderTrail(
+    reviewTrail
+      ? {
+          title: reviewTrail.title,
+          back: reviewTrail.close,
+          backLabel: detail?.name ?? t("settings.voiceAgent"),
+        }
+      : { title: detail?.name ?? t("settings.voiceAgent"), back: onBack },
+  );
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [begin, setBegin] = useState("");
@@ -284,15 +299,16 @@ export function VoiceAgentPage({
   // mount for the same hydration reason VoiceView reads ?agent=.
   const [tab, setTab] = useState<AgentTab>("setup");
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get(AGENT_TAB_PARAM) === "testing") {
-      setTab("testing");
+    const wanted = new URLSearchParams(window.location.search).get(AGENT_TAB_PARAM);
+    if (wanted === "testing" || wanted === "notes") {
+      setTab(wanted);
     }
   }, []);
   const chooseTab = (next: AgentTab) => {
     setTab(next);
     const url = new URL(window.location.href);
-    if (next === "testing") url.searchParams.set(AGENT_TAB_PARAM, "testing");
-    else url.searchParams.delete(AGENT_TAB_PARAM);
+    if (next === "setup") url.searchParams.delete(AGENT_TAB_PARAM);
+    else url.searchParams.set(AGENT_TAB_PARAM, next);
     window.history.replaceState(null, "", url);
   };
   // The line dropdown writes straight to the provider — no Save, because it
@@ -1160,6 +1176,18 @@ export function VoiceAgentPage({
               promptText={draft}
               labels={variableLabels}
               phoneTestStale={dirty || providerDraft}
+            />
+          </div>
+        )}
+
+        {/* Notes: mounted like the other two and only hidden; it reads
+            nothing until it is first shown. */}
+        {detail && (
+          <div hidden={tab !== "notes"}>
+            <AgentNotes
+              agentId={agentId}
+              active={tab === "notes"}
+              onReviewTrail={setReviewTrail}
             />
           </div>
         )}

@@ -4636,6 +4636,11 @@ const dictionary = {
     en: "Setup",
     de: "Einrichtung",
   },
+  "voiceDetail.tabNotes": {
+    tr: "Notlar",
+    en: "Notes",
+    de: "Notizen",
+  },
   "voiceDetail.tabTesting": {
     tr: "Deneme",
     en: "Testing",
@@ -4982,30 +4987,10 @@ const dictionary = {
     de: "Gespeicherte Daten",
   },
   // The owner's review of a test, in the opened row: a note and a verdict.
-  "agentTest.notes": {
-    tr: "Notlar",
-    en: "Notes",
-    de: "Notizen",
-  },
   "agentTest.notesPlaceholder": {
     tr: "Bu aramada ne olmalıydı?",
     en: "What should have happened on this call?",
     de: "Was hätte in diesem Anruf passieren sollen?",
-  },
-  "agentTest.verdict": {
-    tr: "Karar",
-    en: "Verdict",
-    de: "Urteil",
-  },
-  "agentTest.pass": {
-    tr: "Geçti",
-    en: "Pass",
-    de: "Bestanden",
-  },
-  "agentTest.miss": {
-    tr: "Kaçırdı",
-    en: "Miss",
-    de: "Daneben",
   },
   // The phone test, kept at the foot of the Call setup card: Nudge cut its
   // own (a contact's Call button does the same), Resepta keeps it one click
@@ -5024,6 +5009,233 @@ const dictionary = {
     tr: "Aranacak numara",
     en: "Number to ring",
     de: "Anzurufende Nummer",
+  },
+  // The agent page's Notes tab (2026-10-21; Nudge's Analysis tab): a work
+  // queue of reviewed calls and tests, and what was done about each.
+  "agentNotes.calls": {
+    tr: "Gerçek aramalar",
+    en: "Real calls",
+    de: "Echte Anrufe",
+  },
+  "agentNotes.tests": {
+    tr: "Denemeler",
+    en: "Test calls",
+    de: "Testanrufe",
+  },
+  "agentNotes.source": {
+    tr: "Kaynak",
+    en: "Source",
+    de: "Quelle",
+  },
+  "agentNotes.show": {
+    tr: "Göster",
+    en: "Show",
+    de: "Anzeigen",
+  },
+  "agentNotes.misses": {
+    tr: "Kaçırdı",
+    en: "Misses",
+    de: "Daneben",
+  },
+  "agentNotes.passes": {
+    tr: "Geçti",
+    en: "Passes",
+    de: "Bestanden",
+  },
+  "agentNotes.resolved": {
+    tr: "Çözüldü",
+    en: "Resolved",
+    de: "Erledigt",
+  },
+  "agentNotes.author": {
+    tr: "Yazan",
+    en: "Author",
+    de: "Autor",
+  },
+  "agentNotes.feedback": {
+    tr: "Geri bildirim",
+    en: "Feedback",
+    de: "Feedback",
+  },
+  "agentNotes.whatWeDid": {
+    tr: "Ne yaptık",
+    en: "What we did",
+    de: "Was wir getan haben",
+  },
+  "agentNotes.when": {
+    tr: "Ne zaman",
+    en: "When",
+    de: "Wann",
+  },
+  "agentNotes.noNote": {
+    tr: "Not yok",
+    en: "No note",
+    de: "Keine Notiz",
+  },
+  "agentNotes.nothingYet": {
+    tr: "Henüz bir şey yok",
+    en: "Nothing yet",
+    de: "Noch nichts",
+  },
+  "agentNotes.empty": {
+    tr: "Henüz değerlendirilen bir arama ya da deneme yok. Bir aramanın kartına ya da bir denemeye yazılan not buraya düşer.",
+    en: "No reviewed calls or tests yet. A note on a call card or on a test lands here.",
+    de: "Noch keine bewerteten Anrufe oder Tests. Eine Notiz auf einer Anrufkarte oder an einem Test landet hier.",
+  },
+  "agentNotes.hiddenByFilter.one": {
+    tr: "Bu görünümde bir şey yok. {n} değerlendirme diğer görünümlerde.",
+    en: "Nothing in this view. 1 review is in the other views.",
+    de: "Hier ist nichts. 1 Bewertung steht in den anderen Ansichten.",
+  },
+  "agentNotes.hiddenByFilter.other": {
+    tr: "Bu görünümde bir şey yok. {n} değerlendirme diğer görünümlerde.",
+    en: "Nothing in this view. {n} reviews are in the other views.",
+    de: "Hier ist nichts. {n} Bewertungen stehen in den anderen Ansichten.",
+  },
+  "agentNotes.capped": {
+    tr: "Yalnızca en yeni değerlendirmeler gösteriliyor.",
+    en: "Showing the newest reviews only.",
+    de: "Nur die neuesten Bewertungen.",
+  },
+  "agentNotes.position": {
+    tr: "{n} / {total}",
+    en: "{n} of {total}",
+    de: "{n} von {total}",
+  },
+  "agentNotes.previous": {
+    tr: "Önceki",
+    en: "Previous",
+    de: "Vorherige",
+  },
+  "agentNotes.next": {
+    tr: "Sonraki",
+    en: "Next",
+    de: "Nächste",
+  },
+  "agentNotes.notFound": {
+    tr: "Bu değerlendirme artık burada değil.",
+    en: "This review is no longer here.",
+    de: "Diese Bewertung ist nicht mehr da.",
+  },
+  "agentNotes.review": {
+    tr: "Değerlendirme",
+    en: "Review",
+    de: "Bewertung",
+  },
+  "agentNotes.moveToPasses": {
+    tr: "Geçti olarak işaretle",
+    en: "Move to Passes",
+    de: "Zu Bestanden",
+  },
+  "agentNotes.moveToMisses": {
+    tr: "Kaçırdı olarak işaretle",
+    en: "Move to Misses",
+    de: "Zu Daneben",
+  },
+  "agentNotes.markDone": {
+    tr: "Bitti olarak işaretle",
+    en: "Mark done",
+    de: "Als erledigt markieren",
+  },
+  "agentNotes.done": {
+    tr: "Bitti",
+    en: "Done",
+    de: "Erledigt",
+  },
+  "agentNotes.reopen": {
+    tr: "Yeniden aç",
+    en: "Reopen",
+    de: "Wieder öffnen",
+  },
+  "agentNotes.feedbackPlaceholder": {
+    tr: "Notunuzu ekleyin",
+    en: "Add your note",
+    de: "Notiz hinzufügen",
+  },
+  "agentNotes.actionPlaceholder": {
+    tr: "Bunun için ne yapacağız?",
+    en: "What will we do about it?",
+    de: "Was tun wir dagegen?",
+  },
+  "agentNotes.noSummary": {
+    tr: "Özet yok",
+    en: "No summary",
+    de: "Keine Zusammenfassung",
+  },
+  "agentNotes.noWords": {
+    tr: "Bu aramanın konuşma metni yok.",
+    en: "No transcript for this call.",
+    de: "Kein Gesprächsverlauf für diesen Anruf.",
+  },
+  "agentNotes.call": {
+    tr: "Arama",
+    en: "Call",
+    de: "Anruf",
+  },
+  "agentNotes.whoCalled": {
+    tr: "Kim aradı",
+    en: "Who called",
+    de: "Wer hat angerufen",
+  },
+  "agentNotes.theyRang": {
+    tr: "{name} bizi aradı",
+    en: "{name} rang us",
+    de: "{name} hat uns angerufen",
+  },
+  "agentNotes.weRang": {
+    tr: "{name} arandı",
+    en: "We rang {name}",
+    de: "Wir haben {name} angerufen",
+  },
+  "agentNotes.them": {
+    tr: "karşı taraf",
+    en: "them",
+    de: "die Person",
+  },
+  "agentNotes.number": {
+    tr: "Numara",
+    en: "Number",
+    de: "Nummer",
+  },
+  "agentNotes.placedBy": {
+    tr: "Arayan",
+    en: "Placed by",
+    de: "Angerufen von",
+  },
+  "agentNotes.kind": {
+    tr: "Tür",
+    en: "Kind",
+    de: "Art",
+  },
+  "agentNotes.browserTest": {
+    tr: "Tarayıcı denemesi",
+    en: "Browser test",
+    de: "Browser-Test",
+  },
+  "agentNotes.onDraft": {
+    tr: "Tarayıcı denemesi, yayınlanmamış taslakla",
+    en: "Browser test, on the unpublished draft",
+    de: "Browser-Test, auf dem unveröffentlichten Entwurf",
+  },
+  "agentNotes.startedBy": {
+    tr: "Başlatan",
+    en: "Started by",
+    de: "Gestartet von",
+  },
+  "agentNotes.version": {
+    tr: "Sürüm",
+    en: "Version",
+    de: "Version",
+  },
+  "agentNotes.length": {
+    tr: "Süre",
+    en: "Length",
+    de: "Dauer",
+  },
+  "agentNotes.howEnded": {
+    tr: "Nasıl bitti",
+    en: "How it ended",
+    de: "Wie es endete",
   },
   // The chat simulator (P9b): the owner writes as a customer, nothing sent.
   "chatSim.open": {
