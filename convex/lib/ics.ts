@@ -10,6 +10,8 @@
 // emitting VTIMEZONE blocks by hand is a compatibility swamp this sidesteps
 // entirely.
 
+import { addressOneLine } from "./businessAddress";
+
 // TEXT values per RFC 5545 §3.3.11: backslash first, then the separators, and
 // literal newlines become \n.
 function escapeText(value: string): string {
@@ -50,6 +52,8 @@ export function appointmentIcs(args: {
   description?: string;
   // Where it happens: the business's address (orgs.address), so the entry
   // offers directions. Absent = no LOCATION line rather than an empty one.
+  // Written on one line, its lines joined with commas: a calendar shows the
+  // location as one line and hands it to a map search as one query.
   location?: string;
   // The salon, so the entry shows who it is with and replies thread sensibly.
   organizerName: string;
@@ -63,6 +67,7 @@ export function appointmentIcs(args: {
   sequence?: number;
 }): string {
   const now = utcStamp(Date.now());
+  const location = addressOneLine(args.location);
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -75,7 +80,7 @@ export function appointmentIcs(args: {
     `DTEND:${utcStamp(args.startAtMs + args.durationMinutes * 60_000)}`,
     `SUMMARY:${escapeText(args.summary)}`,
     ...(args.description ? [`DESCRIPTION:${escapeText(args.description)}`] : []),
-    ...(args.location ? [`LOCATION:${escapeText(args.location)}`] : []),
+    ...(location ? [`LOCATION:${escapeText(location)}`] : []),
     `ORGANIZER;CN=${escapeText(args.organizerName)}:mailto:${args.organizerEmail}`,
     `ATTENDEE;CN=${escapeText(args.attendeeName)};ROLE=REQ-PARTICIPANT;PARTSTAT=` +
       `${args.method === "CANCEL" ? "DECLINED" : "NEEDS-ACTION"};RSVP=TRUE:mailto:${args.attendeeEmail}`,

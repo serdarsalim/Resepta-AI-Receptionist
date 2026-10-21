@@ -48,6 +48,7 @@ import type * as lib_awayReply from "../lib/awayReply.js";
 import type * as lib_bookingLimits from "../lib/bookingLimits.js";
 import type * as lib_boostedKeywords from "../lib/boostedKeywords.js";
 import type * as lib_browserTest from "../lib/browserTest.js";
+import type * as lib_businessAddress from "../lib/businessAddress.js";
 import type * as lib_businessHours from "../lib/businessHours.js";
 import type * as lib_calcomApi from "../lib/calcomApi.js";
 import type * as lib_callOutcome from "../lib/callOutcome.js";
@@ -201,6 +202,7 @@ declare const fullApi: ApiFromModules<{
   "lib/bookingLimits": typeof lib_bookingLimits;
   "lib/boostedKeywords": typeof lib_boostedKeywords;
   "lib/browserTest": typeof lib_browserTest;
+  "lib/businessAddress": typeof lib_businessAddress;
   "lib/businessHours": typeof lib_businessHours;
   "lib/calcomApi": typeof lib_calcomApi;
   "lib/callOutcome": typeof lib_callOutcome;

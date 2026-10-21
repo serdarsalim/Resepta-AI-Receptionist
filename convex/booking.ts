@@ -32,6 +32,7 @@ import {
 
 import { customerConflict } from "./lib/overlap";
 import { DEFAULT_CURRENCY } from "./lib/money";
+import { addressOneLine } from "./lib/businessAddress";
 
 
 // The native booking page: /book/<slug>. The fifth intake, and the first one
@@ -356,6 +357,8 @@ export const page = query({
       .query("services")
       .withIndex("by_org", (q) => q.eq("orgId", org._id))
       .collect();
+    // One line beside the time, its lines joined (lib/businessAddress).
+    const address = addressOneLine(org.address);
     return {
       orgName: org.name,
       timezone: org.timezone,
@@ -389,7 +392,7 @@ export const page = query({
         delivery: org.deliveryEnabled ?? true,
       },
       minNoticeHours: minNoticeHoursOf(org),
-      ...(org.address ? { address: org.address } : {}),
+      ...(address ? { address } : {}),
       ...(org.termsUrl ? { termsUrl: org.termsUrl } : {}),
       ...(org.privacyUrl ? { privacyUrl: org.privacyUrl } : {}),
     };
@@ -1040,6 +1043,7 @@ export const manage = query({
     const providerOwned = Boolean(
       appointment.externalUid && org.calcomApiKey && org.calcomEventTypeId,
     );
+    const address = addressOneLine(org.address);
     return {
       orgName: org.name,
       logoUrl: org.logoStorageId
@@ -1058,7 +1062,7 @@ export const manage = query({
       canModify: !providerOwned,
       // The number the salon answers on, for the "call us" fallback.
       phone: (await resolvePublicPhone(ctx, org)) ?? null,
-      ...(org.address ? { address: org.address } : {}),
+      ...(address ? { address } : {}),
     };
   },
 });
@@ -1274,7 +1278,7 @@ export const brand = query({
       logoUrl: org.logoStorageId ? await ctx.storage.getUrl(org.logoStorageId) : null,
       language: org.language,
       services,
-      address: open ? org.address?.trim() || null : null,
+      address: open ? addressOneLine(org.address) ?? null : null,
     };
   },
 });

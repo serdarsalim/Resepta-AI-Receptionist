@@ -8,6 +8,7 @@ import { loadEvolutionCreds } from "./lib/waLane";
 import { customerSender, emailLaneConfigured } from "./lib/email";
 import { emailConfig } from "./lib/platformConfig";
 import { assignInboundAddress, resolveInboundAddress } from "./lib/inboundAddress";
+import { normaliseAddress } from "./lib/businessAddress";
 import {
   assignPublicSlug,
   resolvePublicSlug,
@@ -593,8 +594,9 @@ export const update = mutation({
       patch.autoReplyText = args.autoReplyText.trim() || undefined;
     }
     if (args.address !== undefined) {
-      // One line on an invite and in a message: newlines folded, capped.
-      patch.address = args.address.replace(/\s+/g, " ").trim().slice(0, 200) || undefined;
+      // Up to three lines, kept: every reader that shows it on one line joins
+      // them itself (lib/businessAddress).
+      patch.address = normaliseAddress(args.address);
     }
     if (args.termsUrl !== undefined) patch.termsUrl = cleanLegalUrl(args.termsUrl);
     if (args.privacyUrl !== undefined) patch.privacyUrl = cleanLegalUrl(args.privacyUrl);

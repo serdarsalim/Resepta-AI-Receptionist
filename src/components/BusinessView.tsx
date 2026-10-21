@@ -25,12 +25,13 @@ import { ViewOnlyPill } from "./ViewOnlyPill";
 import { CheckSwitch } from "./CheckSwitch";
 import { StaffColorPicker } from "./StaffColorPicker";
 import { FIELD, ROW_GRID, RowLabel } from "./RowLabel";
-import { buttonClass } from "./Control";
+import { buttonClass, fieldClass } from "./Control";
 import { presetLanguage } from "../../convex/lib/industryPresets";
 import { InlineEditValue } from "./RecordField";
 import { TagPillsEditor } from "./TagPillsEditor";
 import { keyFromLabel, normaliseKey } from "../../convex/lib/keys";
 import { slugifyInboundAddress } from "../../convex/lib/inboundAddress";
+import { ADDRESS_MAX_LINES, normaliseAddress } from "../../convex/lib/businessAddress";
 import { MAX_MIN_NOTICE_HOURS, type NoticeUnit } from "../../convex/lib/minNotice";
 import { HoverTip } from "./HoverTip";
 import { embedSnippet } from "@/lib/embed";
@@ -698,15 +699,26 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
           {nameError && <FieldError text={nameError} />}
 
           <FieldLabel label={t("settings.address")} hint={t("settings.addressHint")} />
-          <input
+          {/* Three lines, the way an address is written on an envelope
+              (Serdar, 2026-10-21: a real address cannot be one long bar).
+              Stored with its line breaks; everything that shows it on one
+              line, an invite, a message, the booking page, joins them with
+              commas (lib/businessAddress). Its label sits on the first line. */}
+          <textarea
             key={`address-${settings.org.address ?? ""}`}
-            className={`${FIELD} w-full`}
+            rows={ADDRESS_MAX_LINES}
+            className={`${fieldClass("sm", { multiline: true })} block w-full resize-none`}
             aria-label={t("settings.address")}
             defaultValue={settings.org.address ?? ""}
             onBlur={(e) => {
-              const next = e.target.value.trim();
-              if (next === (settings.org.address ?? "")) return;
-              void update({ address: next });
+              const stored = settings.org.address ?? "";
+              // Compared as the server will store it, so a stray blank line
+              // or a trailing space is not a save; the box is tidied instead.
+              if ((normaliseAddress(e.target.value) ?? "") === stored) {
+                e.target.value = stored;
+                return;
+              }
+              void update({ address: e.target.value });
             }}
           />
 
