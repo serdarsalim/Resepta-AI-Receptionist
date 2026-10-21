@@ -32,6 +32,8 @@
 // offered anywhere anymore; they exist so bodies already written with them —
 // and a Turkish owner who types [ad] out of habit — keep working.
 
+import { addressOneLine } from "./businessAddress";
+
 export type TokenValues = {
   firstName?: string;
   lastName?: string;
@@ -44,7 +46,9 @@ export type TokenValues = {
   // message TO someone has no reason to tell them their number.
   phone?: string;
   email?: string;
-  // orgs.address — where the business is, one line as the owner wrote it.
+  // orgs.address — where the business is. Stored on up to three lines and
+  // rendered on one, joined with commas (lib/businessAddress), so a caller
+  // passes the stored value as it is.
   address?: string;
   // orgs.bookingUrl — the org's public booking page. In every template so the
   // 2h reminder, the closed-hours reply and the winback can all say "book
@@ -176,6 +180,9 @@ export function renderTokens(
   const filled = body.replace(/\[([^\]\n]{1,32})\]/g, (whole, rawName: string) => {
     const raw = rawName.trim().toLowerCase();
     const key = TOKEN_ALIASES[raw];
+    // The address is the one value written on several lines; mid-sentence,
+    // and in a Meta template parameter, it has to be one.
+    if (key === "address") return addressOneLine(values.address) || fallback(raw);
     if (key) return values[key]?.trim() || fallback(raw);
     // The org's own fields, by exact key. hasOwnProperty rather than a truthy
     // read: an empty value is a field that resolves to nothing, which is a

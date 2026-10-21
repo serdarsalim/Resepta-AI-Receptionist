@@ -57,7 +57,7 @@ import {
   timeValueToMinutes,
   weekdayNames,
 } from "@/lib/datetime";
-import { FIELD, ROW_GRID, RowLabel } from "./RowLabel";
+import { ControlLabel, FIELD, ROW_GRID, RowLabel } from "./RowLabel";
 import { TimezoneSelect } from "./TimezoneSelect";
 import { InfoTip } from "./InfoTip";
 import { Card } from "./Card";
@@ -2472,9 +2472,9 @@ export function BusinessHoursCard({
   };
 
   return (
-    // Titled since Business became one page: the chip strip used to name this
-    // card, and a middle card in a stack has nothing to name it.
-    <Card title={t("settings.hours")} disabled={!isOwner}>
+    // Untitled: it is the whole of Business's Hours tab, and the tab already
+    // names it (2026-10-21).
+    <Card disabled={!isOwner}>
       <div className={ROW_GRID}>
         {/* The clock the rows below are read in, and it leads them because
             "09:00 to 18:00" means nothing until you know whose 09:00. It used
@@ -2488,7 +2488,7 @@ export function BusinessHoursCard({
             carries nine rows across three unrelated jobs, and a chip strip
             where one chip scrolls while five swap the pane is two grammars in
             one control. Moving the single coupled row is the smaller fix. */}
-        <RowLabel
+        <ControlLabel
           label={t("settings.timezone")}
           hint={t("settings.timezoneHint")}
         />

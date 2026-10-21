@@ -56,3 +56,27 @@ export function RowLabel({ label, hint, hintPlacement }: { label: string; hint?:
     </span>
   );
 }
+
+// RowLabel for a ROW_GRID row whose value is a control (2026-10-21, the
+// Business card first). The grid is items-start, so a bare 20px label sat 6px
+// above the text of the 32px field beside it. From sm this cell is a
+// control's height with the label centred in it, which puts the words on the
+// field's text line, on a switch's middle, and on the FIRST line of a
+// multi-line box. On a phone the label stacks on its field half a row-gap
+// away, so it reads as that field's and not as the foot of the row above.
+// `className` places it on a taller value (sm:self-center beside a logo).
+export function ControlLabel({
+  label,
+  hint,
+  className = "",
+}: {
+  label: string;
+  hint?: string;
+  className?: string;
+}) {
+  return (
+    <span className={`flex items-center max-sm:-mb-3 sm:min-h-8 ${className}`}>
+      <RowLabel label={label} hint={hint} />
+    </span>
+  );
+}

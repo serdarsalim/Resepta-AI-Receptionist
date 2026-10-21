@@ -1,12 +1,20 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useId, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { ActionTip } from "./InfoTip";
+import { ActionTip, InfoTip } from "./InfoTip";
 import { useConfirm } from "./ConfirmDialog";
 import { LANGUAGES, type TranslationKey } from "@/lib/i18n";
 import {
@@ -24,12 +32,14 @@ import { SegmentedControl } from "./SegmentedControl";
 import { ViewOnlyPill } from "./ViewOnlyPill";
 import { CheckSwitch } from "./CheckSwitch";
 import { StaffColorPicker } from "./StaffColorPicker";
-import { FIELD, ROW_GRID, RowLabel } from "./RowLabel";
+import { ControlLabel, FIELD, ROW_GRID } from "./RowLabel";
+import { buttonClass, fieldClass } from "./Control";
 import { presetLanguage } from "../../convex/lib/industryPresets";
 import { InlineEditValue } from "./RecordField";
 import { TagPillsEditor } from "./TagPillsEditor";
 import { keyFromLabel, normaliseKey } from "../../convex/lib/keys";
 import { slugifyInboundAddress } from "../../convex/lib/inboundAddress";
+import { ADDRESS_MAX_LINES, normaliseAddress } from "../../convex/lib/businessAddress";
 import { MAX_MIN_NOTICE_HOURS, type NoticeUnit } from "../../convex/lib/minNotice";
 import { HoverTip } from "./HoverTip";
 import { embedSnippet } from "@/lib/embed";
@@ -47,38 +57,40 @@ import { embedSnippet } from "@/lib/embed";
 // a garage: services and contact fields are org data, so the vertical's own
 // vocabulary (plate number, last cleaning, insurance) never needs a schema
 // change or a second deployment.
-// Details, services and contact fields are all "set the salon up once" —
-// splitting them across three tabs turns setup into a scavenger hunt, and each
-// card already carries its own heading, so one scroll reads fine. They share
-// the first chip.
+// Three tabs, General · Hours · Team, the underlined strip Nudge's Settings
+// page wears (Serdar, 2026-10-21). From 2026-08-12 to then this was ONE page
+// with the three cards stacked, argued for because hours and capacity are two
+// halves of one calculation (getAvailableSlots reads the business hours AND
+// the count of active staff). Serdar overruled that: three long cards in one
+// scroll read as one endless form, and a tab says what each part is before you
+// read it. Your other businesses lives under Team, the same people seen from
+// the other businesses they could work in.
 //
-// The other two earn their own because neither is setup. People is what you
-// come back to when somebody is hired or leaves. Activity is what you open
-// when something looks wrong and you need to know who did it — a question, not
-// a configuration, and burying it under a setup scroll would mean nobody ever
-// finds it at the moment they need it.
-// One chip, one job. They used to be three, with the first holding identity,
-// the service catalogue and the contact fields — three things an owner opens
-// on completely different schedules, stacked into one scroll, which is how
-// Services ended up below the fold on the screen it is most edited from.
+// Services and contact fields have their own homes (Knowledge, and Customers'
+// Contact fields tab): a price list is a body of content you maintain, not a
+// setting, and the voice agent and booking page both read it at call time.
+// Their cards still live in this file and are exported.
+type BusinessSection = "general" | "hours" | "team";
 
-// Which card each row lives on. Business is ONE page now: General, Hours and
-// Team stacked, no chip strip. The strip went away because it had shrunk to
-// three entries whose contents all answer "what is this business", and because
-// hours and capacity are two halves of one calculation (getAvailableSlots
-// reads the business hours AND orgCapacity, the count of active staff) that a
-// chip boundary kept apart.
-//
-// Services and contact fields left for their own sidebar destination the same
-// day: a price list is a body of content you maintain, not a setting, and the
-// voice agent and booking page both read it at call time.
-//
-// The old objection to stacking these (recorded twice: General carried nine
-// rows across three unrelated jobs, so an open/close grid appended to it landed
-// under the fold) is answered rather than ignored. General shed Timezone to
-// Hours, and the header search now SCROLLS to a card instead of switching
-// sections, so "where do I change opening times" is one query rather than a
-// scroll hunt.
+const SECTIONS: BusinessSection[] = ["general", "hours", "team"];
+
+const SECTION_LABEL: Record<BusinessSection, TranslationKey> = {
+  general: "settings.general",
+  hours: "settings.hours",
+  team: "staff.title",
+};
+
+// The open tab lives in the URL as ?section=, so a refresh comes back to it and
+// the address bar is a link to it. General is the default and leaves the
+// parameter off. The name is the one the Calendar's old "Edit hours" button
+// linked with, so a ?section=hours link still opens Hours.
+const SECTION_PARAM = "section";
+
+function isSection(value: string | null): value is BusinessSection {
+  return SECTIONS.some((section) => section === value);
+}
+
+// Which card each searchable row lives on; a hit opens the card's tab.
 //
 // Hand-maintained, same as Account's: the rows live in card bodies with no
 // runtime register to enumerate, so add a line when you add a row. Forgetting
@@ -93,7 +105,8 @@ const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
   { card: "general", key: "settings.language" },
   { card: "general", key: "settings.industry" },
   { card: "general", key: "settings.bookingPage" },
-  { card: "general", key: "settings.legalLinks" },
+  { card: "general", key: "settings.termsUrl" },
+  { card: "general", key: "settings.privacyUrl" },
   { card: "general", key: "settings.minNotice" },
   { card: "general", key: "settings.currency" },
   { card: "general", key: "settings.priceDecimals" },
@@ -109,13 +122,50 @@ const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
 
 type BusinessCard = "general" | "hours" | "team" | "businesses";
 
-const CARD_LABEL: Record<BusinessCard, TranslationKey> = {
-  general: "settings.general",
-  hours: "settings.hours",
-  team: "staff.title",
-  businesses: "share.title",
+const CARD_SECTION: Record<BusinessCard, BusinessSection> = {
+  general: "general",
+  hours: "hours",
+  team: "team",
+  businesses: "team",
 };
 
+
+// A list's title and its creating action, ABOVE its card (Serdar,
+// 2026-10-21: "all the buttons outside of a list"; Nudge 13bcfad1 and
+// e07ff7ae). The card holds the list and nothing else, and the row renders
+// whether or not the list has anything in it, so Add is on screen in the
+// empty state, the one state where it is the only way forward. The markup and
+// the 8px to the card (LIST_SECTION) are KnowledgeCard's, so every titled
+// list on a page sits the same way.
+//
+// Filled (LIST_ADD) where the list is what the screen is for: Team, Contact
+// fields, and Services on Knowledge. Outlined (LIST_ADD_SECONDARY) for a
+// second list on a screen that already has its filled one, as Add knowledge
+// is, so a page never stacks solid buttons down one edge (AGENTS.md, one loud
+// thing per screen).
+const LIST_ADD = buttonClass("primary", "sm");
+const LIST_ADD_SECONDARY = buttonClass("outline", "sm");
+const LIST_SECTION = "space-y-2";
+
+function ListHead({
+  title,
+  tip,
+  action,
+}: {
+  title: string;
+  tip?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex min-h-8 items-center justify-between gap-3">
+      <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+        {title}
+        {tip && <InfoTip text={tip} />}
+      </h2>
+      {action}
+    </div>
+  );
+}
 
 // Thin wrapper owning the mutation, so the shared card stays a dumb form.
 function HoursCard({
@@ -136,35 +186,40 @@ export function BusinessView() {
   // Claims the header's box, same component and same corner as Customers and
   // Inbox. The shell owns the input; a view only says what it should say.
   const search = useHeaderSearch(t("common.search"));
-  const cardRefs = useRef<Record<BusinessCard, HTMLDivElement | null>>({
-    general: null,
-    hours: null,
-    team: null,
-    businesses: null,
-  });
-  // Held in state and consumed by an effect rather than scrolled on the click.
-  // Clearing the query remounts the cards, so at click time every ref is null,
-  // and one requestAnimationFrame does not cover React's re-render plus the ref
-  // callbacks. Same mechanism AccountView uses, and the same reason.
-  const [pendingScroll, setPendingScroll] = useState<BusinessCard | null>(null);
+  const [section, setSection] = useState<BusinessSection>("general");
+
+  // A layout effect, so a link to Hours never paints General for a frame
+  // first. Read after mount like the shell's own ?tab=, never during render:
+  // initialising state from window there is a hydration mismatch.
+  useLayoutEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get(SECTION_PARAM);
+    if (isSection(wanted)) setSection(wanted);
+  }, []);
+
+  // replaceState, not push, for the shell's reason: switching tabs is not
+  // history, and Back should still mean "the page before this one".
+  const openSection = (next: BusinessSection) => {
+    setSection(next);
+    const url = new URL(window.location.href);
+    if (next === "general") url.searchParams.delete(SECTION_PARAM);
+    else url.searchParams.set(SECTION_PARAM, next);
+    window.history.replaceState(null, "", url);
+  };
+
+  // A hit on Your other businesses opens Team and then scrolls to that card,
+  // the second one on the tab. Held in state and consumed by an effect rather
+  // than scrolled on the click: clearing the query renders the tab, so at
+  // click time the card is not on the page yet. Same mechanism AccountView
+  // uses, and the same reason.
+  const businessesRef = useRef<HTMLDivElement | null>(null);
+  const [pendingScroll, setPendingScroll] = useState(false);
   useEffect(() => {
     if (!pendingScroll) return;
     // No behavior: "smooth". It silently does nothing on this shell's `main`,
     // measured, so asking for it costs the scroll it was meant to prettify.
-    cardRefs.current[pendingScroll]?.scrollIntoView({ block: "start" });
-    setPendingScroll(null);
+    businessesRef.current?.scrollIntoView({ block: "start" });
+    setPendingScroll(false);
   }, [pendingScroll]);
-
-  // The Calendar's "Edit hours" button still deep-links here with
-  // ?section=hours. There are no sections left to switch to, so the param now
-  // means "scroll to that card" — the destination it always meant, expressed
-  // against a page instead of a chip strip. Read once on mount.
-  useEffect(() => {
-    const wanted = new URLSearchParams(window.location.search).get("section");
-    if (wanted === "hours" || wanted === "team" || wanted === "general") {
-      setPendingScroll(wanted);
-    }
-  }, []);
 
   const hits = search.active
     ? SEARCH_INDEX.filter((entry) => search.matches(t(entry.key)))
@@ -177,7 +232,7 @@ export function BusinessView() {
 
   // Searching replaces the page body with a list of places to go, and picking
   // one clears the query, because the search is done the moment it has taken
-  // you somewhere. It scrolls rather than switches now that this is one page.
+  // you somewhere: to the tab that holds the row.
   if (search.active) {
     return (
       <div className="mx-auto max-w-3xl space-y-4 page-stack">
@@ -185,24 +240,32 @@ export function BusinessView() {
           <p className="text-sm text-[var(--muted)]">{t("table.noMatches")}</p>
         ) : (
           <div className="overflow-hidden rounded-lg border border-[var(--border)]">
-            {hits.map((entry, i) => (
-              <button
-                key={`${entry.card}:${entry.key}`}
-                type="button"
-                onClick={() => {
-                  search.setQuery("");
-                  setPendingScroll(entry.card);
-                }}
-                className={`flex w-full items-baseline justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--muted-bg)] ${
-                  i > 0 ? "border-t border-[var(--border)]" : ""
-                }`}
-              >
-                <span className="text-sm">{t(entry.key)}</span>
-                <span className="shrink-0 text-xs text-[var(--muted)]">
-                  {t(CARD_LABEL[entry.card])}
-                </span>
-              </button>
-            ))}
+            {hits.map((entry, i) => {
+              const target = CARD_SECTION[entry.card];
+              const label = t(entry.key);
+              const tabLabel = t(SECTION_LABEL[target]);
+              return (
+                <button
+                  key={`${entry.card}:${entry.key}`}
+                  type="button"
+                  onClick={() => {
+                    search.setQuery("");
+                    openSection(target);
+                    if (entry.card === "businesses") setPendingScroll(true);
+                  }}
+                  className={`flex w-full items-baseline justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[var(--control-hover)] ${
+                    i > 0 ? "border-t border-[var(--border)]" : ""
+                  }`}
+                >
+                  <span className="text-sm">{label}</span>
+                  {/* Where the hit lands. Left off when the hit IS the tab
+                      ("Hours … Hours" said one thing twice). */}
+                  {label !== tabLabel && (
+                    <span className="shrink-0 text-xs text-[var(--muted)]">{tabLabel}</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -211,35 +274,46 @@ export function BusinessView() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 page-stack">
-      {!isOwner && (
-        <div className="flex justify-end">
-          <ViewOnlyPill title={t("settings.ownerOnly")} />
+      {/* Underline tabs, VoiceView's strip: the hairline belongs to the STRIP
+          and each tab overlaps it with -mb-px, so the active underline
+          replaces that segment of the rule, and the weight never changes
+          between states. A member's View only pill rides the strip's right
+          end rather than taking a row of its own above it. */}
+      <div className="flex flex-wrap items-center gap-5 border-b border-[var(--border)]">
+        {SECTIONS.map((id) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => openSection(id)}
+            aria-current={section === id ? "page" : undefined}
+            className={`-mb-px border-b-2 px-0.5 py-2.5 text-sm transition-colors ${
+              section === id
+                ? "border-[var(--foreground)] text-[var(--foreground)]"
+                : "border-transparent text-[var(--muted-strong)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            {t(SECTION_LABEL[id])}
+          </button>
+        ))}
+        {!isOwner && (
+          <span className="ml-auto">
+            <ViewOnlyPill title={t("settings.ownerOnly")} />
+          </span>
+        )}
+      </div>
+
+      {section === "general" && <DetailsCard isOwner={isOwner} />}
+      {/* No Closures card: blocked time is drawn on the calendar, where the
+          owner already lives (BlockSheet). Hours keeps only the standing
+          week. */}
+      {section === "hours" && <HoursCard isOwner={isOwner} org={settings.org} />}
+      {section === "team" && (
+        <div className="space-y-4">
+          <PeopleCard isOwner={isOwner} />
+          {/* Renders only for an owner who has a second business. */}
+          <OtherBusinessesCard isOwner={isOwner} ref={businessesRef} />
         </div>
       )}
-      <div ref={(node) => void (cardRefs.current.general = node)}>
-        <DetailsCard isOwner={isOwner} />
-      </div>
-      {/* Hours and Team are adjacent because they are the two inputs to one
-          calculation: getAvailableSlots reads the business hours AND
-          orgCapacity, the count of active staff. A chip boundary between them
-          meant changing capacity took you off the screen showing when you are
-          open. */}
-      {/* No Closures card any more: blocked time is drawn on the calendar,
-          where the owner already lives — the grid's create popup asks
-          Appointment or Blocked time (see BlockSheet). Settings keep only
-          the standing week. */}
-      <div ref={(node) => void (cardRefs.current.hours = node)}>
-        <HoursCard isOwner={isOwner} org={settings.org} />
-      </div>
-      <div ref={(node) => void (cardRefs.current.team = node)}>
-        <PeopleCard isOwner={isOwner} />
-      </div>
-      {/* Under Team, and renders only for an owner who has a second business.
-          It reads as a footnote to the roster above it — the same people, seen
-          from the other businesses they could be working in. */}
-      <div ref={(node) => void (cardRefs.current.businesses = node)}>
-        <OtherBusinessesCard isOwner={isOwner} />
-      </div>
     </div>
   );
 }
@@ -296,7 +370,7 @@ function BookingRow() {
             prose to read, and Copy is the affordance that matters; a URL
             allowed to wrap took two lines and pushed the button onto a
             third. */}
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2 sm:min-h-8">
           <CheckSwitch
             on={bookingEnabled ?? false}
             label={t("settings.bookingPage")}
@@ -380,59 +454,87 @@ function BookingRow() {
   );
 }
 
+// The General card's grammar (Serdar, 2026-10-21, after Nudge's Branding
+// card): every value is ONE width, the value column's, so the name, the
+// address, the incoming address, every picker and both legal pages end on the
+// same line, and a row that holds two things splits that width rather than
+// adding to it. It replaced boxes capped to their own text (AGENTS.md rule
+// 6), which had given this card five widths.
+//
+// Every label is a ControlLabel (RowLabel.tsx): on the text line of the field
+// beside it and on the first line of the address box, and on a phone close
+// over its own field.
+
+// A refusal under the field it is about, in the value column. The empty
+// label cell is gone on a phone, where it would cost a row-gap of its own.
+function FieldError({ text }: { text: string }) {
+  return (
+    <>
+      <span className="max-sm:hidden" />
+      <p className="-mt-3 text-sm text-red-600 dark:text-red-400">{text}</p>
+    </>
+  );
+}
+
+// One box holding a field and its suffix: the incoming address and its
+// @domain, the notice and its unit. The shell draws the border and the focus
+// ring (focus-within, so the box you see is the box that lights), and the
+// control inside draws nothing, so exactly one of the two is the field.
+// Nudge's fieldShellClass, local until Control.tsx has it.
+const FIELD_SHELL =
+  "flex h-8 w-full items-center rounded-md border border-[var(--border)] bg-[var(--background)] focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-[var(--accent)]";
+// The control inside it: no box of its own, and no outline, since the shell
+// draws the focus. h-full so the whole box is the click target.
+const SHELL_CONTROL =
+  "h-full min-w-0 rounded-none border-0 bg-transparent py-0 text-sm outline-none placeholder:text-[var(--muted)]";
+
 // The business's own terms and privacy pages, named with links above the
 // booking page's Book button (P29, Nudge 3afd3e60). Only while the page is on:
-// it is a fact about that page and nothing else reads it. Two fields BESIDE
-// each other on one row, since they answer one question; each saves on blur,
-// and a refusal (not an http(s) address) says so on the line under them and
-// puts the stored value back.
-function LegalLinksRow() {
+// it is a fact about that page and nothing else reads it. Two rows, Terms
+// page and Privacy page, the way Nudge's Branding card has them (2026-10-21;
+// it was two half-width boxes on one row). Each saves on blur, and a refusal
+// (not an http(s) address) says so under that row and puts the stored value
+// back.
+function LegalPageRows() {
   const { t } = useLanguage();
   const settings = useQuery(api.orgs.current, {});
   const update = useMutation(api.orgs.update);
-  const [error, setError] = useState(false);
+  const [failed, setFailed] = useState<"termsUrl" | "privacyUrl" | null>(null);
   const [tick, setTick] = useState(0);
   if (!settings?.org.bookingEnabled) return null;
   const save = (field: "termsUrl" | "privacyUrl", raw: string) => {
     const next = raw.trim();
     if (next === (settings.org[field] ?? "")) return;
-    setError(false);
+    setFailed(null);
     void update({ [field]: next }).catch((err: unknown) => {
-      if (String(err).includes("invalid-url")) setError(true);
+      if (String(err).includes("invalid-url")) setFailed(field);
       setTick((n) => n + 1);
     });
   };
+  const row = (
+    field: "termsUrl" | "privacyUrl",
+    label: TranslationKey,
+    hint?: string,
+  ) => (
+    <>
+      <ControlLabel label={t(label)} hint={hint} />
+      <input
+        key={`${field}-${tick}-${settings.org[field] ?? ""}`}
+        type="url"
+        inputMode="url"
+        className={`${FIELD} w-full`}
+        defaultValue={settings.org[field] ?? ""}
+        placeholder="https://"
+        aria-label={t(label)}
+        onBlur={(e) => save(field, e.target.value)}
+      />
+      {failed === field && <FieldError text={t("settings.invalidUrl")} />}
+    </>
+  );
   return (
     <>
-      <RowLabel label={t("settings.legalLinks")} hint={t("settings.legalLinksHint")} />
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <input
-          key={`terms-${tick}-${settings.org.termsUrl ?? ""}`}
-          type="url"
-          inputMode="url"
-          className={FIELD}
-          defaultValue={settings.org.termsUrl ?? ""}
-          placeholder={t("settings.termsUrl")}
-          aria-label={t("settings.termsUrl")}
-          onBlur={(e) => save("termsUrl", e.target.value)}
-        />
-        <input
-          key={`privacy-${tick}-${settings.org.privacyUrl ?? ""}`}
-          type="url"
-          inputMode="url"
-          className={FIELD}
-          defaultValue={settings.org.privacyUrl ?? ""}
-          placeholder={t("settings.privacyUrl")}
-          aria-label={t("settings.privacyUrl")}
-          onBlur={(e) => save("privacyUrl", e.target.value)}
-        />
-      </div>
-      {error && (
-        <>
-          <span />
-          <p className="text-sm text-red-600 dark:text-red-400">{t("settings.invalidUrl")}</p>
-        </>
-      )}
+      {row("termsUrl", "settings.termsUrl", t("settings.legalLinksHint"))}
+      {row("privacyUrl", "settings.privacyUrl")}
     </>
   );
 }
@@ -443,6 +545,10 @@ function LegalLinksRow() {
 // "2 days"), which is what someone reaching for the other unit means. The
 // value in force shows in the box even when nothing was ever saved: an unset
 // business runs on one hour, and an empty field would say it runs on none.
+//
+// One box at the card's one width, the unit picker inside it at the right
+// end, the way a unit sits inside Nudge's number fields: it reads as "2
+// hours", a value, rather than as a number box and a second control.
 function MinNoticeRow({
   hours,
   unit,
@@ -456,7 +562,7 @@ function MinNoticeRow({
   const shown = unit === "days" ? Math.round(hours / 24) : hours;
   const max = unit === "days" ? MAX_MIN_NOTICE_HOURS / 24 : MAX_MIN_NOTICE_HOURS;
   return (
-    <span className="flex items-center gap-2">
+    <span className={FIELD_SHELL}>
       <input
         // Remounted when the stored value moves, so a clamp on the server
         // (or the other unit) shows what was actually kept.
@@ -467,7 +573,7 @@ function MinNoticeRow({
         step={1}
         inputMode="numeric"
         aria-label={t("settings.minNotice")}
-        className={`${FIELD} w-20`}
+        className={`${SHELL_CONTROL} flex-1 px-3 tabular-nums`}
         defaultValue={shown}
         onKeyDown={(e) => {
           if (e.key === "Enter") e.currentTarget.blur();
@@ -491,7 +597,7 @@ function MinNoticeRow({
       />
       <select
         aria-label={t("settings.minNoticeUnit")}
-        className={`${FIELD} w-auto`}
+        className={`${SHELL_CONTROL} w-auto shrink-0 pr-2 pl-3 text-[var(--muted-strong)]`}
         value={unit}
         onChange={(e) => {
           const next: NoticeUnit = e.target.value === "days" ? "days" : "hours";
@@ -583,7 +689,8 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
   );
 
   return (
-    <Card title={t("settings.general")} disabled={!isOwner}>
+    // Untitled: the General tab right above it already names it.
+    <Card disabled={!isOwner}>
       {confirmDialog}
       {settings === undefined ? (
         <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
@@ -592,22 +699,16 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
           {/* The hint is not decoration: this field now moves the public
               booking link, and an owner tidying up their spelling has no way
               to guess that from a box labelled "Business name". */}
-          <RowLabel
+          <ControlLabel
             label={t("settings.businessName")}
             hint={t("settings.businessNameHint")}
           />
-          {/* Capped per input rather than by narrowing ROW_GRID: the shared
-              column has to stay 24rem for the rows that need it (seven day
-              chips on one line, the open/close pickers). These values are a
-              name, an email local part and two-word selects — a box wider
-              than the text it will ever hold reads as an invitation to write
-              an essay. One cap for every box in this card: the email input
-              used to sit visibly shorter than the rest because its @domain
-              suffix ate into the same 18rem, and a card of five widths reads
-              as five decisions. */}
+          {/* Every box in this card is the value column's width (the General
+              card's grammar, above FieldError, says why). */}
           <input
             key={`name-${nameTick}-${settings.org.name}`}
-            className={`${FIELD} sm:max-w-56`}
+            className={`${FIELD} w-full`}
+            aria-label={t("settings.businessName")}
             defaultValue={settings.org.name}
             onBlur={(e) => {
               const next = e.target.value;
@@ -623,26 +724,38 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               });
             }}
           />
-          {nameError && (
-            <>
-              <span />
-              <p className="text-sm text-red-600 dark:text-red-400">{nameError}</p>
-            </>
-          )}
+          {nameError && <FieldError text={nameError} />}
 
-          <RowLabel label={t("settings.address")} hint={t("settings.addressHint")} />
-          <input
+          <ControlLabel label={t("settings.address")} hint={t("settings.addressHint")} />
+          {/* Three lines, the way an address is written on an envelope
+              (Serdar, 2026-10-21: a real address cannot be one long bar).
+              Stored with its line breaks; everything that shows it on one
+              line, an invite, a message, the booking page, joins them with
+              commas (lib/businessAddress). Its label sits on the first line. */}
+          <textarea
             key={`address-${settings.org.address ?? ""}`}
-            className={FIELD}
+            rows={ADDRESS_MAX_LINES}
+            className={`${fieldClass("sm", { multiline: true })} block w-full resize-none`}
+            aria-label={t("settings.address")}
             defaultValue={settings.org.address ?? ""}
             onBlur={(e) => {
-              const next = e.target.value.trim();
-              if (next === (settings.org.address ?? "")) return;
-              void update({ address: next });
+              const stored = settings.org.address ?? "";
+              // Compared as the server will store it, so a stray blank line
+              // or a trailing space is not a save; the box is tidied instead.
+              if ((normaliseAddress(e.target.value) ?? "") === stored) {
+                e.target.value = stored;
+                return;
+              }
+              void update({ address: e.target.value });
             }}
           />
 
-          <RowLabel label={t("settings.logo")} hint={t("settings.logoHint")} />
+          {/* Centred on the 48px picture rather than on a one-line field. */}
+          <ControlLabel
+            label={t("settings.logo")}
+            hint={t("settings.logoHint")}
+            className="sm:self-center"
+          />
           <div className="flex items-center gap-3">
             {settings.org.logoUrl ? (
               /* eslint-disable-next-line @next/next/no-img-element -- a
@@ -657,7 +770,9 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                 {settings.org.name.trim().charAt(0).toUpperCase() || "·"}
               </div>
             )}
-            <label className="cursor-pointer rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium hover:bg-[var(--muted-bg)]">
+            {/* The outlined tier from Control.tsx, so it is the same button
+                as every other secondary action rather than a look of its own. */}
+            <label className={buttonClass("outline", "sm")} data-edit-only>
               {logoBusy ? t("common.saving") : t("settings.logoUpload")}
               <input
                 type="file"
@@ -692,7 +807,8 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               <button
                 type="button"
                 onClick={() => void setLogo({ storageId: null })}
-                className="rounded-lg px-2 py-1 text-xs text-[var(--muted)] hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                data-edit-only
+                className={buttonClass("quiet", "sm")}
               >
                 {t("settings.logoRemove")}
               </button>
@@ -712,8 +828,13 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               the /r page and the booking page were two public channels for
               the same job, and the booking card next door is the one that
               survived. */}
-          <RowLabel label={t("settings.inboundAddress")} hint={t("settings.inboundAddressHint")} />
-          <span className="flex items-center gap-1">
+          <ControlLabel label={t("settings.inboundAddress")} hint={t("settings.inboundAddressHint")} />
+          {/* The domain is INSIDE the box, a muted suffix after what you type
+              (Serdar, 2026-10-21). Hanging to the right of the field it made
+              this row wider than every other, and it read as a second value
+              rather than as the end of the address. Clicking the suffix
+              focuses the input: the whole box is one field. */}
+          <label className={FIELD_SHELL}>
             {/* The salon's OWN name, slugged the way the server will slug it
                 (lib/inboundAddress) — so the placeholder is both an example
                 and a preview of what typing their name would give them. A
@@ -721,7 +842,8 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                 other salon, which reads as someone else's data. */}
             <input
               key={`inbound-${addressTick}`}
-              className={`${FIELD} sm:max-w-56`}
+              className={`${SHELL_CONTROL} flex-1 pl-3`}
+              aria-label={t("settings.inboundAddress")}
               defaultValue={settings.org.inboundAddress ?? ""}
               placeholder={slugifyInboundAddress(settings.org.name) || "randevu"}
               onBlur={(e) => {
@@ -738,18 +860,15 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                 });
               }}
             />
-            <span className="shrink-0 text-sm text-[var(--muted)]">
+            {/* 16px on a phone like the input beside it (globals.css's iOS
+                rule), so the two halves of one address are one size. */}
+            <span className="shrink-0 pr-3 text-sm text-[var(--muted)] max-sm:text-base">
               {settings.org.inboundDomain
                 ? `@${settings.org.inboundDomain}`
                 : t("settings.inboundNoDomain")}
             </span>
-          </span>
-          {addressError && (
-            <>
-              <span />
-              <p className="text-sm text-red-600 dark:text-red-400">{addressError}</p>
-            </>
-          )}
+          </label>
+          {addressError && <FieldError text={addressError} />}
           {/* Operator plumbing, same call as the WhatsApp credentials: sending
               from your own domain means verifying it with the mail provider,
               which the salon cannot do from in here. So the row is absent
@@ -759,16 +878,16 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               from the incoming address above, which needs no setup at all. */}
           {settings.org.emailFrom && (
             <>
-              <RowLabel
+              <ControlLabel
                 label={t("settings.emailFrom")}
                 hint={t("settings.emailFromHint")}
               />
-              <span className="text-sm text-[var(--muted)]">
+              <span className="flex items-center text-sm text-[var(--muted)] sm:min-h-8">
                 {settings.org.emailFrom}
               </span>
             </>
           )}
-          <RowLabel
+          <ControlLabel
             label={t("settings.language")}
             hint={t("settings.languageHint")}
           />
@@ -779,7 +898,8 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               — the same wrong value under an immutable field would have
               needed operator surgery to fix. */}
           <select
-            className={`${FIELD} sm:max-w-56`}
+            className={`${FIELD} w-full`}
+            aria-label={t("settings.language")}
             defaultValue={settings.org.language}
             onChange={(e) => {
               const el = e.target;
@@ -816,13 +936,16 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               is the "start blank, change your mind later" path the wizard
               promises. Fields a voice agent references survive the reset,
               because deleting them would wedge the agent's next publish. */}
-          <RowLabel
+          <ControlLabel
             label={t("settings.industry")}
             hint={t("settings.industryHint")}
           />
-          <div className="flex items-center gap-3">
+          {/* The picker and Reset share the one width: the picker takes what
+              the button leaves. */}
+          <div className="flex items-center gap-2">
             <select
-              className={`${FIELD} w-full sm:max-w-56`}
+              className={`${FIELD} min-w-0 flex-1`}
+              aria-label={t("settings.industry")}
               value={settings.org.industry ?? ""}
               onChange={(e) => {
                 const industry = e.target.value;
@@ -857,7 +980,8 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
                     await resetIndustry({});
                   })();
                 }}
-                className="shrink-0 rounded-lg px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+                data-edit-only
+                className={buttonClass("quiet", "sm")}
               >
                 {t("settings.industryReset")}
               </button>
@@ -869,7 +993,7 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               as 40000 is ₺400,00 today and €400.00 tomorrow. That is the
               honest behaviour: we don't know an exchange rate and inventing
               one would silently rewrite what customers were charged. */}
-          <RowLabel label={t("settings.currency")} hint={t("settings.currencyHint")} />
+          <ControlLabel label={t("settings.currency")} hint={t("settings.currencyHint")} />
           {/* Currency and decimals stay on ONE line: they answer the same
               question together — currency picks the symbol, language picks
               the separators, this picks how much of the number to write. A
@@ -878,9 +1002,12 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               rejected outright: a picked "option" that toggles a setting and
               snaps the select back is a control lying about its value, and a
               screen reader would offer it as a currency. */}
+          {/* One width again: the picker takes what the switch and its words
+              leave, so "Show decimals" ends where every box above ends. */}
           <div className="flex items-center gap-3">
             <select
-              className={`${FIELD} w-full sm:max-w-56`}
+              className={`${FIELD} min-w-0 flex-1`}
+              aria-label={t("settings.currency")}
               defaultValue={settings.org.currency}
               onChange={(e) => void update({ currency: e.target.value })}
             >
@@ -916,8 +1043,8 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               it unlocks counts in. Off by default: an org that never fills in
               prices would get a nav item leading to three zeroes, which reads
               as broken not unused. */}
-          <RowLabel label={t("settings.revenueEnabled")} hint={t("settings.revenueEnabledHint")} />
-          <span className="flex items-center">
+          <ControlLabel label={t("settings.revenueEnabled")} hint={t("settings.revenueEnabledHint")} />
+          <span className="flex items-center sm:min-h-8">
             <CheckSwitch
               on={settings.org.revenueEnabled ?? false}
               label={t("settings.revenueEnabled")}
@@ -939,17 +1066,17 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               argument survives — the sentence explaining what the page IS was
               the only thing the card's header carried that the row does
               not. */}
-          <RowLabel
+          <ControlLabel
             label={t("settings.bookingPage")}
             hint={t("settings.bookingPageHint")}
           />
           <BookingRow />
-          <LegalLinksRow />
+          <LegalPageRows />
           {/* The minimum notice (lib/minNotice), under the booking page
               because that is the door most customers meet it at. Shown with
               the page off too: the phone agent and the WhatsApp assistant obey
               it as well. */}
-          <RowLabel label={t("settings.minNotice")} hint={t("settings.minNoticeHint")} />
+          <ControlLabel label={t("settings.minNotice")} hint={t("settings.minNoticeHint")} />
           <MinNoticeRow
             hours={settings.org.minNoticeHours}
             unit={settings.org.minNoticeUnit}
@@ -967,11 +1094,11 @@ function DetailsCard({ isOwner }: { isOwner: boolean }) {
               product — so it disables rather than refusing after the tap. */}
           {sellsGoods && (
             <>
-              <RowLabel
+              <ControlLabel
                 label={t("settings.fulfillment")}
                 hint={t("settings.fulfillmentHint")}
               />
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 sm:min-h-8">
                 {(
                   [
                     ["pickupEnabled", "booking.pickup", "deliveryEnabled"],
@@ -1269,7 +1396,8 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
   // It was a boolean while one shared button sat above both cards and the
   // sheet asked Type itself.
   const [adding, setAdding] = useState<"service" | "good" | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // A refused delete, said under the list it happened in.
+  const [error, setError] = useState<{ text: string; goods: boolean } | null>(null);
   const [confirm, confirmDialog] = useConfirm();
   // The row being dragged by its six-dot handle (Serdar, 2026-08-28), the
   // contact-fields pattern. One id serves both lists; a drop checks the
@@ -1523,7 +1651,7 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
                         if (!ok) return;
                         setError(null);
                         await remove({ serviceId: service._id }).catch((err) =>
-                          setError(serviceErrorText(err, t)),
+                          setError({ text: serviceErrorText(err, t), goods: goodsList }),
                         );
                       })();
                     }}
@@ -1541,62 +1669,74 @@ export function ServicesCard({ isOwner }: { isOwner: boolean }) {
     </div>
   );
 
-  return (
-    <div className="space-y-2">
-      <Card
-        title={t("services.title")}
-        tip={t("services.hint")}
-        disabled={!isOwner}
-        action={
-          isOwner ? (
-            <button
-              type="button"
-              onClick={() => setAdding("service")}
-              className="card-action"
-            >
-              {t("services.add")}
-            </button>
-          ) : undefined
-        }
-      >
-        {services === undefined ? (
-          <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
-        ) : (
-          serviceList(timed)
-        )}
-      </Card>
-      {/* Only when the salon actually sells something. An empty Products card
-          is a heading over a sentence saying there is nothing under it, on a
-          page most salons will never put a product on.
+  const errorLine = (goodsList: boolean) =>
+    error && error.goods === goodsList ? (
+      <p className="text-sm text-red-600 dark:text-red-400">{error.text}</p>
+    ) : null;
 
-          It has its OWN Add product now (Serdar, 2026-08-21). The old note
-          here argued a second button would be "a second door onto one form",
-          which was right while the sheet asked Type as its first question and
-          one shared button sat above both cards. Two buttons in two card
-          headers is a different shape: the gesture answers Type, so the sheet
-          opens already on the right kind instead of asking a question the
-          click just answered. The switch stays for a mistake. */}
-      {goods.length > 0 && (
-        <Card
-          title={t("services.products")}
-          tip={t("services.productsHint")}
-          disabled={!isOwner}
+  return (
+    // Each list's title and Add sit above its card (ListHead). The lists are
+    // the page's own card gap apart (KnowledgeView's 1rem), twice the 8px
+    // between a title and its card, so a title reads as the head of the card
+    // under it and not as the foot of the one above.
+    <div className="space-y-4">
+      <div className={LIST_SECTION}>
+        <ListHead
+          title={t("services.title")}
+          tip={t("services.hint")}
           action={
             isOwner ? (
               <button
                 type="button"
-                onClick={() => setAdding("good")}
-                className="card-action"
+                onClick={() => setAdding("service")}
+                className={LIST_ADD}
               >
-                {t("services.addProduct")}
+                {t("services.add")}
               </button>
             ) : undefined
           }
-        >
-          {serviceList(goods, true)}
+        />
+        <Card disabled={!isOwner}>
+          {services === undefined ? (
+            <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
+          ) : timed.length === 0 ? (
+            <p className="text-sm text-[var(--muted)]">{t("services.none")}</p>
+          ) : (
+            serviceList(timed)
+          )}
         </Card>
+        {errorLine(false)}
+      </div>
+      {/* Only when the salon actually sells something. An empty Products card
+          is a heading over a sentence saying there is nothing under it, on a
+          page most salons will never put a product on. The first one goes in
+          through Add service, whose sheet asks Type first.
+
+          It has its OWN Add product (Serdar, 2026-08-21): the gesture answers
+          Type, so the sheet opens already on the right kind instead of asking
+          a question the click just answered. The switch stays for a mistake.
+          Outlined, because Add service is this page's filled action. */}
+      {goods.length > 0 && (
+        <div className={LIST_SECTION}>
+          <ListHead
+            title={t("services.products")}
+            tip={t("services.productsHint")}
+            action={
+              isOwner ? (
+                <button
+                  type="button"
+                  onClick={() => setAdding("good")}
+                  className={LIST_ADD_SECONDARY}
+                >
+                  {t("services.addProduct")}
+                </button>
+              ) : undefined
+            }
+          />
+          <Card disabled={!isOwner}>{serviceList(goods, true)}</Card>
+          {errorLine(true)}
+        </div>
       )}
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       {confirmDialog}
       {adding && (
         <NewServiceSheet initialKind={adding} onClose={() => setAdding(null)} />
@@ -1844,21 +1984,12 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
   const identityLocks = useQuery(api.contactFields.identityLocks, {});
   const setIdentityLock = useMutation(api.contactFields.setIdentityLock);
   const usage = useQuery(api.retell.fieldUsage, {});
-  const createField = useMutation(api.contactFields.create);
   const updateField = useMutation(api.contactFields.update);
   const removeField = useMutation(api.contactFields.remove);
   const [confirm, confirmDialog] = useConfirm();
   const [adding, setAdding] = useState(false);
-  const [type, setType] = useState<"text" | "select" | "number" | "date">("text");
-  const [source, setSource] = useState<FieldSource>("manual");
-  // The key is declared at creation: prefilled from the label as it is typed,
-  // editable until the owner has touched it — after creation it only moves
-  // through the unused-only path in the table.
-  const [labelDraft, setLabelDraft] = useState("");
-  const [keyDraft, setKeyDraft] = useState("");
-  const [keyTouched, setKeyTouched] = useState(false);
+  // A refused rename or delete in the table, said under it.
   const [error, setError] = useState<string | null>(null);
-  const sourceLabelId = useId();
 
   // Unset reads as "manual": fields defined before the voice agent existed are
   // staff-filled by definition.
@@ -1898,30 +2029,24 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
     // explains what a contact field IS. That sentence is worth more to a salon
     // owner than the repetition costs. Moved from the Voice agent's strip to
     // the Customers strip on 2026-08-25; see CustomersView's header for why.
-    <Card
-      title={t("fields.title")}
-      tip={t("fields.hint")}
-      disabled={!isOwner}
-      // Top right, filled, same as Team's Add member and Voice agent's Add
-      // agent. It was a ghost button at the FOOT of the table — the card's one
-      // primary action, wearing the treatment this design language reserves
-      // for secondary controls, parked below however many fields the salon has
-      // collected.
-      //
-      // Still hidden while the form is open, which is what it always did. The
-      // Card header carries min-h-8, so it going away moves nothing.
-      action={
-        isOwner && !adding ? (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="card-action"
-          >
-            {t("fields.add")}
-          </button>
-        ) : undefined
-      }
-    >
+    //
+    // The title and Add field sit ABOVE the card (ListHead), and adding opens
+    // a sheet (2026-10-21). The form used to unfold at the foot of the table,
+    // which with the button above the card would have put the form a list's
+    // length away from the button that opened it.
+    <div className={LIST_SECTION}>
+      <ListHead
+        title={t("fields.title")}
+        tip={t("fields.hint")}
+        action={
+          isOwner ? (
+            <button type="button" onClick={() => setAdding(true)} className={LIST_ADD}>
+              {t("fields.add")}
+            </button>
+          ) : undefined
+        }
+      />
+    <Card disabled={!isOwner}>
       {/* One sortable table, ported from Nudge's fields admin: system rows
           are pinned and undeletable, org rows drag to reorder, a List type
           expands into its options editor, and Filled by is the column that
@@ -2046,131 +2171,141 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
           </tbody>
         </table>
       </div>
-      {error && !adding && (
-        <p className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>
-      )}
+    </Card>
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       {confirmDialog}
+      {adding && <NewFieldSheet onClose={() => setAdding(false)} />}
+    </div>
+  );
+}
 
-      {/* Adding appears on demand: a permanently open form charged this card
-          a row of empty inputs on every visit for a task done a few times a
-          year. The trigger is the Card's header action above. */}
-      {isOwner && adding && (
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const formEl = event.currentTarget;
-            const form = new FormData(formEl);
-            setError(null);
-            try {
-              await createField({
-                label: labelDraft,
-                key: keyDraft.trim() || undefined,
-                type,
-                source,
-                options:
-                  type === "select"
-                    ? String(form.get("options") ?? "")
-                        .split(",")
-                        .map((o) => o.trim())
-                        .filter(Boolean)
-                    : undefined,
-              });
-              formEl.reset();
-              setType("text");
-              setSource("manual");
-              setLabelDraft("");
-              setKeyDraft("");
-              setKeyTouched(false);
-              setAdding(false);
-            } catch (err) {
-              setError(fieldErrorText(err, t));
-            }
-          }}
-        >
-          <label className="block text-sm">
-            {t("fields.label")}
-            <input
-              required
-              value={labelDraft}
-              onChange={(e) => {
-                setLabelDraft(e.target.value);
-                if (!keyTouched) setKeyDraft(keyFromLabel(e.target.value));
-              }}
-              className="mt-1 block w-44"
-            />
-          </label>
+// Adding a contact field, as a sheet (2026-10-21), the shape New service has:
+// labels in a column, every control starting at one left edge. It was a form
+// that unfolded under the table, in a row of five boxes that wrapped
+// wherever the card's width ran out.
+function NewFieldSheet({ onClose }: { onClose: () => void }) {
+  const { t } = useLanguage();
+  const createField = useMutation(api.contactFields.create);
+  const [type, setType] = useState<"text" | "select" | "number" | "date">("text");
+  const [source, setSource] = useState<FieldSource>("manual");
+  // The key is declared at creation: prefilled from the label as it is typed,
+  // editable until the owner has touched it — after creation it only moves
+  // through the unused-only path in the table.
+  const [labelDraft, setLabelDraft] = useState("");
+  const [keyDraft, setKeyDraft] = useState("");
+  const [keyTouched, setKeyTouched] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const sourceLabelId = useId();
+
+  return (
+    <Sheet title={t("fields.add")} onClose={onClose}>
+      <form
+        className="space-y-3"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          setPending(true);
+          setError(null);
+          try {
+            await createField({
+              label: labelDraft,
+              key: keyDraft.trim() || undefined,
+              type,
+              source,
+              options:
+                type === "select"
+                  ? String(form.get("options") ?? "")
+                      .split(",")
+                      .map((o) => o.trim())
+                      .filter(Boolean)
+                  : undefined,
+            });
+            onClose();
+          } catch (err) {
+            setError(fieldErrorText(err, t));
+            setPending(false);
+          }
+        }}
+      >
+        <div className="grid grid-cols-[6.5rem_1fr] items-center gap-x-4 gap-y-3 text-sm">
+          <label htmlFor="field-label">{t("fields.label")}</label>
+          <input
+            id="field-label"
+            required
+            data-sheet-autofocus
+            value={labelDraft}
+            onChange={(e) => {
+              setLabelDraft(e.target.value);
+              if (!keyTouched) setKeyDraft(keyFromLabel(e.target.value));
+            }}
+            className="w-56"
+          />
+
           {/* The key, declared at creation: follows the label until touched,
               normalised on blur so what is shown is what will be stored. */}
-          <label className="block text-sm">
-            {t("fields.key")}
-            <input
-              value={keyDraft}
-              onChange={(e) => {
-                setKeyTouched(true);
-                setKeyDraft(e.target.value);
-              }}
-              onBlur={() => setKeyDraft((current) => normaliseKey(current))}
-              className="mt-1 block w-44 font-mono text-xs"
-            />
-          </label>
-          <label className="block text-sm">
-            {t("fields.typeLabel")}
-            <select
-              className="mt-1 block w-auto"
-              value={type}
-              onChange={(e) => setType(e.target.value as typeof type)}
-            >
-              <option value="text">{t("fields.type.text")}</option>
-              <option value="select">{t("fields.type.select")}</option>
-              <option value="number">{t("fields.type.number")}</option>
-              <option value="date">{t("fields.type.date")}</option>
-            </select>
-          </label>
-          <div className="text-sm">
-            <span id={sourceLabelId} className="block">
-              {t("fields.source")}
-            </span>
-            {/* The shared segmented control (this picker is where it was
-                first lifted from). */}
-            <div className="mt-1">
-              <SegmentedControl
-                labelledBy={sourceLabelId}
-                value={source}
-                onChange={setSource}
-                segments={FIELD_SOURCES.map((option) => ({
-                  id: option.id,
-                  label: t(option.key),
-                }))}
-              />
-            </div>
-          </div>
-          {type === "select" && (
-            <label className="block text-sm">
-              {t("fields.options")}
-              <input name="options" className="mt-1 block w-56" />
-            </label>
-          )}
-          <button
-            type="submit"
-            className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)]"
-          >
-            {t("fields.add")}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setAdding(false);
-              setError(null);
+          <label htmlFor="field-key">{t("fields.key")}</label>
+          <input
+            id="field-key"
+            value={keyDraft}
+            onChange={(e) => {
+              setKeyTouched(true);
+              setKeyDraft(e.target.value);
             }}
-            className="rounded-lg px-3 py-2 text-sm text-[var(--muted)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
+            onBlur={() => setKeyDraft((current) => normaliseKey(current))}
+            className="w-56 font-mono text-xs"
+          />
+
+          <label htmlFor="field-type">{t("fields.typeLabel")}</label>
+          <select
+            id="field-type"
+            className="w-auto justify-self-start"
+            value={type}
+            onChange={(e) => setType(e.target.value as typeof type)}
           >
+            <option value="text">{t("fields.type.text")}</option>
+            <option value="select">{t("fields.type.select")}</option>
+            <option value="number">{t("fields.type.number")}</option>
+            <option value="date">{t("fields.type.date")}</option>
+          </select>
+
+          {type === "select" && (
+            <>
+              <label htmlFor="field-options">{t("fields.options")}</label>
+              <input id="field-options" name="options" className="w-56" />
+            </>
+          )}
+
+          <span id={sourceLabelId}>{t("fields.source")}</span>
+          {/* The shared segmented control (this picker is where it was first
+              lifted from). */}
+          <div className="justify-self-start">
+            <SegmentedControl
+              labelledBy={sourceLabelId}
+              value={source}
+              onChange={setSource}
+              segments={FIELD_SOURCES.map((option) => ({
+                id: option.id,
+                label: t(option.key),
+              }))}
+            />
+          </div>
+        </div>
+
+        {/* Reserved whether or not it holds anything, so a refused save does
+            not shove the buttons out from under the pointer. */}
+        <p className="min-h-[1.25rem] text-sm text-red-600 dark:text-red-400">{error}</p>
+
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className={buttonClass("quiet", "md")}>
             {t("common.cancel")}
           </button>
-          {error && <p className="w-full text-sm text-red-600 dark:text-red-400">{error}</p>}
-        </form>
-      )}
-    </Card>
+          <button type="submit" disabled={pending} className={buttonClass("primary", "md")}>
+            {t("fields.add")}
+          </button>
+        </div>
+      </form>
+    </Sheet>
   );
 }
 
@@ -2254,8 +2389,34 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
     }
   };
 
+  // Above the card and on screen before the roster loads, so the first row
+  // arriving moves nothing. A button, not a pair of empty inputs living at
+  // the foot of the list forever: adding somebody is a twice-a-year job and
+  // it should not charge rent on every visit. Gated on isOwner here rather
+  // than by the fieldset, which it sits outside of.
+  const head = (
+    <ListHead
+      title={t("staff.title")}
+      tip={t("roster.hint")}
+      action={
+        isOwner ? (
+          <button type="button" onClick={() => setAdding(true)} className={LIST_ADD}>
+            {t("roster.add")}
+          </button>
+        ) : undefined
+      }
+    />
+  );
+
   if (roster === undefined || team === undefined) {
-    return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
+    return (
+      <div className={LIST_SECTION}>
+        {head}
+        <Card>
+          <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>
+        </Card>
+      </div>
+    );
   }
 
   // Logins nobody has claimed as a bookable person yet, offered on the rows
@@ -2321,35 +2482,9 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
         : t("roster.removeAccess");
 
   return (
-    <>
-    <Card
-      title={t("staff.title")}
-      tip={t("roster.hint")}
-      disabled={!isOwner}
-      // A button, not a pair of empty inputs living at the foot of the list
-      // forever. Adding somebody is a twice-a-year job and it should not
-      // charge rent on every visit.
-      //
-      // Top right of the card, which is where Add agent, Add message and Add
-      // customer all sit. This one sat at the FOOT of the roster, so on a
-      // salon with a dozen chairs the page's primary action moved down the
-      // screen as the team grew, and it was the only add button in the
-      // product you had to scroll a list to reach.
-      //
-      // Gated on isOwner here rather than by the fieldset: a Card's action
-      // renders outside it.
-      action={
-        isOwner ? (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="card-action"
-          >
-            {t("roster.add")}
-          </button>
-        ) : undefined
-      }
-    >
+    <div className={LIST_SECTION}>
+    {head}
+    <Card disabled={!isOwner}>
       <div className="space-y-3">
         {/* No "what do you call these people?" input. It was the most
             prominent control in the card and it set ONE string — the field
@@ -2620,7 +2755,7 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
             always-present "Deactivated (0)" is a permanent reminder of a state
             most salons never use.
 
-            Alone on this line now that Add member has gone to the header. It
+            Alone on this line now that Add member sits above the card. It
             keeps the foot of the card because it is history, and history reads
             under the list it belongs to. */}
         {deactivated.length > 0 && (
@@ -2700,25 +2835,22 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
 
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       </div>
-
-      {adding && (
-        <AddPersonSheet onClose={() => setAdding(false)} />
-      )}
-      {inviteFor && (
-        <GrantLoginSheet
-          staffId={inviteFor.staffId}
-          name={inviteFor.name}
-          unclaimed={unclaimed}
-          onLink={(userId) =>
-            guard(() => linkStaff({ staffId: inviteFor.staffId, userId }))
-          }
-          onClose={() => setInviteFor(null)}
-        />
-      )}
     </Card>
 
+    {adding && <AddPersonSheet onClose={() => setAdding(false)} />}
+    {inviteFor && (
+      <GrantLoginSheet
+        staffId={inviteFor.staffId}
+        name={inviteFor.name}
+        unclaimed={unclaimed}
+        onLink={(userId) =>
+          guard(() => linkStaff({ staffId: inviteFor.staffId, userId }))
+        }
+        onClose={() => setInviteFor(null)}
+      />
+    )}
     {confirmDialog}
-    </>
+    </div>
   );
 }
 
@@ -2741,7 +2873,14 @@ function PeopleCard({ isOwner }: { isOwner: boolean }) {
 // account is a row on this org's rota; there is nothing to grant them
 // elsewhere, and copying the rota into another business is a different feature
 // (that one wants their hours and their services too).
-function OtherBusinessesCard({ isOwner }: { isOwner: boolean }) {
+function OtherBusinessesCard({
+  isOwner,
+  ref,
+}: {
+  isOwner: boolean;
+  // The page scrolls here when a search hit names this card.
+  ref?: Ref<HTMLDivElement>;
+}) {
   const { t } = useLanguage();
   // Skipped rather than rendered-and-ignored for staff: both queries are
   // owner-only on the server, so a staff session would spend two failing
@@ -2771,7 +2910,12 @@ function OtherBusinessesCard({ isOwner }: { isOwner: boolean }) {
         : t("roster.noAccess");
 
   return (
-    <Card title={t("share.title")} tip={t("share.hint")} disabled={!isOwner}>
+    // Titled above its card like the Team list over it, so the tab reads as
+    // two sections with one grammar. It has nothing to add: access is given
+    // per person inside.
+    <div ref={ref} className={LIST_SECTION}>
+    <ListHead title={t("share.title")} tip={t("share.hint")} />
+    <Card disabled={!isOwner}>
       <div className="space-y-1">
         {others.map((business) => {
           const roles = new Map(
@@ -2864,6 +3008,7 @@ function OtherBusinessesCard({ isOwner }: { isOwner: boolean }) {
       </div>
       {error && <p className="pt-2 text-xs text-[var(--now-line)]">{error}</p>}
     </Card>
+    </div>
   );
 }
 
