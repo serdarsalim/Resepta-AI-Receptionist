@@ -12,6 +12,7 @@ import {
   addLocalDays,
   formatDayHeading,
   formatTime,
+  formatWeekHeading,
   localeFor,
   startOfLocalDay,
   startOfLocalWeek,
@@ -457,21 +458,11 @@ export function AppointmentsView({
 
   const heading = useMemo(() => {
     const locale = localeFor(language);
-    const day = (ms: number) =>
-      new Intl.DateTimeFormat(locale, { day: "numeric" }).format(new Date(ms));
     switch (view) {
       case "day":
         return formatDayHeading(anchor, language);
-      case "week": {
-        const from = startOfWeek(anchor);
-        const to = from + 6 * DAY_MS;
-        // Only the closing date carries the month: "27-2 August" reads as one
-        // span, where naming both months twice would read as two.
-        return `${day(from)}-${new Intl.DateTimeFormat(locale, {
-          day: "numeric",
-          month: "long",
-        }).format(new Date(to))}`;
-      }
+      case "week":
+        return formatWeekHeading(startOfWeek(anchor), language);
       case "month":
         return new Intl.DateTimeFormat(locale, {
           month: "long",

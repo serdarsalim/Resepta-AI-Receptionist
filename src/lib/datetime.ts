@@ -76,6 +76,22 @@ export function formatDayHeading(ms: number, language: Language, timezone?: stri
   }).format(new Date(ms));
 }
 
+// The week view's heading names the MONTH, Google's way (Serdar, 2026-10-21):
+// "October 2026", "Oct – Nov 2026" across two months, "Dec 2026 – Jan 2027"
+// across two years. The day columns already carry the dates. ICU spaces the
+// range dash with thin spaces; Google's are plain ones. Nudge's twin is
+// formatWeekHeading in its calendarTime.ts.
+export function formatWeekHeading(weekStartMs: number, language: Language): string {
+  const from = new Date(weekStartMs);
+  const to = new Date(addLocalDays(weekStartMs, 6));
+  if (from.getMonth() === to.getMonth()) {
+    return new Intl.DateTimeFormat(LOCALE[language], { month: "long", year: "numeric" }).format(from);
+  }
+  return new Intl.DateTimeFormat(LOCALE[language], { month: "short", year: "numeric" })
+    .formatRange(from, to)
+    .replace(/ /g, " ");
+}
+
 // Compact age for table cells, Nudge's timeAgo with the units localised and
 // the "ago" dropped: in a column headed "Added", the word is already implied.
 //
