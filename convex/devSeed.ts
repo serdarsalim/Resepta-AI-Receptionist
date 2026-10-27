@@ -1,13 +1,24 @@
 import { v } from "convex/values";
 import { syncCustomerSearch } from "./lib/customerSearch";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { syncAppointmentSchedule } from "./lib/reminderSchedule";
 import { recomputeThread } from "./lib/thread";
+import {
+  DEMO_AGENTS,
+  DEMO_CALLS,
+  DEMO_INBOUND_LINE,
+  DEMO_OUTBOUND_LINE,
+  DEMO_TESTS,
+  demoAgentId,
+  type DemoAgentKey,
+} from "./lib/demoVoice";
 
-// Dev-only demo data: 20 English salon customers, services, a week of
-// appointments in both directions, and a believable message history. Run
-// against the dev deployment with:
+// Demo data for Real Estate Co. (the public showroom, 2026-10-27): 20 English
+// customers, the agency's appointment types, a week of viewings and
+// valuations in both directions, a believable message history, and the phone
+// side: two agents on two lines, their calls, test results and reviews
+// (lib/demoVoice). Run against the dev deployment with:
 //
 //   npx convex run devSeed:seed
 //
@@ -15,47 +26,27 @@ import { recomputeThread } from "./lib/thread";
 // public demo reset calls it explicitly; CLI use targets the first org unless
 // orgId is passed. Refuses to run twice unless force.
 
+// demoVoice's calls and tests name customers by index into this list.
 const FIRST_NAMES = [
-  "Emily", "Olivia", "Sophia", "Amelia", "Charlotte", "Ava", "Mia", "Lily",
-  "Grace", "Chloe", "James", "Oliver", "Henry", "Noah", "Jack", "Daniel",
-  "Leo", "Ethan", "Lucas", "Benjamin",
+  "Emily", "Olivia", "Sophia", "Amelia", "Charlotte", "Daniel", "Mia", "Lily",
+  "Grace", "Chloe", "Leo", "Oliver", "Lucas", "Noah", "Henry", "Hannah",
+  "James", "Jack", "Ethan", "Benjamin",
 ];
 const LAST_NAMES = [
   "Carter", "Wilson", "Bennett", "Hughes", "Parker", "Collins", "Reed", "Morgan",
   "Foster", "Bailey", "Turner", "Cooper", "Ward", "Murphy", "Brooks", "Hayes",
   "Price", "Graham", "Bell", "Adams",
 ];
-// Prices in minor units — 5500 is £55.00, the same integer the real app
-// stores. Seeding round floats here would hide exactly the bug the integer
-// choice exists to prevent.
-const SERVICES: { name: string; durationMinutes: number; price: number }[] = [
-  { name: "Haircut", durationMinutes: 45, price: 5500 },
-  { name: "Blow-dry", durationMinutes: 45, price: 4500 },
-  { name: "Hair colour", durationMinutes: 120, price: 14500 },
-  { name: "Manicure", durationMinutes: 45, price: 4000 },
-  { name: "Facial", durationMinutes: 60, price: 8500 },
+// An agency charges commission on the sale, not per visit, so these carry no
+// price: the takings column stays empty rather than inventing a fee.
+const SERVICES: { name: string; durationMinutes: number; price?: number }[] = [
+  { name: "Property viewing", durationMinutes: 30 },
+  { name: "Second viewing", durationMinutes: 30 },
+  { name: "Market valuation", durationMinutes: 60 },
+  { name: "Mortgage consultation", durationMinutes: 45 },
+  { name: "Tenancy signing", durationMinutes: 45 },
 ];
-const STAFF = ["Sophie Bennett", "Mia Collins", "Daniel Brooks"];
-
-// Voice calls. Seeded because the call lane is otherwise the one channel with
-// no sample data, which meant its UI could only ever be checked against an
-// empty state. Shapes match what the Retell webhook writes.
-const CALLS = [
-  {
-    outcome: "Appointment booked",
-    summary:
-      "The customer asked for a Saturday haircut. The 2:00 PM slot was available and confirmed.",
-    transcript:
-      "Agent: Hello, Moda Hair Salon. How can I help?\nCustomer: Do you have any time for a haircut on Saturday?\nAgent: We have 2:00 PM available. Shall I book that for you?\nCustomer: Yes, please. Thank you.",
-    durationSec: 95,
-  },
-  {
-    outcome: "No answer",
-    summary: "The customer did not answer, so a voicemail was left.",
-    transcript: undefined,
-    durationSec: 18,
-  },
-];
+const STAFF = ["Sophie Bennett", "Marcus Reid", "Priya Shah"];
 
 export const seed = internalMutation({
   args: { orgId: v.optional(v.id("orgs")), force: v.optional(v.boolean()) },
@@ -114,6 +105,7 @@ export const seed = internalMutation({
       for (const row of [...messages, ...calls, ...appointments, ...olderCustomers]) {
         await ctx.db.delete(row._id);
       }
+      await clearDemoVoice(ctx, orgId);
       // Appointments are gone first, so their service and staff references no
       // longer point at rows we are about to replace with the canonical demo.
       for (const row of [...olderServices, ...olderStaff]) {
@@ -188,7 +180,9 @@ export const seed = internalMutation({
             ? live.price !== undefined
               ? { price: live.price }
               : {}
-            : { price: fixture.price }),
+            : fixture.price !== undefined
+              ? { price: fixture.price }
+              : {}),
           durationMinutes: live?.durationMinutes ?? fixture.durationMinutes,
         },
       ];
@@ -201,6 +195,8 @@ export const seed = internalMutation({
     let appointmentCount = 0;
     let messageCount = 0;
 
+    const customerIds: Id<"customers">[] = [];
+    const phones: string[] = [];
     for (let i = 0; i < 20; i++) {
       const firstName = FIRST_NAMES[i];
       const lastName = LAST_NAMES[(i * 7) % LAST_NAMES.length];
@@ -224,6 +220,8 @@ export const seed = internalMutation({
         lastInboundAt: i % 3 === 0 ? now - (i % 5) * HOUR : undefined,
       });
       await syncCustomerSearch(ctx, customerId);
+      customerIds.push(customerId);
+      phones.push(phone);
 
       // 1–2 appointments per customer: mostly upcoming week, some history.
       const rounds = i % 3 === 0 ? 2 : 1;
@@ -256,7 +254,9 @@ export const seed = internalMutation({
           startAt,
           durationMinutes: SERVICES[serviceIdx].durationMinutes,
           status,
-          source: i % 4 === 0 ? "calcom" : "manual",
+          // One in four came in through the phone agent, so the calendar
+          // shows where its bookings land.
+          source: i % 4 === 0 ? "voice" : "manual",
           reminderSentOffsets: reminded ? [24] : undefined,
           confirmationSentAt: startAt - 2 * DAY,
         });
@@ -271,7 +271,7 @@ export const seed = internalMutation({
           direction: "out",
           kind: "confirmation",
           templateName: "appointment_confirmation",
-          body: `Hello ${firstName}! Your appointment at ${org.name || "the salon"} is booked.`,
+          body: `Hi ${firstName}, your ${SERVICES[serviceIdx].name.toLowerCase()} with ${org.name || "us"} is booked.`,
           // WITHOUT this every seeded row shares one _creationTime — the
           // whole seed lands in a single transaction — so the inbox had no
           // order to sort by and drew twenty conversations all stamped the
@@ -296,7 +296,7 @@ export const seed = internalMutation({
             direction: "out",
             kind: "reminder_24h",
             templateName: "appointment_reminder",
-            body: `Hello ${firstName}! Just a reminder about your appointment tomorrow.`,
+            body: `Hi ${firstName}, a reminder about your ${SERVICES[serviceIdx].name.toLowerCase()} tomorrow. Reply here if you need to move it.`,
             occurredAt: Math.min(startAt - DAY, now - (i + 2) * HOUR),
             status: "delivered",
             wamid: `wamid.seed.${i}.${r}.rem`,
@@ -339,9 +339,9 @@ export const seed = internalMutation({
           customerId,
           direction: "out",
           kind: "email_confirmation",
-          body: `Hello ${firstName},\n\nYour appointment at ${org.name || "the salon"} is confirmed. Reply to this email if you need to move it.\n\nSee you soon.`,
-          emailSubject: "Your appointment is confirmed",
-          emailFrom: `hello@${(org.publicSlug || "salon")}.example.com`,
+          body: `Hi ${firstName},\n\nYou're booked in with ${org.name || "us"}. Reply to this email if you need to move it.\n\nSee you soon.`,
+          emailSubject: "You're booked in",
+          emailFrom: `hello@${(org.publicSlug || "agency")}.example.com`,
           emailId: `seed-email-${i}-out`,
           occurredAt: now - (i + 8) * HOUR,
           status: i % 4 === 0 ? "read" : "delivered",
@@ -355,9 +355,9 @@ export const seed = internalMutation({
           kind: "email_reply",
           body:
             i % 2 === 0
-              ? "Thanks — could I move it to Friday afternoon instead?"
-              : "Perfect, see you then.",
-          emailSubject: "Re: Your appointment is confirmed",
+              ? "Thanks. Could we do Friday afternoon instead?"
+              : "Perfect, see you there.",
+          emailSubject: "Re: You're booked in",
           emailFrom: address,
           emailId: `seed-email-${i}-in`,
           // Newest thing this customer did, for one in three — so the inbox
@@ -379,9 +379,9 @@ export const seed = internalMutation({
             customerId,
             direction: "out",
             kind: "email_reminder_24h",
-            body: `Hello ${firstName}, a reminder about your appointment tomorrow.`,
-            emailSubject: "Reminder: your appointment tomorrow",
-            emailFrom: `hello@${(org.publicSlug || "salon")}.example.com`,
+            body: `Hi ${firstName}, a reminder about your appointment with us tomorrow.`,
+            emailSubject: "Reminder: see you tomorrow",
+            emailFrom: `hello@${(org.publicSlug || "agency")}.example.com`,
             occurredAt: now - ((i % 5) * 15 + 5) * 60_000,
             status: "failed",
             error: "smtp-bounce",
@@ -390,38 +390,12 @@ export const seed = internalMutation({
         }
       }
 
-      // Every fifth customer also rang. Enough to populate the call tab for a
-      // handful of records without making voice look like the main channel,
-      // which it isn't.
-      //
-      // Placed in the last half hour, and NEWER than that customer's messages,
-      // because the inbox row draws only the newest entry — an hours-old call
-      // behind a minutes-old email is invisible there, so the call lane could
-      // be seeded and still leave the list with nothing to show for it. Which
-      // of the pair is newer alternates, so the list carries both an inbound
-      // and an outbound call rather than four of the same arrow.
-      if (i % 5 === 0) {
-        for (const [index, call] of CALLS.entries()) {
-          await ctx.db.insert("calls", {
-            orgId: org._id,
-            customerId,
-            direction: index === 0 ? "inbound" : "outbound",
-            fromNumber: phone,
-            startedAt:
-              now - ((i % 10 === 0 ? index : 1 - index) * 7 + 7 + i) * 60_000,
-            durationSec: call.durationSec,
-            outcome: call.outcome,
-            summary: call.summary,
-            ...(call.transcript ? { transcript: call.transcript } : {}),
-            retellCallId: `seed-call-${i}-${index}`,
-          });
-          callCount++;
-        }
-      }
       // Seeds write rows directly, so the summary the inbox reads is rebuilt
       // here rather than by each insert (lib/thread.ts).
       await recomputeThread(ctx, customerId);
     }
+
+    callCount = await seedDemoVoice(ctx, org._id, customerIds, phones, now);
 
     return {
       customers: 20,
@@ -652,3 +626,155 @@ export const setOrgName = internalMutation({
     return null;
   },
 });
+
+// The phone side of the showroom. Removes what the last seed left first, so a
+// reseed never stacks a second copy of an agent.
+async function clearDemoVoice(ctx: MutationCtx, orgId: Id<"orgs">) {
+  const agents = await ctx.db
+    .query("retellAgents")
+    .withIndex("by_org", (q) => q.eq("orgId", orgId))
+    .collect();
+  const lines = await ctx.db
+    .query("agentLines")
+    .withIndex("by_org", (q) => q.eq("orgId", orgId))
+    .collect();
+  for (const row of [...agents, ...lines]) await ctx.db.delete(row._id);
+  for (const agent of agents) {
+    const tests = await ctx.db
+      .query("agentTests")
+      .withIndex("by_org_agent_started", (q) =>
+        q.eq("orgId", orgId).eq("retellAgentId", agent.retellAgentId),
+      )
+      .collect();
+    for (const row of tests) await ctx.db.delete(row._id);
+  }
+}
+
+// Two agents on two lines, then their calls, tests and reviews, all as the
+// webhook and the Testing tab would have written them. Returns the call
+// count. Only ever reached for a demo org: every id here is fake and the
+// provider has never heard of it.
+async function seedDemoVoice(
+  ctx: MutationCtx,
+  orgId: Id<"orgs">,
+  customerIds: Id<"customers">[],
+  phones: string[],
+  now: number,
+): Promise<number> {
+  const org = await ctx.db.get(orgId);
+  if (org?.demoMode !== true) return 0;
+  await clearDemoVoice(ctx, orgId);
+
+  const MINUTE = 60_000;
+  const keys: DemoAgentKey[] = ["frontDesk", "followUp"];
+  for (const key of keys) {
+    const agent = DEMO_AGENTS[key];
+    const id = demoAgentId(orgId, key);
+    const calls = DEMO_CALLS.filter((call) => call.agent === key);
+    await ctx.db.insert("retellAgents", {
+      orgId,
+      retellAgentId: id,
+      name: agent.name,
+      ...(key === "frontDesk" ? { inboundNumber: DEMO_INBOUND_LINE } : {}),
+      enabled: true,
+      personaName: agent.persona,
+      openers: agent.openers,
+      canEndCall: true,
+      // Counters as recordCall keeps them, plus a history before the seed.
+      callCount: calls.length + (key === "frontDesk" ? 214 : 87),
+      lastCallStartedAt: Math.max(...calls.map((call) => now - call.minutesAgo * MINUTE)),
+    });
+  }
+  await ctx.db.insert("agentLines", {
+    orgId,
+    number: DEMO_INBOUND_LINE,
+    nickname: "Office line",
+    inboundAgentId: demoAgentId(orgId, "frontDesk"),
+  });
+  await ctx.db.insert("agentLines", {
+    orgId,
+    number: DEMO_OUTBOUND_LINE,
+    nickname: "Follow-up line",
+    outboundAgentId: demoAgentId(orgId, "followUp"),
+  });
+
+  const touched = new Set<Id<"customers">>();
+  for (const [index, call] of DEMO_CALLS.entries()) {
+    const customerId = customerIds[call.customer];
+    if (!customerId) continue;
+    const startedAt = now - call.minutesAgo * MINUTE;
+    const reviewedAt = startedAt + call.durationSec * 1000 + 20 * MINUTE;
+    await ctx.db.insert("calls", {
+      orgId,
+      customerId,
+      direction: call.direction,
+      fromNumber: phones[call.customer],
+      startedAt,
+      durationSec: call.durationSec,
+      outcome: call.successful ? "true" : "false",
+      summary: call.summary,
+      ...(call.transcript ? { transcript: call.transcript } : {}),
+      retellCallId: `demo-call-${orgId}-${index}`,
+      retellAgentId: demoAgentId(orgId, call.agent),
+      ...(call.collected ? { collected: call.collected } : {}),
+      disconnectionReason: call.disconnectionReason,
+      ...(call.review
+        ? {
+            note: call.review.note,
+            verdict: call.review.verdict,
+            noteUpdatedAt: Math.min(reviewedAt, now),
+            ...(call.review.action
+              ? { action: call.review.action, actionUpdatedAt: Math.min(reviewedAt, now) }
+              : {}),
+            ...(call.review.done ? { doneAt: Math.min(reviewedAt + MINUTE, now) } : {}),
+          }
+        : {}),
+    });
+    touched.add(customerId);
+  }
+  for (const customerId of touched) await recomputeThread(ctx, customerId);
+
+  for (const [index, test] of DEMO_TESTS.entries()) {
+    const startedAt = now - test.hoursAgo * 3600_000;
+    const endedAt = startedAt + test.durationSec * 1000;
+    const reviewedAt = Math.min(endedAt + 10 * MINUTE, now);
+    await ctx.db.insert("agentTests", {
+      orgId,
+      retellAgentId: demoAgentId(orgId, test.agent),
+      callId: `demo-test-${orgId}-${index}`,
+      direction: test.direction,
+      agentVersion: test.version,
+      draft: test.draft,
+      ...(test.customer !== undefined && customerIds[test.customer]
+        ? { customerId: customerIds[test.customer] }
+        : {}),
+      startedAt,
+      endedAt,
+      durationSec: test.durationSec,
+      outcome: test.successful ? "true" : "false",
+      summary: test.summary,
+      ...(test.collected ? { collected: test.collected } : {}),
+      disconnectionReason: test.disconnectionReason,
+      ...(test.actions
+        ? {
+            actions: test.actions.map((action, step) => ({
+              ...action,
+              at: startedAt + (step + 1) * 20_000,
+            })),
+          }
+        : {}),
+      ...(test.review
+        ? {
+            note: test.review.note,
+            verdict: test.review.verdict,
+            noteUpdatedAt: reviewedAt,
+            ...(test.review.action
+              ? { action: test.review.action, actionUpdatedAt: reviewedAt }
+              : {}),
+            ...(test.review.done ? { doneAt: reviewedAt } : {}),
+          }
+        : {}),
+    });
+  }
+  return DEMO_CALLS.length;
+}

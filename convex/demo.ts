@@ -32,10 +32,17 @@
 
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalMutation, query, type MutationCtx } from "./_generated/server";
+import { internalMutation, internalQuery, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { seedDefaultRules } from "./messageRules";
 import { noteMessageById } from "./lib/thread";
+import { requireOrg } from "./lib/orgAuth";
+import { demoAgentKeyOf } from "./lib/demoVoice";
+
+// The showroom's one identity. A real estate agency since 2026-10-27
+// (Serdar): the phone agents are the part a prospect most wants to see, and an
+// agency's calls (viewings, valuations, follow-ups) show them best.
+export const SHOWROOM_NAME = "Real Estate Co.";
 
 // Roughly how often a simulated outbound draws a reply. Not 100%: a demo where
 // every customer answers reads as a toy. Not 0: the inbox is half the product.
@@ -119,12 +126,13 @@ export const landSimulated = internalMutation({
   },
 });
 
+// The showroom is English, so its customers answer in English.
 const REPLIES = [
-  "Tamam, geliyorum 👍",
-  "Teşekkürler!",
-  "Saat 15:00 olur mu acaba?",
-  "Görüşmek üzere",
-  "Maalesef gelemeyeceğim, sonra ararım",
+  "Great, see you there 👍",
+  "Thanks!",
+  "Could we make it 3pm instead?",
+  "Is parking easy near the flat?",
+  "Sorry, can't make it now. I'll call to rebook.",
 ];
 
 export const landReply = internalMutation({
@@ -176,7 +184,7 @@ export const provision = internalMutation({
     const orgId = await ctx.db.insert("orgs", {
       // Specific enough to read as a real business rather than "Demo Salon",
       // while remaining immediately legible to an international prospect.
-      name: args.name ?? "Moda Hair Salon",
+      name: args.name ?? SHOWROOM_NAME,
       timezone: "Europe/London",
       language: "en",
       currency: "GBP",
@@ -215,7 +223,7 @@ export const nightlyReset = internalMutation({
       // A prospect demo (it has a demoProspects row) is NOT the showroom: it
       // holds the prospect's own services under their own business name, and
       // the whole point is that it survives until they call it. Rebuilding it
-      // into "Moda Hair Salon" overnight would be the reset destroying the
+      // into the showroom overnight would be the reset destroying the
       // demo it exists to protect.
       const prospect = await ctx.db
         .query("demoProspects")
@@ -226,7 +234,7 @@ export const nightlyReset = internalMutation({
       // surviving org row here also migrates demos provisioned before the
       // English fixture existed.
       await ctx.db.patch(org._id, {
-        name: "Moda Hair Salon",
+        name: SHOWROOM_NAME,
         timezone: "Europe/London",
         language: "en",
         currency: "GBP",
@@ -328,3 +336,29 @@ async function clearExtras(ctx: MutationCtx, orgId: Id<"orgs">): Promise<void> {
     .take(500);
   for (const row of [...notes, ...activity]) await ctx.db.delete(row._id);
 }
+
+// A demo agent, as the agent page's demo branches need it: the business and
+// which fixture (lib/demoVoice). Null for every real org and every agent that
+// is not one of this demo org's own, so a real agent page never takes the
+// demo branch. Any member may read it: demo visitors are staff, and the
+// demo's agent page is read-only for them anyway (every write still asks for
+// an owner).
+export const agentView = internalQuery({
+  args: { agentId: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      orgId: v.id("orgs"),
+      orgName: v.string(),
+      key: v.union(v.literal("frontDesk"), v.literal("followUp")),
+    }),
+  ),
+  handler: async (ctx, { agentId }) => {
+    const { orgId } = await requireOrg(ctx);
+    const org = await ctx.db.get(orgId);
+    if (!isDemo(org)) return null;
+    const key = demoAgentKeyOf(orgId, agentId);
+    return key ? { orgId, orgName: org!.name, key } : null;
+  },
+});
+

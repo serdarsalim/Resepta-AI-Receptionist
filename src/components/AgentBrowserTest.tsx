@@ -397,7 +397,9 @@ export function AgentBrowserTest({
           ? t("agentTest.micDenied")
           : raw.includes("test-unavailable")
             ? t("agentTest.unavailable")
-            : t("agentTest.failed"),
+            : raw.includes("demo workspace")
+              ? t("agentTest.demo")
+              : t("agentTest.failed"),
       );
       hangUp();
       setPhase("idle");

@@ -3580,9 +3580,9 @@ const dictionary = {
     de: "Dieser Assistent ist nicht mehr mit diesem Betrieb verbunden. Möglicherweise wurde die Verbindung getrennt oder er wurde gelöscht.",
   },
   "settings.voiceDemoWorkspace": {
-    tr: "Bu demo iş yeri. Sesli asistan bilgileri burada tutulmuyor.",
-    en: "This is the demo business. It holds no voice credentials.",
-    de: "Dies ist der Demo-Betrieb. Hier sind keine Zugangsdaten für Sprachassistenten hinterlegt.",
+    tr: "Bu bir demo, burada yapılan hiçbir şey gerçek bir telefon hattına yayınlanmıyor.",
+    en: "This is the demo, so nothing here is published to a real phone line.",
+    de: "Das ist die Demo, hier wird nichts auf einer echten Telefonleitung veröffentlicht.",
   },
   "settings.voiceNoKey": {
     tr: "Bu iş yeri için henüz Retell API anahtarı tanımlanmadı.",
@@ -4785,6 +4785,11 @@ const dictionary = {
     tr: "Okunmayan {n} değeri gizle",
     en: "Hide the {n} not read by this agent",
     de: "Die {n} nicht gelesenen ausblenden",
+  },
+  "agentTest.demo": {
+    tr: "Bu bir demo, canlı test araması yapılmıyor. Aşağıdaki sonuçlar gerçek bir hesapta nasıl görüneceğini gösteriyor.",
+    en: "Live test calls are off in the demo. The results below show what you'd see on your own account.",
+    de: "In der Demo gibt es keine echten Testanrufe. Die Ergebnisse unten zeigen, was du in deinem eigenen Konto siehst.",
   },
   "agentTest.unavailable": {
     tr: "Asistan şu an arama alamıyor: kapalı, işletme askıda ya da bakiye boş.",

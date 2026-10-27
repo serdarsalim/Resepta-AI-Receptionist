@@ -52,6 +52,17 @@ import { publishVersionBody, versionNoteValidator, type VersionNote } from "./li
 import { OPENER_KEY, openerFallback, usesOpener, type AgentOpeners } from "./lib/opener";
 import { BROWSER_TEST_MARKER, PLACED_BY_MARKER, browserTestFacts } from "./lib/browserTest";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import {
+  DEMO_AGENTS,
+  DEMO_INBOUND_LINE,
+  DEMO_OUTBOUND_LINE,
+  DEMO_VOICES,
+  demoAgentId,
+  demoTestByCallId,
+  demoTestVariables,
+  demoVariableItems,
+  type DemoAgentKey,
+} from "./lib/demoVoice";
 
 const API = "https://api.retellai.com";
 
@@ -219,6 +230,14 @@ async function stampKeywords(
   });
 }
 
+// The showroom's agent, or null for every real one. Annotated rather than
+// inferred: a handler whose type flows through runQuery into this module's
+// own api types is circular (same fix as voiceBackfill.repairIdentities).
+type DemoView = { orgId: Id<"orgs">; orgName: string; key: DemoAgentKey } | null;
+async function demoView(ctx: Pick<ActionCtx, "runQuery">, agentId: string): Promise<DemoView> {
+  return (await ctx.runQuery(internal.demo.agentView, { agentId })) as DemoView;
+}
+
 async function editorContext(
   ctx: Pick<ActionCtx, "runQuery">,
   agentId: string,
@@ -226,6 +245,12 @@ async function editorContext(
   // signed-in caller leaves it unset and is authorised by requireOwner.
   orgId?: Id<"orgs">,
 ): Promise<EditorContext> {
+  // The showroom's agents first, so a demo visitor (staff) is told it is the
+  // demo rather than that only an owner may do this. Signed-in callers only:
+  // the sessionless provisioning path never reaches a demo org.
+  if (!orgId && (await demoView(ctx, agentId))) {
+    throw new Error("This is the demo workspace. It holds no Retell credentials.");
+  }
   const context = (await ctx.runQuery(internal.retell.agentEditorContext, {
     retellAgentId: agentId,
     orgId,
@@ -442,12 +467,83 @@ function importVariables(
   return [...byKey.values()];
 }
 
+// The showroom's agent page, in the shape `read` returns for a real agent
+// (lib/demoVoice). Built here, never fetched: the demo org has no provider.
+function demoDetail(orgId: Id<"orgs">, key: DemoAgentKey) {
+  const agent = DEMO_AGENTS[key];
+  const id = demoAgentId(orgId, key);
+  const site = siteUrl();
+  const hook = site ? `${site}/retell/call-ended` : null;
+  const variables = demoVariableItems(key);
+  const tools = [
+    ["check_availability", "Free times for a viewing or valuation."],
+    ["book_appointment", "Books the time the caller picked."],
+    ["find_appointment", "The caller's own upcoming booking."],
+    ["reschedule_appointment", "Moves the caller's booking."],
+    ["cancel_appointment", "Cancels the caller's booking."],
+    ["escalate_to_staff", "Asks a negotiator to call back."],
+    ["end_call", "Hangs up politely."],
+  ];
+  return {
+    agentId: id,
+    name: agent.name,
+    version: agent.version,
+    isDraft: false,
+    liveVersion: agent.version,
+    voicemail:
+      key === "followUp"
+        ? {
+            action: "static_text" as const,
+            text: "Hi, it's Sam from Real Estate Co. following up on your viewing. Give us a call back when you can.",
+          }
+        : { action: "hangup" as const },
+    summaryLanguage: "en" as const,
+    businessLanguage: "en" as const,
+    voiceId: agent.voiceId,
+    voices: DEMO_VOICES,
+    language: "en-GB",
+    engineType: "retell-llm",
+    llmId: `llm_demo_${key}`,
+    lines: [
+      { number: DEMO_INBOUND_LINE, nickname: "Office line", agentId: demoAgentId(orgId, "frontDesk") },
+      { number: DEMO_OUTBOUND_LINE, nickname: "Follow-up line", agentId: demoAgentId(orgId, "followUp") },
+    ],
+    inboundNumber: key === "frontDesk" ? DEMO_INBOUND_LINE : null,
+    prompt: { general: agent.prompt, beginMessage: agent.beginMessage },
+    webhook: { expected: hook, actual: hook, wired: Boolean(hook), pointsElsewhere: false },
+    signatureRejectedAt: null,
+    personaName: agent.persona,
+    openers: agent.openers,
+    canEndCall: true,
+    template: {
+      synced: VOICE_AGENT_TEMPLATE_VERSION,
+      current: VOICE_AGENT_TEMPLATE_VERSION,
+      behind: false,
+    },
+    variables: {
+      preCall: [],
+      duringCall: tools.map(([name, description]) => ({ name, type: "custom", description })),
+      postCall: variables.map((row) => ({
+        name: row.key,
+        type: row.type,
+        description: row.description,
+      })),
+    },
+    variableConfig: { managed: true, items: variables },
+    contactFields: [],
+    voiceLockedIdentity: [],
+    voiceIdentityDescriptions: {},
+  };
+}
+
 // ── Read ─────────────────────────────────────────────────────────────────────
 
 export const read = action({
   args: { agentId: v.string() },
   returns: v.any(),
   handler: async (ctx, { agentId }) => {
+    const demo = await demoView(ctx, agentId);
+    if (demo) return demoDetail(demo.orgId, demo.key);
     const context = await editorContext(ctx, agentId);
     const key = context.apiKey!;
     const id = encodeURIComponent(agentId);
@@ -1066,6 +1162,17 @@ export const listVersions = action({
     }),
   ),
   handler: async (ctx, { agentId }) => {
+    const demo = await demoView(ctx, agentId);
+    if (demo) {
+      const agent = DEMO_AGENTS[demo.key];
+      return agent.versions.map((row, i) => ({
+        version: agent.version - i,
+        isPublished: true,
+        title: row.title,
+        description: row.description || null,
+        modifiedAt: Date.now() - row.daysAgo * 86_400_000,
+      }));
+    }
     const context = await editorContext(ctx, agentId);
     const rows = await listAgentVersions(retellCaller(context.apiKey!), agentId);
     return rows.map((row) => ({
@@ -1089,6 +1196,16 @@ export const readVersion = action({
     voiceId: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, { agentId, version }) => {
+    // The demo keeps one script; every version restores to it.
+    const demo = await demoView(ctx, agentId);
+    if (demo) {
+      const agent = DEMO_AGENTS[demo.key];
+      return {
+        generalPrompt: agent.prompt,
+        beginMessage: agent.beginMessage,
+        voiceId: agent.voiceId,
+      };
+    }
     const context = await editorContext(ctx, agentId);
     const key = context.apiKey!;
     const doc = (await (
@@ -3039,6 +3156,24 @@ export const browserTestVariables = action({
     ctx,
     { agentId, customerId, direction, openers },
   ): Promise<{ variables: Record<string, string>; unavailable: boolean }> => {
+    const demo = await demoView(ctx, agentId);
+    if (demo) {
+      const customer = customerId
+        ? await ctx.runQuery(internal.agentTests.testCustomer, {
+            orgId: demo.orgId,
+            customerId,
+          })
+        : null;
+      return {
+        variables: demoTestVariables(
+          demo.orgName,
+          demo.key,
+          customer,
+          direction ?? "outbound",
+        ),
+        unavailable: false,
+      };
+    }
     const context = await editorContext(ctx, agentId);
     let phone = "";
     if (customerId) {
@@ -3094,6 +3229,25 @@ export const browserTestResult = action({
   }> => {
     const row = await ctx.runQuery(internal.agentTests.ownedTest, { callId });
     if (!row) throw new Error("no-such-test");
+    // The showroom's tests answer from the fixture they were seeded from.
+    const demo = await demoView(ctx, row.retellAgentId);
+    if (demo) {
+      const test = demoTestByCallId(demo.orgId, callId);
+      return {
+        ready: true,
+        turns: (test?.transcript ?? "").split("\n").flatMap((line) => {
+          const match = line.match(/^(Agent|User):\s*(.+)$/);
+          return match
+            ? [{ role: match[1] === "Agent" ? "agent" : "user", text: match[2] }]
+            : [];
+        }),
+        summary: row.summary ?? null,
+        collected: row.collected ?? {},
+        recordingUrl: null,
+        durationSec: row.durationSec ?? null,
+        actions: row.actions ?? [],
+      };
+    }
     const context = await editorContext(ctx, row.retellAgentId);
     const got = (await (
       await call(context.apiKey!, "GET", `v2/get-call/${encodeURIComponent(callId)}`)

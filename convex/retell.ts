@@ -62,6 +62,13 @@ import { callErased, isDeleting } from "./lib/customerDeletion";
 import { cancelQueuedCallbacks } from "./callbacks";
 import { learnCustomerLanguage } from "./lib/customerLanguage";
 import { isDemo } from "./demo";
+import {
+  DEMO_AGENTS,
+  DEMO_INBOUND_LINE,
+  DEMO_OUTBOUND_LINE,
+  DEMO_VOICES,
+  demoAgentId,
+} from "./lib/demoVoice";
 import { freeStarts, goodsLeadMs } from "./booking";
 import { durationOf } from "./agentAppointments";
 
@@ -1490,16 +1497,6 @@ type AgentListResult = {
   hiddenAgentIds: string[];
 };
 
-const DEMO_AGENTS = [
-  {
-    id: "agent_demo_reception",
-    name: "Salon reception",
-    languages: ["tr-TR"],
-    collects: ["customer_name", "service", "preferred_time"],
-    webhookUrl: null,
-    ownedHere: true,
-  },
-];
 
 // Never throws on a provider failure. This renders inside a salon's own Phone
 // agent view, and a red banner is not what an owner should get because a key was
@@ -1558,29 +1555,43 @@ export const listAgents = action({
     // guard that keeps it off a provider has to sit in front of the code that
     // reaches one, not behind it.
     if (context.demoMode) {
+      // The showroom's two agents (lib/demoVoice), read as wired: the demo
+      // exists to look healthy, and an amber "results not arriving" dot on a
+      // fake agent would be a defect tour, not a demo.
+      const hook = process.env.CONVEX_SITE_URL
+        ? `${process.env.CONVEX_SITE_URL}/retell/call-ended`
+        : null;
+      const frontDesk = demoAgentId(context.orgId, "frontDesk");
+      const followUp = demoAgentId(context.orgId, "followUp");
       return {
         configured: true,
         error: null,
-        connectedAgentId: context.connectedAgentId ?? DEMO_AGENTS[0].id,
-        // The demo agent reads as wired: the showroom exists to look healthy,
-        // and an amber "results not arriving" dot on a fake agent would be
-        // a defect tour, not a demo.
-        agents: DEMO_AGENTS.map((a) => ({
-          ...a,
-          webhookUrl: process.env.CONVEX_SITE_URL
-            ? `${process.env.CONVEX_SITE_URL}/retell/call-ended`
-            : null,
+        connectedAgentId: frontDesk,
+        agents: (["frontDesk", "followUp"] as const).map((key) => ({
+          id: demoAgentId(context.orgId, key),
+          name: DEMO_AGENTS[key].name,
+          languages: ["en-GB"],
+          collects: DEMO_AGENTS[key].collects,
+          webhookUrl: hook,
+          ownedHere: true,
         })),
         phoneNumbers: [
           {
-            number: "+902121112233",
-            nickname: "Salon line",
-            inboundAgentId: DEMO_AGENTS[0].id,
-            outboundAgentId: DEMO_AGENTS[0].id,
-            agentId: DEMO_AGENTS[0].id,
+            number: DEMO_INBOUND_LINE,
+            nickname: "Office line",
+            inboundAgentId: frontDesk,
+            outboundAgentId: null,
+            agentId: frontDesk,
+          },
+          {
+            number: DEMO_OUTBOUND_LINE,
+            nickname: "Follow-up line",
+            inboundAgentId: null,
+            outboundAgentId: followUp,
+            agentId: followUp,
           },
         ],
-        voices: [],
+        voices: DEMO_VOICES,
         hiddenAgentIds: [],
         agentSource: "randevu",
       };

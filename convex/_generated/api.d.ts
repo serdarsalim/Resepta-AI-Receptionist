@@ -61,6 +61,7 @@ import type * as lib_connections from "../lib/connections.js";
 import type * as lib_customerDeletion from "../lib/customerDeletion.js";
 import type * as lib_customerLanguage from "../lib/customerLanguage.js";
 import type * as lib_customerSearch from "../lib/customerSearch.js";
+import type * as lib_demoVoice from "../lib/demoVoice.js";
 import type * as lib_discardOrg from "../lib/discardOrg.js";
 import type * as lib_email from "../lib/email.js";
 import type * as lib_emailInbound from "../lib/emailInbound.js";
@@ -217,6 +218,7 @@ declare const fullApi: ApiFromModules<{
   "lib/customerDeletion": typeof lib_customerDeletion;
   "lib/customerLanguage": typeof lib_customerLanguage;
   "lib/customerSearch": typeof lib_customerSearch;
+  "lib/demoVoice": typeof lib_demoVoice;
   "lib/discardOrg": typeof lib_discardOrg;
   "lib/email": typeof lib_email;
   "lib/emailInbound": typeof lib_emailInbound;

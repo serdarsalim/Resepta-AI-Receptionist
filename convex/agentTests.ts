@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireOwner } from "./lib/orgAuth";
+import { requireOwner, requireOwnerOrDemoReader } from "./lib/orgAuth";
 import { isDeleting } from "./lib/customerDeletion";
 import { callVerdict } from "./schema";
 
@@ -177,7 +177,7 @@ export const listForAgent = query({
     }),
   ),
   handler: async (ctx, { retellAgentId }) => {
-    const { orgId } = await requireOwner(ctx);
+    const { orgId } = await requireOwnerOrDemoReader(ctx);
     const rows = await ctx.db
       .query("agentTests")
       .withIndex("by_org_agent_started", (q) =>
@@ -225,7 +225,7 @@ export const ownedTest = internalQuery({
   args: { callId: v.string() },
   returns: v.union(v.null(), testRow),
   handler: async (ctx, { callId }) => {
-    const { orgId } = await requireOwner(ctx);
+    const { orgId } = await requireOwnerOrDemoReader(ctx);
     const row = await ctx.db
       .query("agentTests")
       .withIndex("by_call", (q) => q.eq("callId", callId))

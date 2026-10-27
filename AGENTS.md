@@ -553,6 +553,19 @@ is not registered otherwise. Never set `demoMode` on an org with credentials.
 The public entry origin is `https://demo.resepta.xyz`; its session stays on that
 subdomain so trying the demo does not replace an owner's `resepta.xyz` session.
 
+**The showroom is Real Estate Co., and its phone side is a fixture**
+(Serdar, 2026-10-27). `lib/demoVoice` holds its two agents (Front desk on
+the office line, Viewing follow-up on its own), their prompts, versions,
+calls, test results and reviews; devSeed writes the rows and every voice
+read that would ask the provider (`retell.listAgents`, `retellAgent.read`,
+`listVersions`, `readVersion`, `browserTestVariables`, `browserTestResult`)
+answers from the fixture first through `demo.agentView`, before any
+credential check. Walk-ins are staff, so the agent page's READS
+(`agentTests.listForAgent`, `agentReviews.list`/`get`) take
+`requireOwnerOrDemoReader`; every write stays `requireOwner`. Demo agent
+ids carry the org id and its numbers are Ofcom's drama range, so neither can
+ever match a real one.
+
 ## The mobile pass (2026-08-15) — phone rules that now hold everywhere
 
 A full pass over the app below `sm`, measured against Nudge at identical

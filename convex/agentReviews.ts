@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireOwner } from "./lib/orgAuth";
+import { requireOwner, requireOwnerOrDemoReader } from "./lib/orgAuth";
 import { isDeleting } from "./lib/customerDeletion";
 import { callVerdict } from "./schema";
 
@@ -133,7 +133,7 @@ export const list = query({
   args: { retellAgentId: v.string() },
   returns: v.object({ items: v.array(item), capped: v.boolean() }),
   handler: async (ctx, { retellAgentId }) => {
-    const { orgId } = await requireOwner(ctx);
+    const { orgId } = await requireOwnerOrDemoReader(ctx);
     const nameOf = namer(ctx);
     const [calls, tests] = await Promise.all([
       ctx.db
@@ -215,7 +215,7 @@ export const get = query({
   args: { kind, id: v.string() },
   returns: v.union(v.null(), detail),
   handler: async (ctx, args) => {
-    const { orgId } = await requireOwner(ctx);
+    const { orgId } = await requireOwnerOrDemoReader(ctx);
     const found = await loadReviewed(ctx, orgId, args.kind, args.id);
     if (!found) return null;
     const nameOf = namer(ctx);

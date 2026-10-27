@@ -85,6 +85,20 @@ export async function requireOwner(
   return { user, orgId };
 }
 
+// An owner, or any member of the showroom (orgs.demoMode), whose walk-in
+// visitors are staff. For the agent page's READS only (its tests and
+// reviews), so a prospect sees what an owner would. Never gate a write with
+// it: those stay requireOwner, in the demo as everywhere.
+export async function requireOwnerOrDemoReader(
+  ctx: Ctx,
+): Promise<{ user: Doc<"users">; orgId: Id<"orgs"> }> {
+  const { user, orgId, role } = await requireOrg(ctx);
+  if (role !== "owner" && (await ctx.db.get(orgId))?.demoMode !== true) {
+    throw new Error("owner-only");
+  }
+  return { user, orgId };
+}
+
 // E.164 or it doesn't exist (Nudge convention). The strict door: separators are
 // normalised, a country is never guessed.
 //
