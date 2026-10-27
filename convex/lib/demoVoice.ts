@@ -290,9 +290,10 @@ User: No, thanks.`,
     collected: { area: "Bow", budget: "£420k", buyer_type: "Buy" },
     review: {
       verdict: "miss",
+      // Open on purpose: the Notes tab opens on Misses, and a showroom whose
+      // first view is empty shows nothing.
       note: "Never say what a seller might accept. Should have handed him to a negotiator.",
-      action: "Added a rule: price questions go to a negotiator (version 5).",
-      done: true,
+      action: "Added a rule: price questions go to a negotiator. Check the next few calls.",
     },
   },
   {
