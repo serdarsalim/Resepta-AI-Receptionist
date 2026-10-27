@@ -222,6 +222,19 @@ export type FeedFilter = Channel | "form" | "note" | "all";
 // notes in a single interleaved feed — plus the composer. Shared by the inbox
 // right pane and the contact page; one implementation, never a per-page
 // variant (Nudge's rule).
+// Subscribes to what a conversation pane reads first, and draws nothing. The
+// Inbox mounts it for the row under the pointer, so by the click the Convex
+// client already holds the answers and the pane opens in one frame instead of
+// "Loading", then pills without counts, then the feed (Serdar, 2026-10-27:
+// "the right side flashes"). Keep it in step with the queries below.
+export function ConversationWarmup({ customerId }: { customerId: Id<"customers"> }) {
+  useQuery(api.messages.feedForCustomer, { customerId });
+  useQuery(api.customers.get, { customerId });
+  useQuery(api.chatAgent.stateForCustomer, { customerId });
+  useQuery(api.callbacks.forCustomer, { customerId });
+  return null;
+}
+
 export function ConversationPanel({
   customerId,
   contactName,

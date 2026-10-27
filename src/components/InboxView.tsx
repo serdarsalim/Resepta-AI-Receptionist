@@ -20,7 +20,7 @@ import type { TranslationKey } from "@/lib/i18n";
 import { mediaKindKey } from "@/lib/mediaLabel";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { resetUnreadVisit, useUnreadVisit } from "@/lib/useUnreadVisit";
-import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
+import { ConversationPanel, ConversationWarmup, type FeedFilter } from "./ConversationPanel";
 import { ContactRecord, JOINED_PANES, PANE_DIVIDER, TWO_PANE_COLUMNS } from "./ContactView";
 import { FeedFilterPills } from "./FeedFilterPills";
 import { FeedIcon, type FeedIconType } from "./FeedIcon";
@@ -179,6 +179,9 @@ export function InboxView({
   // on it instead of on their list. Applied once per conversation (the panel
   // is keyed on the customer).
   const [openedItemId, setOpenedItemId] = useState<string | undefined>(undefined);
+  // The row under the pointer, read ahead so its pane opens without a
+  // loading flash (ConversationWarmup).
+  const [warmId, setWarmId] = useState<Id<"customers"> | null>(null);
   const pickFilter = (next: FeedFilter) => {
     setDetails(false);
     setFilter(next);
@@ -559,6 +562,8 @@ export function InboxView({
                         role="button"
                         tabIndex={0}
                         onClick={() => open()}
+                        onPointerEnter={() => setWarmId(c.customerId)}
+                        onFocus={() => setWarmId(c.customerId)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault();
@@ -832,6 +837,7 @@ export function InboxView({
                 })}
               </ul>
             )}
+            {warmId && <ConversationWarmup customerId={warmId} />}
             {menuRow && (
               <ContextMenu
                 panelRef={rowMenu.panelRef}

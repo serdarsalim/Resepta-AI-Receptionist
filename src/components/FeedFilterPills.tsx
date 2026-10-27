@@ -28,13 +28,11 @@ export const CHANNEL_LABEL: Record<Channel, TranslationKey> = {
 // Channels first, then the two things that are not channels — a form arrival
 // and a note.
 //
-// "all" is not among them and has no pill (Serdar, 2026-08-18). It used to sit
-// past a rule as the way back out, which made five controls in a header whose
-// thread often holds one message, and spent the widest pill in the row saying
-// "no filter". The way back out is now the open pill itself: picking it again
-// clears it, which is what every other filter chip in the world does. The
-// STATE stays — the panel composes and restores scroll against it — only the
-// button is gone.
+// "all" is not among them. It had no pill from 2026-08-18, the lit pill
+// clearing itself on a second click instead; Serdar brought it back on
+// 2026-10-27 as the contact page's last pill (`showAll`), because a view you
+// reach by un-clicking a symbol is one nobody finds. The Inbox has no merged
+// feed to offer, as in Nudge.
 type FeedTab = Exclude<FeedFilter, "all">;
 const TABS: readonly FeedTab[] = [...CHANNELS, "form", "note"];
 
@@ -44,6 +42,7 @@ export function FeedFilterPills({
   onChange,
   details,
   onDetails,
+  showAll,
   className,
 }: {
   customerId: Id<"customers">;
@@ -55,6 +54,11 @@ export function FeedFilterPills({
   // pill is lit, and picking one leaves the record for that channel.
   details?: boolean;
   onDetails?: () => void;
+  // The contact page's All pill, after the channels (Nudge 0ed6ddae): the
+  // merged history is a place you pick, not what is left when you click the
+  // lit pill again. The Inbox has none: you open a conversation there to
+  // answer it on a channel.
+  showAll?: boolean;
   className?: string;
 }) {
   const { t } = useLanguage();
@@ -109,11 +113,10 @@ export function FeedFilterPills({
       <HoverTip key={tab} text={label}>
       <button
         type="button"
-        // Picking the open one clears it. This is the only route back to the
-        // merged feed now, and it has to keep working: the composer is live on
-        // "all" and dead on Call and Form (ConversationPanel), so a thread you
-        // could not unfilter would be a thread you could not reply to.
-        onClick={() => onChange(active ? "all" : tab)}
+        // Picking the lit one keeps it lit (Serdar, 2026-10-27): every view
+        // has its own button, All included where the merged feed exists, so
+        // nothing hides behind clicking a symbol twice.
+        onClick={() => onChange(tab)}
         aria-label={label}
         aria-pressed={active}
         // text-sm and the glyph at 15: the pills sit beside the conversation's
@@ -157,6 +160,16 @@ export function FeedFilterPills({
     // push the card down. The pills are small enough to hold one line.
     <div className={`flex shrink-0 flex-nowrap items-center gap-1.5 ${className ?? ""}`}>
       {tabs.map(pill)}
+      {showAll && (
+        <button
+          type="button"
+          onClick={() => onChange("all")}
+          aria-pressed={value === "all"}
+          className={filterPillClass(value === "all")}
+        >
+          {t("inbox.filterAll")}
+        </button>
+      )}
       {onDetails && (
         // LAST, at the row's right end with a little more room before it
         // (Nudge 1c6d0bf6): it is the customer, not a way to read the

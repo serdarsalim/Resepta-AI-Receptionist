@@ -339,6 +339,7 @@ export function ContactView({
                 customerId={customerId}
                 value={filter}
                 onChange={setFilter}
+                showAll
                 className="max-lg:hidden"
               />
             }
