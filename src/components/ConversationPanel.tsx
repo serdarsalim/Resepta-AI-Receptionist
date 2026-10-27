@@ -916,13 +916,16 @@ export function ConversationPanel({
         // action rides its right end, so Compose, Place call and Add note end
         // where the channel pills' row ends (px-3), never at the feed
         // column's wider inset (Nudge 18dfc375 made the same move).
-        <div className="flex h-11 shrink-0 items-center gap-2 px-3">
+        // On the card's fill, so the row reads as the pane's header and
+        // everything under it, the action row included, sits on the tab's
+        // paper (Nudge's: the fill change draws the edge, no rule).
+        <div className="flex h-11 shrink-0 items-center gap-2 bg-[var(--card)] px-3">
           {header}
           {tabAction && !actionsBelow && <div className="ml-auto flex shrink-0">{tabAction}</div>}
         </div>
       )}
       {header && tabAction && actionsBelow && (
-        <div className="flex shrink-0 justify-end px-3 pb-2">{tabAction}</div>
+        <div className="flex shrink-0 justify-end px-3 pt-3">{tabAction}</div>
       )}
       {details && (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--card)]">
