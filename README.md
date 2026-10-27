@@ -4,7 +4,7 @@ An AI front desk for salons, barbers and clinics. It answers the phone, books th
 
 [![Resepta](docs/screenshot.png)](https://resepta.xyz)
 
-**[See it live](https://resepta.xyz)**
+**[Try the demo](https://demo.resepta.xyz/)** · [Website](https://resepta.xyz)
 
 ## What it does
 
