@@ -28,3 +28,7 @@ npm run dev
 ```
 
 Copy `.env.example` for the settings you need. The full setup and architecture are in the [developer guide](docs/developer-guide.md).
+
+## License
+
+[Functional Source License 1.1](LICENSE): read it, learn from it and self-host it for your own business. Running it as a competing service isn't allowed. Each version becomes Apache 2.0 two years after release.
