@@ -1044,7 +1044,10 @@ which shows `ContactRecord` (ContactView.tsx) IN PLACE of the feed through
 `ConversationPanel`'s `details`; the feed stays mounted and hidden, so a
 draft survives. The contact page's left pane mounts the same component; a
 record shown anywhere else mounts it too, never a copy. The full page is the
-name's › and the row menu's Open customer.
+name (no ›, underlined on hover) and the row menu's Open customer. The
+header row is the name, then the pills at its right end; the open tab's
+action (Compose, Place call, Add note) sits on its own row under it
+(`actionsBelow`). The contact page keeps its action on the pills' row.
 
 **Each of the two is ONE card holding both panes** (P22, 2026-10-17; Nudge
 2e5b63e7). `JOINED_PANES` (next to `TWO_PANE_COLUMNS`) puts the card on the
@@ -1525,7 +1528,8 @@ the lit row (its menu open, or open beside the list) is a rounded neutral
 fill (`--row-active-bg`), never a left bar.
 
 **A row has a menu, and Mark as unread is a FLAG** (P21, Nudge 2a94bb92).
-Right-click a row or its chevron for one portalled `ContextMenu`: Open
+Right-click a row (on touch, its chevron; no hover chevron since
+2026-10-27) for one portalled `ContextMenu`: Open
 customer, Pin, Mark as read / unread, Mute. Mark as unread is
 `inboxReads.unreadAt`, per person, checked AHEAD of the read floor, unioned
 into `inboxUnseenCount`, `inboxCounts` and the Unread page (marked rows below

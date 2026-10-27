@@ -232,6 +232,7 @@ export function ConversationPanel({
   search,
   header,
   details,
+  actionsBelow,
   className,
 }: {
   // The pane's identity row — who this conversation is with, and the channel
@@ -253,6 +254,11 @@ export function ConversationPanel({
   // Details tab is open (Nudge's, 2026-10-26). The feed stays mounted and
   // hidden under it, so a half-typed reply and the scroll survive the look.
   details?: React.ReactNode;
+  // The Inbox's shape (Nudge's): the header row is the name and the pills,
+  // pills at its right end, and the open tab's action (Compose, Place call,
+  // Add note) sits on its own right-aligned row under it. Without it the
+  // action rides the header row's right end (the contact page).
+  actionsBelow?: boolean;
   customerId: Id<"customers">;
   // Labels the customer's side of a call transcript. Optional: the panel works
   // without it, the bubbles just say "Caller".
@@ -912,8 +918,11 @@ export function ConversationPanel({
         // column's wider inset (Nudge 18dfc375 made the same move).
         <div className="flex h-11 shrink-0 items-center gap-2 px-3">
           {header}
-          {tabAction && <div className="ml-auto flex shrink-0">{tabAction}</div>}
+          {tabAction && !actionsBelow && <div className="ml-auto flex shrink-0">{tabAction}</div>}
         </div>
+      )}
+      {header && tabAction && actionsBelow && (
+        <div className="flex shrink-0 justify-end px-3 pb-2">{tabAction}</div>
       )}
       {details && (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--card)]">

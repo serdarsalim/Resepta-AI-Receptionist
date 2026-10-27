@@ -327,7 +327,7 @@ export function InboxView({
 
   // The row menu, WhatsApp Web's chat-row menu cut to what a salon needs
   // (P21, Nudge 2a94bb92): right-click a row (opens at the cursor) or its
-  // chevron (opens under it). ONE menu for the list, aimed at whichever row
+  // chevron on touch (opens under it). ONE menu for the list, aimed at whichever row
   // asked. Left out with Nudge's reasons: archive, block, clear and delete
   // (destructive or meaningless here), favourites (the pin is that),
   // add to contacts (everyone here is one).
@@ -804,12 +804,11 @@ export function InboxView({
                           >
                             {previewOf(c, t)}
                           </span>
-                          {/* The row menu's chevron, where WhatsApp Web puts
-                              it: the end of the preview line, in on hover,
-                              kept while its own menu is open, always shown on
-                              touch (no hover, no right-click there). A slot of
-                              fixed width, so the preview never reflows when it
-                              appears. */}
+                          {/* The row menu's chevron, on TOUCH only (no
+                              right-click there), at the end of the preview
+                              line. With a mouse the menu is right-click only
+                              (Serdar, 2026-10-27; Nudge 4c2ae48e): the hover
+                              arrow cluttered every row it crossed. */}
                           <button
                             type="button"
                             onClick={(e) => {
@@ -821,9 +820,7 @@ export function InboxView({
                             aria-haspopup="menu"
                             aria-expanded={menuOpenHere}
                             aria-label={t("inbox.rowMenu", { name: c.name || c.phone })}
-                            className={`-my-0.5 flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded text-[var(--muted-strong)] outline-none transition-opacity hover:text-[var(--foreground)] focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-[var(--accent)] [@media(hover:none)]:opacity-100 ${
-                              menuOpenHere ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                            }`}
+                            className="-my-0.5 hidden h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded text-[var(--muted-strong)] outline-none hover:text-[var(--foreground)] focus-visible:outline-2 focus-visible:outline-[var(--accent)] [@media(hover:none)]:flex"
                           >
                             <MenuIcon name="chevron" />
                           </button>
@@ -895,6 +892,7 @@ export function InboxView({
               filter={filter}
               initialItemId={openedItemId}
               onFilterChange={pickFilter}
+              actionsBelow
               details={
                 details ? (
                   <ContactRecord
@@ -939,34 +937,15 @@ export function InboxView({
                 onClick={() => onOpenContact(active.customerId)}
                 // text-base, not text-sm: this is the heading for everything
                 // in the right column, and at text-sm it weighed exactly the
-                // same as a name in the list beside it.
-                //
-                // The chevron is what says the name goes somewhere. A
-                // hover-underline is only found by people who already
-                // suspected, and this is the only route from a conversation to
-                // the record behind it. It is the same mark the feed rows use
-                // for "open this", at rest in --muted so a heading does not
-                // arrive wearing a control, and it lifts with the name.
-                className="group/name flex min-w-0 shrink items-center gap-1 text-base font-semibold"
+                // same as a name in the list beside it. Kept as the pane's
+                // heading because the list's lit row scrolls away and a phone
+                // hides the list. No › any more (Serdar, 2026-10-27): the
+                // record is the Details pill; the name still opens the full
+                // page on click, underlined on hover, as Nudge's does.
+                className="min-w-0 shrink truncate text-base font-semibold hover:underline"
                 title={t("inbox.openContact")}
               >
-                <span className="truncate group-hover/name:underline">
-                  {active.name || active.phone}
-                </span>
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
-                  className="shrink-0 text-[var(--muted)] transition-colors group-hover/name:text-[var(--foreground)]"
-                >
-                  <path d="m9 18 6-6-6-6" />
-                </svg>
+                {active.name || active.phone}
               </button>
               <FeedFilterPills
                 customerId={active.customerId}
@@ -974,6 +953,7 @@ export function InboxView({
                 onChange={pickFilter}
                 details={details}
                 onDetails={() => setDetails(true)}
+                className="ml-auto"
               />
                 </>
               }
