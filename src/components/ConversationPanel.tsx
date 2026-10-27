@@ -231,6 +231,7 @@ export function ConversationPanel({
   onFilterChange,
   search,
   header,
+  details,
   className,
 }: {
   // The pane's identity row — who this conversation is with, and the channel
@@ -248,6 +249,10 @@ export function ConversationPanel({
   // own header and the card deliberately leads its column, so the tab keeps
   // drawing its action exactly where it did.
   header?: React.ReactNode;
+  // The customer's record, shown IN PLACE of the feed while the Inbox's
+  // Details tab is open (Nudge's, 2026-10-26). The feed stays mounted and
+  // hidden under it, so a half-typed reply and the scroll survive the look.
+  details?: React.ReactNode;
   customerId: Id<"customers">;
   // Labels the customer's side of a call transcript. Optional: the panel works
   // without it, the bubbles just say "Caller".
@@ -821,7 +826,7 @@ export function ConversationPanel({
   // resting state is a single right-aligned button, which is what makes one
   // shared row possible; the EXPANDED states (a composer, an open thread's
   // back-and-subject) still get the band below, where they earn the height.
-  const tabAction = !header ? null : filter === "email" ? (
+  const tabAction = !header || details ? null : filter === "email" ? (
     <button
       type="button"
       onClick={() => {
@@ -910,6 +915,14 @@ export function ConversationPanel({
           {tabAction && <div className="ml-auto flex shrink-0">{tabAction}</div>}
         </div>
       )}
+      {details && (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--card)]">
+          {details}
+        </div>
+      )}
+      {/* display: contents, so everything below lays out as the panel's own
+          children, exactly as before the Details tab; hidden while it shows. */}
+      <div className={details ? "hidden" : "contents"}>
       {/* Email tab: Compose top-right, Gmail's convention and Nudge's, only
           when the pane has no header row to carry it. The window it opens
           is docked over the page (EmailComposeWindow, P28). Reply lives on
@@ -2116,6 +2129,7 @@ export function ConversationPanel({
           )}
         </>
       )}
+      </div>
       {confirmCallDialog}
       {composing && (
         <EmailComposeWindow

@@ -1148,16 +1148,6 @@ const dictionary = {
     en: "Business language ({language})",
     de: "Sprache des Betriebs ({language})",
   },
-  "customers.languageHint": {
-    tr: "Bu müşteriye giden mesajların dili. Kimse seçmediyse müşterinin yazdığı ya da telefonda konuştuğu dilden öğrenilir.",
-    en: "The language messages to this customer go out in. While nobody has picked one, it is learned from the language they write or speak in.",
-    de: "Die Sprache der Nachrichten an diesen Kunden. Solange niemand eine wählt, wird sie aus der Sprache gelernt, in der der Kunde schreibt oder spricht.",
-  },
-  "customers.languageLearnedHint": {
-    tr: "Müşterinin kendi WhatsApp yanıtından ya da yanıtladığı bir aramadan öğrenildi. Buradan değiştirirseniz sizin seçiminiz kalır.",
-    en: "Learned from their own WhatsApp reply or an answered call. Change it here and your choice stays.",
-    de: "Aus der eigenen WhatsApp-Antwort oder einem angenommenen Anruf gelernt. Ändern Sie sie hier, bleibt Ihre Wahl bestehen.",
-  },
   // "Stumm", not "Stummschalten": this is a label on a switch in the record
   // footer's one row of three, and the extra eight characters were the widest
   // single thing in the German layout. The switch itself supplies the verb.
@@ -3039,6 +3029,11 @@ const dictionary = {
     tr: "Kaydını açmak ve yanıtlamak için bir konuşmaya tıklayın.",
     en: "Open a conversation to see the contact and reply.",
     de: "Öffnen Sie eine Unterhaltung, um den Kontakt zu sehen und zu antworten.",
+  },
+  "inbox.details": {
+    tr: "Ayrıntılar",
+    en: "Details",
+    de: "Details",
   },
   "inbox.openContact": {
     tr: "Müşteriyi aç",

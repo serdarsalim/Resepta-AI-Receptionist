@@ -161,58 +161,19 @@ export function ContactView({
   // record has nothing left to show, so the page it sat on decides.
   onDeleted?: () => void;
 }) {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const customer = useQuery(api.customers.get, { customerId });
-  const fields = useQuery(api.contactFields.list, {});
-  const appointments = useQuery(api.appointments.listForCustomer, { customerId });
-  const settings = useQuery(api.orgs.current, {});
-  const currency = settings?.org.currency ?? DEFAULT_CURRENCY;
-  const updateCustomer = useMutation(api.customers.update);
-  const setCustomValue = useMutation(api.customers.setCustomValue);
-  const setMuted = useMutation(api.customers.setMuted);
-  const setNoAiCalls = useMutation(api.customers.setNoAiCalls);
-  const setMarketingEmailOptOut = useMutation(api.customers.setMarketingEmailOptOut);
-  const [confirmResubscribe, confirmResubscribeDialog] = useConfirm();
-  // Switching Unsubscribe off sends this person marketing again, which
-  // is theirs to ask for: the switch asks before doing it. On is immediate.
-  const changeUnsubscribed = async (next: boolean) => {
-    if (!next) {
-      const ok = await confirmResubscribe({
-        title: t("customers.resubscribeTitle"),
-        body: t("customers.resubscribeBody"),
-        confirmLabel: t("customers.resubscribe"),
-        destructive: false,
-        focusCancel: true,
-      });
-      if (!ok) return;
-    }
-    await setMarketingEmailOptOut({ customerId, on: next });
-  };
-  const removeCustomer = useMutation(api.customers.remove);
   const markConversationRead = useMutation(api.messages.markConversationRead);
-  // Deleting is an owner's call, server-side too (customers.remove); the menu
-  // is simply not drawn for staff rather than offered and refused.
-  const isOwner = settings?.me.role === "owner";
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  // Set the moment a delete starts. The record's own query answers null as
-  // soon as the deletion commits, a beat before the page moves on, and
-  // without this that beat reads "No customers" on the person just deleted.
+  // Set by the record the moment a delete starts. The record's own query
+  // answers null as soon as the deletion commits, a beat before the page
+  // moves on, and without this that beat reads "No customers" on the person
+  // just deleted.
   const [leaving, setLeaving] = useState(false);
-  const confirmDelete = async () => {
-    setLeaving(true);
-    try {
-      await removeCustomer({ customerId });
-    } catch (error) {
-      setLeaving(false);
-      throw error;
-    }
-    onDeleted?.();
-  };
 
   // Reading a conversation happens HERE now, so this is where it gets marked
-  // read. Since 2026-08-22 an inbox row navigates to this page instead of
-  // filling the pane beside it, and the stamp went with the click — which
-  // covered exactly one of the doors into this page. Every other way in
+  // read. An inbox row stamps on its own click (it opens the conversation
+  // beside the list since 2026-10-27), but that covers only one door into a
+  // conversation. Every other way into this page
   // (Customers, the header jump list, an appointment, a name in someone
   // else's feed) opened the same conversation and left the dot burning.
   //
@@ -225,9 +186,6 @@ export function ContactView({
   useEffect(() => {
     void markConversationRead({ customerId }).catch(() => {});
   }, [customerId, markConversationRead]);
-  // Same sheet the calendar opens, same conflict handling. No onOpenContact:
-  // the record it would navigate to is the one you are reading.
-  const booking = useBookingSheet({});
   // Below lg the two panes swap instead of sharing the row (InboxView does the
   // same). The record opens first: you came here to read the customer, not to
   // land mid-thread.
@@ -301,12 +259,6 @@ export function ContactView({
     onTitle?.(recentName);
   }, [onTitle, recentName]);
 
-  // Two groups, in the order a reader works through the record: what staff
-  // typed, then what the calls collected and will keep collecting on their own.
-  // Source is unset on every field created before voice existed, so anything
-  // that isn't explicitly "voice" is staff-filled.
-  const orgFields: Doc<"contactFields">[] = fields ?? [];
-
   if (customer === null) {
     if (leaving) return null;
     return <p className="text-sm text-[var(--muted)]">{t("customers.none")}</p>;
@@ -314,10 +266,6 @@ export function ContactView({
   if (!customer) {
     return <p className="text-sm text-[var(--muted)]">{t("common.loading")}</p>;
   }
-
-  // Built once. Four places wanted it and each carried its own copy of the
-  // same `${first} ${last ?? ""}`.trim().
-  const customerName = `${customer.firstName} ${customer.lastName ?? ""}`.trim();
 
   return (
     // Fills the pane and scrolls inside itself, so it takes the phone's bottom
@@ -350,266 +298,7 @@ export function ContactView({
               The pane fills the column and the field list scrolls INSIDE it,
               so the scrollbar hugs the card's edge the way the conversation's
               does. The card itself is the grid's (JOINED_PANES). */}
-          <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="thin-scroll stable-gutter min-h-0 flex-1 space-y-1.5 overflow-y-auto p-4">
-              {/* What they bought leads the card; who they are follows. See the
-                  component. Booking from the record, with this customer already
-                  decided: the calendar was the only way in, which meant the one
-                  screen that knows who you are talking about could not act on
-                  it. */}
-              <CustomerAppointments
-                appointments={appointments}
-                currency={currency}
-                priceDecimals={settings?.org.priceDecimals}
-                // The record's own verbs, hard right on the card's first
-                // line: the card IS the customer, and an action belongs to
-                // the card it acts on. Delete is the only one today.
-                menu={
-                  isOwner ? (
-                    <RowMenu
-                      label={t("customers.actions")}
-                      items={[
-                        {
-                          key: "delete",
-                          label: t("customers.delete"),
-                          danger: true,
-                          onSelect: () => setDeleteOpen(true),
-                        },
-                      ]}
-                    />
-                  ) : undefined
-                }
-                onAdd={() =>
-                  booking.open({
-                    // Next round hour, the same default the calendar's own
-                    // toolbar button uses when no slot was clicked.
-                    startAt: Math.ceil(Date.now() / 3_600_000) * 3_600_000,
-                    durationMinutes: DEFAULT_DURATION,
-                    customerId,
-                    customerName: customerName,
-                  })
-                }
-                onOpen={(draft, anchor) =>
-                  booking.open({ ...draft, customerId, customerName }, anchor)
-                }
-              />
-              <FieldRow label={t("customers.firstName")}>
-                <InlineEditValue
-                  dense
-                  value={customer.firstName}
-                  onSave={(next) => updateCustomer({ customerId, firstName: next })}
-                />
-              </FieldRow>
-              <FieldRow label={t("customers.lastName")}>
-                <InlineEditValue
-                  dense
-                  value={customer.lastName ?? ""}
-                  onSave={(next) => updateCustomer({ customerId, lastName: next })}
-                />
-              </FieldRow>
-              <FieldRow label={t("customers.phone")}>
-                {/* Copy beside the number (P12): it is the value people paste
-                    into their own phone or another app most often, and
-                    selecting text inside an inline editor opens the editor. */}
-                <div className="flex min-w-0 items-center gap-1">
-                  <div className="min-w-0 flex-1">
-                    <PhoneField
-                      dense
-                      value={customer.phone}
-                      onSave={(next) => updateCustomer({ customerId, phone: next })}
-                    />
-                  </div>
-                  <CopyButton value={customer.phone} />
-                </div>
-              </FieldRow>
-              <FieldRow label={t("customers.email")}>
-                <InlineEditValue
-                  dense
-                  value={customer.email ?? ""}
-                  type="email"
-                  onSave={(next) => updateCustomer({ customerId, email: next })}
-                />
-              </FieldRow>
-              {/* The language messages go out in (P30). Unset is the business's,
-                  shown as such; a reply or an answered call may fill it, and
-                  the (i) says so once it has. Picking here makes it the
-                  person's choice, which nothing learned replaces. */}
-              <FieldRow
-                label={t("customers.language")}
-                hint={t(customer.languageLearnedAt ? "customers.languageLearnedHint" : "customers.languageHint")}
-              >
-                <InlineEditValue
-                  dense
-                  value={customer.language || LANGUAGE_DEFAULT}
-                  options={[LANGUAGE_DEFAULT, ...LANGUAGES.map((l) => l.code)]}
-                  clearable={false}
-                  labelFor={(code) =>
-                    code === LANGUAGE_DEFAULT
-                      ? t("customers.languageDefault", {
-                          language: languageLabel(settings?.org.language ?? ""),
-                        })
-                      : languageLabel(code)
-                  }
-                  onSave={(next) =>
-                    updateCustomer({
-                      customerId,
-                      language: next === LANGUAGE_DEFAULT ? "" : next,
-                    })
-                  }
-                />
-              </FieldRow>
-              {/* NO HEADINGS. The record is one continuous list of fields, in
-                  the org's own display order, and it ends here rather than
-                  starting a new section.
-
-                  It carried two headings within an hour of each other and both
-                  came out. "From calls" split the same fields by field.source,
-                  which is a fact about which door a value came in through —
-                  true of Resepta, irrelevant to the person on the card, and
-                  loud enough to break the record in half ("that's totally
-                  irrelevant"). Then "Contact fields" itself: First name, Phone
-                  and Email are contact fields too, and the Contact fields
-                  table lists them alongside these ones, so a heading here drew
-                  a line the surface that DEFINES them does not draw
-                  ("everything here is a contact field anyway").
-
-                  The source still matters where it is a DECISION — that
-                  table's Locked / Can edit column, where you choose what the
-                  agent may write. Nowhere else.
-
-                  Same `fields` query the Contact fields table reads, so the two
-                  are one list, and its drag-reorder is the single answer to
-                  what sits where on both. */}
-              {orgFields.map((field) => (
-                <CustomFieldRow
-                  key={field._id}
-                  field={field}
-                  value={customer.custom?.[field.key] ?? ""}
-                  onSave={(next) =>
-                    setCustomValue({ customerId, key: field.key, value: next })
-                  }
-                />
-              ))}
-              {/* When they arrived and when they last wrote: facts, so they
-                  close the record as rows like every other fact on it, and
-                  the footer keeps only the decisions about contacting them
-                  (Nudge, 2026-09-22: "label value design, not a header", then
-                  "put it lower"). Read-only, so a plain value on the same
-                  line box InlineEditValue's dense value draws.
-
-                  Added keeps a date and Last reply takes an age, the split
-                  the Customers table makes: when somebody joined is a fact
-                  you look up, when they last wrote is one you feel. The exact
-                  moment stays on the title, one hover away, and a customer
-                  who never wrote has no Last reply row rather than a blank
-                  one. */}
-              <FieldRow label={t("customers.added")}>
-                <span
-                  className="block py-1 text-xs"
-                  title={formatDateTime(customer._creationTime, language)}
-                >
-                  {formatDay(customer._creationTime, language)}
-                </span>
-              </FieldRow>
-              {customer.lastInboundAt !== undefined && (
-                <FieldRow label={t("customers.lastReply")}>
-                  <span
-                    className="block py-1 text-xs"
-                    title={formatDateTime(customer.lastInboundAt, language)}
-                  >
-                    {formatAge(customer.lastInboundAt, language)}
-                  </span>
-                </FieldRow>
-              )}
-            </div>
-
-            {/* The footer: the decisions about contacting this person, and
-                nothing else (Nudge's, 2026-09-22): Unsubscribe, Mute and No AI
-                calls, one row. Pinned under the field list as a sibling of its
-                scroll region, so the switches stay in reach on a long record.
-
-                Consent left it on 2026-10-21 (Serdar: everybody a business
-                reaches out to has consented, so the switch was redundant), and
-                with it the gate: nothing reads customers.consentAt any more.
-                Added and Last reply moved up into the record as rows.
-
-                THREE COLUMNS AT EVERY WIDTH, Nudge's call ("always side by
-                side in a 3 column rather than stack in any resolution"): a
-                2 + 1 reflow strands the third switch on a line of its own,
-                where it reads as a control that failed to load. Each pair
-                takes its natural width and the row spreads them edge to edge
-                (auto tracks, space-between), so a label wraps only when the
-                three cannot share one line. Equal thirds wrapped "No AI
-                calls" by a pixel in a 381px pane (2026-10-21), because the
-                widest label took its third first. Do not truncate: "No AI c…"
-                on the control that stops the machine calling somebody is
-                worse than a wrap.
-
-                8px inside a cell, 16px between cells. The ratio is the point:
-                it is what makes the row read as three pairs rather than six
-                loose things.
-
-                Two departures from Nudge's markup, both measured in Inter
-                (2026-10-21), and neither changes the look on a desktop:
-                - A column never shrinks below its longest word (an auto
-                  track's floor, and no min-w-0 on the cells).
-                  Nudge's minmax(0, 1fr) let "Unsubscribe" run 4px into Mute
-                  on a 375px phone and 15px into it at 1024px with the
-                  sidebar open; with the floor, a narrow column takes the
-                  room from its neighbours, whose labels wrap instead.
-                - Under a 20rem footer (a 320px phone, Turkish at 1024px) even
-                  that overflowed the card, so both gaps halve there, 4px and
-                  8px, which keeps the ratio. Every width from 271px up then
-                  fits in all three languages. A longer label moves these
-                  numbers; measure before changing one. */}
-            <div className="@container shrink-0 border-t border-[var(--border)] px-4 py-3">
-              <div className="grid grid-cols-[repeat(3,auto)] items-center justify-between gap-x-4 text-xs text-[var(--muted)] @max-[20rem]:gap-x-2">
-                {/* Unsubscribe: no marketing, on any channel (campaigns, bulk
-                    messages and calls, win-backs). The customer's own link in
-                    a marketing email turns it on; so can whoever hears "stop
-                    sending me offers". Turning it OFF puts somebody back on
-                    the marketing list, so that direction asks first, with
-                    Cancel holding focus. */}
-                <div className="flex items-center gap-2 @max-[20rem]:gap-1">
-                  <MetaLabel label={t("customers.unsubscribe")} hint={t("customers.unsubscribeHint")} />
-                  <SinceTip at={customer.marketingEmailOptOutAt}>
-                    <CheckSwitch
-                      small
-                      label={t("customers.unsubscribe")}
-                      on={customer.marketingEmailOptOutAt !== undefined}
-                      onChange={(next) => void changeUnsubscribed(next)}
-                    />
-                  </SinceTip>
-                </div>
-                {/* Mute: what this person may put in front of the business,
-                    not what the business may send them. */}
-                <div className="flex items-center gap-2 @max-[20rem]:gap-1">
-                  <MetaLabel label={t("customers.mute")} hint={t("customers.muteHint")} />
-                  <CheckSwitch
-                    small
-                    label={t("customers.mute")}
-                    on={customer.mutedAt !== undefined}
-                    onChange={(next) => void setMuted({ customerId, muted: next })}
-                  />
-                </div>
-                {/* No AI calls (Nudge's do-not-call): a customer who refuses
-                    robot calls still gets their reminders. On by a person
-                    here, or by the phone agent when the caller asks on a
-                    call; off only by a person. */}
-                <div className="flex items-center gap-2 @max-[20rem]:gap-1">
-                  <MetaLabel label={t("customers.noAiCalls")} hint={t("customers.noAiCallsHint")} />
-                  <SinceTip at={customer.noAiCallsAt}>
-                    <CheckSwitch
-                      small
-                      label={t("customers.noAiCalls")}
-                      on={customer.noAiCallsAt !== undefined}
-                      onChange={(next) => void setNoAiCalls({ customerId, on: next })}
-                    />
-                  </SinceTip>
-                </div>
-              </div>
-            </div>
-          </section>
+          <ContactRecord customerId={customerId} onDeleted={onDeleted} onLeaving={setLeaving} />
         </div>
 
         {/* Right: conversation, the shared component, never a page variant.
@@ -657,6 +346,351 @@ export function ContactView({
         </section>
       </div>
 
+    </div>
+  );
+}
+
+// The record: everything ABOUT the customer, as one card body. The contact
+// page's left pane and the Inbox's Details tab (Nudge's, 2026-10-26) both
+// mount THIS, never a copy, so an edit, a switch or a delete behaves the same
+// wherever the record is read. It reads its own data; on the contact page
+// those are the page's own subscriptions, served once.
+export function ContactRecord({
+  customerId,
+  onDeleted,
+  onLeaving,
+}: {
+  customerId: Id<"customers">;
+  // Where to go once this customer has been deleted from the ⋯ menu.
+  onDeleted?: () => void;
+  onLeaving?: (leaving: boolean) => void;
+}) {
+  const { t, language } = useLanguage();
+  const customer = useQuery(api.customers.get, { customerId });
+  const fields = useQuery(api.contactFields.list, {});
+  const appointments = useQuery(api.appointments.listForCustomer, { customerId });
+  const settings = useQuery(api.orgs.current, {});
+  const currency = settings?.org.currency ?? DEFAULT_CURRENCY;
+  const updateCustomer = useMutation(api.customers.update);
+  const setCustomValue = useMutation(api.customers.setCustomValue);
+  const setMuted = useMutation(api.customers.setMuted);
+  const setNoAiCalls = useMutation(api.customers.setNoAiCalls);
+  const setMarketingEmailOptOut = useMutation(api.customers.setMarketingEmailOptOut);
+  const [confirmResubscribe, confirmResubscribeDialog] = useConfirm();
+  // Switching Unsubscribe off sends this person marketing again, which
+  // is theirs to ask for: the switch asks before doing it. On is immediate.
+  const changeUnsubscribed = async (next: boolean) => {
+    if (!next) {
+      const ok = await confirmResubscribe({
+        title: t("customers.resubscribeTitle"),
+        body: t("customers.resubscribeBody"),
+        confirmLabel: t("customers.resubscribe"),
+        destructive: false,
+        focusCancel: true,
+      });
+      if (!ok) return;
+    }
+    await setMarketingEmailOptOut({ customerId, on: next });
+  };
+  const removeCustomer = useMutation(api.customers.remove);
+  // Deleting is an owner's call, server-side too (customers.remove); the menu
+  // is simply not drawn for staff rather than offered and refused.
+  const isOwner = settings?.me.role === "owner";
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  // Set the moment a delete starts: the query answers null as soon as the
+  // deletion commits, a beat before the page moves on, and without this that
+  // beat reads "No customers" on the person just deleted. Reported up too,
+  // since the contact page reads the same row.
+  const [leaving, setLeaving] = useState(false);
+  const confirmDelete = async () => {
+    setLeaving(true);
+    onLeaving?.(true);
+    try {
+      await removeCustomer({ customerId });
+    } catch (error) {
+      setLeaving(false);
+      onLeaving?.(false);
+      throw error;
+    }
+    onDeleted?.();
+  };
+  // Same sheet the calendar opens, same conflict handling. No onOpenContact:
+  // the record it would navigate to is the one you are reading.
+  const booking = useBookingSheet({});
+  const orgFields: Doc<"contactFields">[] = fields ?? [];
+
+  if (customer === null) {
+    if (leaving) return null;
+    return <p className="p-4 text-sm text-[var(--muted)]">{t("customers.none")}</p>;
+  }
+  if (!customer) {
+    return <p className="p-4 text-sm text-[var(--muted)]">{t("common.loading")}</p>;
+  }
+
+  // Built once. Four places wanted it and each carried its own copy of the
+  // same `${first} ${last ?? ""}`.trim().
+  const customerName = `${customer.firstName} ${customer.lastName ?? ""}`.trim();
+
+  return (
+    <>
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="thin-scroll stable-gutter min-h-0 flex-1 space-y-1.5 overflow-y-auto p-4">
+          {/* What they bought leads the card; who they are follows. See the
+              component. Booking from the record, with this customer already
+              decided: the calendar was the only way in, which meant the one
+              screen that knows who you are talking about could not act on
+              it. */}
+          <CustomerAppointments
+            appointments={appointments}
+            currency={currency}
+            priceDecimals={settings?.org.priceDecimals}
+            // The record's own verbs, hard right on the card's first
+            // line: the card IS the customer, and an action belongs to
+            // the card it acts on. Delete is the only one today.
+            menu={
+              isOwner ? (
+                <RowMenu
+                  label={t("customers.actions")}
+                  items={[
+                    {
+                      key: "delete",
+                      label: t("customers.delete"),
+                      danger: true,
+                      onSelect: () => setDeleteOpen(true),
+                    },
+                  ]}
+                />
+              ) : undefined
+            }
+            onAdd={() =>
+              booking.open({
+                // Next round hour, the same default the calendar's own
+                // toolbar button uses when no slot was clicked.
+                startAt: Math.ceil(Date.now() / 3_600_000) * 3_600_000,
+                durationMinutes: DEFAULT_DURATION,
+                customerId,
+                customerName: customerName,
+              })
+            }
+            onOpen={(draft, anchor) =>
+              booking.open({ ...draft, customerId, customerName }, anchor)
+            }
+          />
+          <FieldRow label={t("customers.firstName")}>
+            <InlineEditValue
+              dense
+              value={customer.firstName}
+              onSave={(next) => updateCustomer({ customerId, firstName: next })}
+            />
+          </FieldRow>
+          <FieldRow label={t("customers.lastName")}>
+            <InlineEditValue
+              dense
+              value={customer.lastName ?? ""}
+              onSave={(next) => updateCustomer({ customerId, lastName: next })}
+            />
+          </FieldRow>
+          <FieldRow label={t("customers.phone")}>
+            {/* Copy beside the number (P12): it is the value people paste
+                into their own phone or another app most often, and
+                selecting text inside an inline editor opens the editor. */}
+            <div className="flex min-w-0 items-center gap-1">
+              <div className="min-w-0 flex-1">
+                <PhoneField
+                  dense
+                  value={customer.phone}
+                  onSave={(next) => updateCustomer({ customerId, phone: next })}
+                />
+              </div>
+              <CopyButton value={customer.phone} />
+            </div>
+          </FieldRow>
+          <FieldRow label={t("customers.email")}>
+            <InlineEditValue
+              dense
+              value={customer.email ?? ""}
+              type="email"
+              onSave={(next) => updateCustomer({ customerId, email: next })}
+            />
+          </FieldRow>
+          {/* The language messages go out in (P30). Unset is the business's,
+              shown as such; a reply or an answered call may fill it.
+              Picking here makes it the person's choice, which nothing
+              learned replaces. No (i): the value already says what it is
+              (Serdar, 2026-10-27). */}
+          <FieldRow label={t("customers.language")}>
+            <InlineEditValue
+              dense
+              value={customer.language || LANGUAGE_DEFAULT}
+              options={[LANGUAGE_DEFAULT, ...LANGUAGES.map((l) => l.code)]}
+              clearable={false}
+              labelFor={(code) =>
+                code === LANGUAGE_DEFAULT
+                  ? t("customers.languageDefault", {
+                      language: languageLabel(settings?.org.language ?? ""),
+                    })
+                  : languageLabel(code)
+              }
+              onSave={(next) =>
+                updateCustomer({
+                  customerId,
+                  language: next === LANGUAGE_DEFAULT ? "" : next,
+                })
+              }
+            />
+          </FieldRow>
+          {/* NO HEADINGS. The record is one continuous list of fields, in
+              the org's own display order, and it ends here rather than
+              starting a new section.
+
+              It carried two headings within an hour of each other and both
+              came out. "From calls" split the same fields by field.source,
+              which is a fact about which door a value came in through —
+              true of Resepta, irrelevant to the person on the card, and
+              loud enough to break the record in half ("that's totally
+              irrelevant"). Then "Contact fields" itself: First name, Phone
+              and Email are contact fields too, and the Contact fields
+              table lists them alongside these ones, so a heading here drew
+              a line the surface that DEFINES them does not draw
+              ("everything here is a contact field anyway").
+
+              The source still matters where it is a DECISION — that
+              table's Locked / Can edit column, where you choose what the
+              agent may write. Nowhere else.
+
+              Same `fields` query the Contact fields table reads, so the two
+              are one list, and its drag-reorder is the single answer to
+              what sits where on both. */}
+          {orgFields.map((field) => (
+            <CustomFieldRow
+              key={field._id}
+              field={field}
+              value={customer.custom?.[field.key] ?? ""}
+              onSave={(next) =>
+                setCustomValue({ customerId, key: field.key, value: next })
+              }
+            />
+          ))}
+          {/* When they arrived and when they last wrote: facts, so they
+              close the record as rows like every other fact on it, and
+              the footer keeps only the decisions about contacting them
+              (Nudge, 2026-09-22: "label value design, not a header", then
+              "put it lower"). Read-only, so a plain value on the same
+              line box InlineEditValue's dense value draws.
+
+              Added keeps a date and Last reply takes an age, the split
+              the Customers table makes: when somebody joined is a fact
+              you look up, when they last wrote is one you feel. The exact
+              moment stays on the title, one hover away, and a customer
+              who never wrote has no Last reply row rather than a blank
+              one. */}
+          <FieldRow label={t("customers.added")}>
+            <span
+              className="block py-1 text-xs"
+              title={formatDateTime(customer._creationTime, language)}
+            >
+              {formatDay(customer._creationTime, language)}
+            </span>
+          </FieldRow>
+          {customer.lastInboundAt !== undefined && (
+            <FieldRow label={t("customers.lastReply")}>
+              <span
+                className="block py-1 text-xs"
+                title={formatDateTime(customer.lastInboundAt, language)}
+              >
+                {formatAge(customer.lastInboundAt, language)}
+              </span>
+            </FieldRow>
+          )}
+        </div>
+
+        {/* The footer: the decisions about contacting this person, and
+            nothing else (Nudge's, 2026-09-22): Unsubscribe, Mute and No AI
+            calls, one row. Pinned under the field list as a sibling of its
+            scroll region, so the switches stay in reach on a long record.
+
+            Consent left it on 2026-10-21 (Serdar: everybody a business
+            reaches out to has consented, so the switch was redundant), and
+            with it the gate: nothing reads customers.consentAt any more.
+            Added and Last reply moved up into the record as rows.
+
+            THREE COLUMNS AT EVERY WIDTH, Nudge's call ("always side by
+            side in a 3 column rather than stack in any resolution"): a
+            2 + 1 reflow strands the third switch on a line of its own,
+            where it reads as a control that failed to load. Each pair
+            takes its natural width and the row spreads them edge to edge
+            (auto tracks, space-between), so a label wraps only when the
+            three cannot share one line. Equal thirds wrapped "No AI
+            calls" by a pixel in a 381px pane (2026-10-21), because the
+            widest label took its third first. Do not truncate: "No AI c…"
+            on the control that stops the machine calling somebody is
+            worse than a wrap.
+
+            8px inside a cell, 16px between cells. The ratio is the point:
+            it is what makes the row read as three pairs rather than six
+            loose things.
+
+            Two departures from Nudge's markup, both measured in Inter
+            (2026-10-21), and neither changes the look on a desktop:
+            - A column never shrinks below its longest word (an auto
+              track's floor, and no min-w-0 on the cells).
+              Nudge's minmax(0, 1fr) let "Unsubscribe" run 4px into Mute
+              on a 375px phone and 15px into it at 1024px with the
+              sidebar open; with the floor, a narrow column takes the
+              room from its neighbours, whose labels wrap instead.
+            - Under a 20rem footer (a 320px phone, Turkish at 1024px) even
+              that overflowed the card, so both gaps halve there, 4px and
+              8px, which keeps the ratio. Every width from 271px up then
+              fits in all three languages. A longer label moves these
+              numbers; measure before changing one. */}
+        <div className="@container shrink-0 border-t border-[var(--border)] px-4 py-3">
+          <div className="grid grid-cols-[repeat(3,auto)] items-center justify-between gap-x-4 text-xs text-[var(--muted)] @max-[20rem]:gap-x-2">
+            {/* Unsubscribe: no marketing, on any channel (campaigns, bulk
+                messages and calls, win-backs). The customer's own link in
+                a marketing email turns it on; so can whoever hears "stop
+                sending me offers". Turning it OFF puts somebody back on
+                the marketing list, so that direction asks first, with
+                Cancel holding focus. */}
+            <div className="flex items-center gap-2 @max-[20rem]:gap-1">
+              <MetaLabel label={t("customers.unsubscribe")} hint={t("customers.unsubscribeHint")} />
+              <SinceTip at={customer.marketingEmailOptOutAt}>
+                <CheckSwitch
+                  small
+                  label={t("customers.unsubscribe")}
+                  on={customer.marketingEmailOptOutAt !== undefined}
+                  onChange={(next) => void changeUnsubscribed(next)}
+                />
+              </SinceTip>
+            </div>
+            {/* Mute: what this person may put in front of the business,
+                not what the business may send them. */}
+            <div className="flex items-center gap-2 @max-[20rem]:gap-1">
+              <MetaLabel label={t("customers.mute")} hint={t("customers.muteHint")} />
+              <CheckSwitch
+                small
+                label={t("customers.mute")}
+                on={customer.mutedAt !== undefined}
+                onChange={(next) => void setMuted({ customerId, muted: next })}
+              />
+            </div>
+            {/* No AI calls (Nudge's do-not-call): a customer who refuses
+                robot calls still gets their reminders. On by a person
+                here, or by the phone agent when the caller asks on a
+                call; off only by a person. */}
+            <div className="flex items-center gap-2 @max-[20rem]:gap-1">
+              <MetaLabel label={t("customers.noAiCalls")} hint={t("customers.noAiCallsHint")} />
+              <SinceTip at={customer.noAiCallsAt}>
+                <CheckSwitch
+                  small
+                  label={t("customers.noAiCalls")}
+                  on={customer.noAiCallsAt !== undefined}
+                  onChange={(next) => void setNoAiCalls({ customerId, on: next })}
+                />
+              </SinceTip>
+            </div>
+          </div>
+        </div>
+      </section>
       {booking.render()}
       {confirmResubscribeDialog}
       {deleteOpen && (
@@ -666,7 +700,7 @@ export function ContactView({
           onConfirm={confirmDelete}
         />
       )}
-    </div>
+    </>
   );
 }
 

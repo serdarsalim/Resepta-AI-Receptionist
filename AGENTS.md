@@ -1034,9 +1034,17 @@ the DOCUMENT to reach it, and the shell's overflow cannot clip that.
 
 **The Inbox and the customer record share one split**, `TWO_PANE_COLUMNS` in
 ContactView (Nudge 1a6c46ce): 40/60 from lg, the left column capped at 32rem,
-the conversation taking the rest inside its own 56rem measure. A row in the
-Inbox opens the record, so the two right-hand panes are one pane a click
-apart; change the split there, never in one view.
+the conversation taking the rest inside its own 56rem measure. Change the
+split there, never in one view.
+
+**An Inbox row opens its conversation beside the list** (Serdar, 2026-10-27,
+Nudge's Inbox; it had opened the full record since 2026-08-22, leaving the
+Inbox). The record is the thread header's last pill, **Details** (a head),
+which shows `ContactRecord` (ContactView.tsx) IN PLACE of the feed through
+`ConversationPanel`'s `details`; the feed stays mounted and hidden, so a
+draft survives. The contact page's left pane mounts the same component; a
+record shown anywhere else mounts it too, never a copy. The full page is the
+name's › and the row menu's Open customer.
 
 **Each of the two is ONE card holding both panes** (P22, 2026-10-17; Nudge
 2e5b63e7). `JOINED_PANES` (next to `TWO_PANE_COLUMNS`) puts the card on the

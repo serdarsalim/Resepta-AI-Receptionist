@@ -21,7 +21,7 @@ import { mediaKindKey } from "@/lib/mediaLabel";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { resetUnreadVisit, useUnreadVisit } from "@/lib/useUnreadVisit";
 import { ConversationPanel, type FeedFilter } from "./ConversationPanel";
-import { JOINED_PANES, PANE_DIVIDER, TWO_PANE_COLUMNS } from "./ContactView";
+import { ContactRecord, JOINED_PANES, PANE_DIVIDER, TWO_PANE_COLUMNS } from "./ContactView";
 import { FeedFilterPills } from "./FeedFilterPills";
 import { FeedIcon, type FeedIconType } from "./FeedIcon";
 import { RowMenu } from "./RowMenu";
@@ -171,6 +171,18 @@ export function InboxView({
   // Re-snapped to the conversation's own channel on every select; "all" is
   // only the before-first-selection default.
   const [filter, setFilter] = useState<FeedFilter>("all");
+  // The Details tab: the customer's record in place of the feed (Nudge's,
+  // 2026-10-26). A tab, not a third column, so the chat keeps its width.
+  // Every open snaps back to the conversation, as it snaps the channel.
+  const [details, setDetails] = useState(false);
+  // WHICH mail or call the row was quoting, so the email and call tabs open
+  // on it instead of on their list. Applied once per conversation (the panel
+  // is keyed on the customer).
+  const [openedItemId, setOpenedItemId] = useState<string | undefined>(undefined);
+  const pickFilter = (next: FeedFilter) => {
+    setDetails(false);
+    setFilter(next);
+  };
   // Which slice of the list. Persisted per browser: a filter is a working
   // context ("I'm on my unread"), and re-picking it on every visit is the same
   // friction the filter exists to remove. Safe to persist only because the
@@ -236,10 +248,6 @@ export function InboxView({
     }
   };
 
-  // The "a reply landed while you were sitting in this thread" re-stamp lived
-  // here. It cannot happen any more: opening a row LEAVES this view, so no
-  // conversation is ever being watched from the inbox. The row stamps on its
-  // way out and that is the whole of it.
 
   // NOTHING is selected on arrival (Serdar, 2026-08-17, matching Nudge). The
   // inbox used to open the newest conversation for you, which is the app
@@ -289,10 +297,21 @@ export function InboxView({
   );
   const active = inList ?? openedRow ?? undefined;
 
-  // A row opens the customer's record (the 2026-08-22 trial, below), read on
-  // the way out: nothing is left mounted here to stamp it afterwards. The
-  // record opens on the channel the row was showing, and ON the mail or call
-  // it was quoting, so a click lands where the preview pointed.
+  // A reply that lands while its conversation is open beside the list is
+  // read: the person is looking at it. The click stamps the open itself; this
+  // covers what arrives after.
+  const activeUnseen = active?.unseen === true;
+  useEffect(() => {
+    if (!selected || !activeUnseen) return;
+    void markConversationRead({ customerId: selected }).catch(() => {});
+  }, [selected, activeUnseen, markConversationRead]);
+
+  // A row opens its conversation BESIDE the list, Nudge's Inbox (Serdar,
+  // 2026-10-27, ending the 2026-08-22 trial that left the Inbox for the full
+  // record on every click and reloaded the list on the way back). It opens on
+  // the channel the row was showing, and ON the mail or call it was quoting,
+  // so a click lands where the preview pointed. The record is the Details
+  // tab; the whole page is the name in the header and the row menu.
   const openRow = (c: ConversationRow) => {
     unreadVisit.keep(c);
     // A read that failed releases the kept row, or it would show read
@@ -300,7 +319,10 @@ export function InboxView({
     void markConversationRead({ customerId: c.customerId }).catch(() =>
       unreadVisit.remove([c.customerId]),
     );
-    onOpenContact(c.customerId, c.lastChannel, c.lastId);
+    setSelected(c.customerId);
+    setFilter(c.lastChannel ?? "all");
+    setOpenedItemId(c.lastId);
+    setDetails(false);
   };
 
   // The row menu, WhatsApp Web's chat-row menu cut to what a salon needs
@@ -330,7 +352,7 @@ export function InboxView({
           key: "open",
           icon: <MenuIcon name="contact" />,
           label: t("inbox.openContact"),
-          onSelect: () => openRow(menuRow),
+          onSelect: () => onOpenContact(menuRow.customerId),
         },
         {
           key: "pin",
@@ -871,7 +893,16 @@ export function InboxView({
               contactName={active.name}
               lastInboundAt={active.awaitingReply ? active.lastAt : undefined}
               filter={filter}
-              onFilterChange={setFilter}
+              initialItemId={openedItemId}
+              onFilterChange={pickFilter}
+              details={
+                details ? (
+                  <ContactRecord
+                    customerId={active.customerId}
+                    onDeleted={() => setSelected(null)}
+                  />
+                ) : undefined
+              }
               className="min-h-0 flex-1 overflow-hidden"
               // Handed to the panel rather than drawn above it, so the pane's
               // identity and whatever the open tab offers share ONE line. Drawn
@@ -940,7 +971,9 @@ export function InboxView({
               <FeedFilterPills
                 customerId={active.customerId}
                 value={filter}
-                onChange={setFilter}
+                onChange={pickFilter}
+                details={details}
+                onDetails={() => setDetails(true)}
               />
                 </>
               }

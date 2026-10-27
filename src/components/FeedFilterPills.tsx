@@ -42,11 +42,19 @@ export function FeedFilterPills({
   customerId,
   value,
   onChange,
+  details,
+  onDetails,
   className,
 }: {
   customerId: Id<"customers">;
   value: FeedFilter;
   onChange: (next: FeedFilter) => void;
+  // The Inbox's Details tab (Nudge's, 2026-10-26): the customer's record in
+  // place of the feed. Only the Inbox passes these; the contact page already
+  // shows the record beside the conversation. While it is open no channel
+  // pill is lit, and picking one leaves the record for that channel.
+  details?: boolean;
+  onDetails?: () => void;
   className?: string;
 }) {
   const { t } = useLanguage();
@@ -87,7 +95,7 @@ export function FeedFilterPills({
 
   const pill = (tab: FeedTab) => {
     const count = countOf(tab);
-    const active = value === tab;
+    const active = !details && value === tab;
     const label =
       tab === "note"
         ? t("notes.title")
@@ -149,6 +157,38 @@ export function FeedFilterPills({
     // push the card down. The pills are small enough to hold one line.
     <div className={`flex shrink-0 flex-nowrap items-center gap-1.5 ${className ?? ""}`}>
       {tabs.map(pill)}
+      {onDetails && (
+        // LAST, at the row's right end with a little more room before it
+        // (Nudge 1c6d0bf6): it is the customer, not a way to read the
+        // conversation, and the top right is where "about this person"
+        // lives. The room is on a wrapper so the hover label stays centred.
+        <span className="ml-1.5 inline-flex">
+          <HoverTip text={t("inbox.details")}>
+            <button
+              type="button"
+              onClick={onDetails}
+              aria-label={t("inbox.details")}
+              aria-pressed={details === true}
+              className={filterPillClass(details === true)}
+            >
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 21a8 8 0 0 1 16 0" />
+              </svg>
+            </button>
+          </HoverTip>
+        </span>
+      )}
     </div>
   );
 }
