@@ -6778,9 +6778,9 @@ const dictionary = {
     de: "Resepta mit einem funktionierenden Beispiel testen",
   },
   "demo.entryBody": {
-    tr: "Moda Hair Salon’ın örnek hesabında dolu bir takvimi, müşteri kayıtlarını ve gerçekçi konuşmaları keşfedin.",
-    en: "Explore a full calendar, customer records and realistic conversations inside Moda Hair Salon’s fictional account.",
-    de: "Entdecken Sie einen vollen Kalender, Kundendaten und realistische Unterhaltungen im fiktiven Konto von Moda Hair Salon.",
+    tr: "Real Estate Co.’nun örnek hesabında dolu bir takvimi, müşteri kayıtlarını, sesli asistanları ve gerçekçi konuşmaları keşfedin.",
+    en: "Explore a full calendar, customer records, phone agents and realistic conversations inside Real Estate Co.’s fictional account.",
+    de: "Entdecken Sie einen vollen Kalender, Kundendaten, Telefonassistenten und realistische Unterhaltungen im fiktiven Konto von Real Estate Co.",
   },
   "demo.entryCta": {
     tr: "Demoyu aç",

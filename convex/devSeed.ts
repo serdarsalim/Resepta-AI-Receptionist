@@ -680,6 +680,9 @@ async function seedDemoVoice(
       personaName: agent.persona,
       openers: agent.openers,
       canEndCall: true,
+      // What a real agent gets when its tools are wired. Without it the
+      // agents table flags the row "not fully connected".
+      runtimeConnectedAt: now,
       // Counters as recordCall keeps them, plus a history before the seed.
       callCount: calls.length + (key === "frontDesk" ? 214 : 87),
       lastCallStartedAt: Math.max(...calls.map((call) => now - call.minutesAgo * MINUTE)),
