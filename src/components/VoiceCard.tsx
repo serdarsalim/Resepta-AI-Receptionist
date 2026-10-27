@@ -352,6 +352,7 @@ export function VoiceCard({
         type="button"
         onClick={openAdd}
         disabled={
+          !isOwner ||
           !roster?.configured ||
           !provisioningReady ||
           (!canCreate && !canConnect)
@@ -364,10 +365,12 @@ export function VoiceCard({
   );
 
   return (
-    // Not a Card: the table is the main actor and frames itself. The fieldset
-    // is the one job the card chrome was doing — staff see all of this
-    // read-only — and it stays, invisible (min-w-0 per Card's own lesson).
-    <fieldset disabled={!isOwner} className={`min-w-0 ${!isOwner ? "readonly-form" : ""}`}>
+    // Not a Card: the table is the main actor and frames itself. Staff see
+    // all of this read-only, but each CONTROL is disabled on its own rather
+    // than by a disabled fieldset: that would also disable the agent's name,
+    // and in the demo (whose visitors are staff) opening an agent is the
+    // whole point (2026-10-27). The fieldset stays for the read-only look.
+    <fieldset className={`min-w-0 ${!isOwner ? "readonly-form" : ""}`}>
       {toolbar}
 
       {connected.length > 0 && (
@@ -500,7 +503,7 @@ export function VoiceCard({
                             <MultiSelectDropdown
                               options={[...new Set([...numbers, ...held])]}
                               selected={held}
-                              disabled={assigningLine === row.retellAgentId}
+                              disabled={!isOwner || assigningLine === row.retellAgentId}
                               placeholder={t("settings.voiceAddNumber")}
                               label={t(
                                 direction === "inbound"
@@ -540,6 +543,7 @@ export function VoiceCard({
                     <td className="px-2 py-2">
                       <CheckSwitch
                         on={row.enabled}
+                        disabled={!isOwner}
                         label={t("settings.voiceEnabled")}
                         onChange={(next) => void update({ agentId: row._id, enabled: next })}
                       />
@@ -547,6 +551,7 @@ export function VoiceCard({
                     <td className="px-2 py-2">
                       <CheckSwitch
                         on={row.chatEnabled === true}
+                        disabled={!isOwner}
                         label={t("settings.chatEnabled")}
                         onChange={(next) =>
                           void update({ agentId: row._id, chatEnabled: next })
@@ -631,6 +636,7 @@ export function VoiceCard({
                             <span>{t("settings.voiceActionFailed")}</span>
                           )}
                           {connectionNeedsFix &&
+                            isOwner &&
                             (wiring === row.retellAgentId ? (
                               <span className="animate-pulse">{t("voiceDetail.wiring")}</span>
                             ) : (
