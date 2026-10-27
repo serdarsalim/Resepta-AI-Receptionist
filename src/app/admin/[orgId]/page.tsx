@@ -15,6 +15,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { buttonClass } from "@/components/Control";
 import { notFound, useParams, useRouter } from "next/navigation";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -298,28 +299,18 @@ export default function TenantPage() {
     <Plane narrow className="space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          {/* A real button now, and a drawn arrow (Serdar, 2026-08-26). The
-              old "← Fleet" was twelve-pixel muted text with a glyph whose
-              shape is whatever the reader's font decides — the one control
-              that leaves this page, styled quieter than any control on it.
-              Same SVG the app shell draws for its own back arrow. "Back"
-              rather than the destination's name: this page has exactly one
-              place to go back to, so naming it bought nothing the arrow does
-              not already say. */}
-          <Link
-            href="/admin"
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 text-xs font-medium text-[var(--muted-strong)] transition-colors hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)]"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M19 12H5" />
-              <path d="m12 19-7-7 7-7" />
-            </svg>
-            Back
-          </Link>
-          <h1 className="page-title mt-1 text-lg font-semibold">
+          {/* The way back is the path you came by (the salon app's P25
+              breadcrumb), now that the rail says where Businesses is. */}
+          <nav aria-label="Breadcrumb" className="text-sm text-[var(--muted)]">
+            <Link href="/admin" className="hover:text-[var(--foreground)]">
+              Businesses
+            </Link>
+            <span className="mx-1.5" aria-hidden>›</span>
+          </nav>
+          <h1 className="page-title mt-0.5 text-xl font-bold tracking-tight">
             {detail.name}
             {detail.demoMode && (
-              <span className="ml-2 rounded-full bg-[var(--muted-bg)] px-2 py-0.5 text-xs font-normal text-[var(--muted)]">
+              <span className="ml-2 rounded-full bg-[var(--muted-bg)] px-2 py-0.5 align-middle text-xs font-normal text-[var(--muted)]">
                 demo
               </span>
             )}
@@ -355,7 +346,7 @@ export default function TenantPage() {
             // gradient; filled, it reads as a control on the same paper as
             // the cards below it. Height matches the search box beside it —
             // any difference on the top row reads as misalignment.
-            className="h-9 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-medium transition-colors hover:bg-[var(--muted-bg)]"
+            className={buttonClass("outline", "sm")}
           >
             Open their app →
           </button>

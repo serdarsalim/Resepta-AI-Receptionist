@@ -47,16 +47,33 @@ export function Plane({
   className?: string;
   children: React.ReactNode;
 }) {
+  // The fill and the scroll belong to the admin layout's workspace now; this
+  // is only the reading column inside it, Nudge admin's measure and inset.
   return (
-    <div className="min-h-dvh bg-[image:var(--content-bg)] bg-fixed">
-      <main
-        className={`page-stack mx-auto px-4 pt-6 sm:px-6 ${
-          narrow ? "max-w-4xl" : "max-w-6xl"
-        } ${className}`}
-      >
-        {children}
-      </main>
-    </div>
+    <main
+      className={`page-stack mx-auto w-full px-4 pt-6 sm:px-8 sm:pt-8 ${
+        narrow ? "max-w-4xl" : "max-w-6xl"
+      } ${className}`}
+    >
+      {children}
+    </main>
+  );
+}
+
+// A section's head, Nudge admin's: the title is the first text on the page,
+// its controls at the right end of the same row.
+export function PageHead({
+  title,
+  children,
+}: {
+  title: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  return (
+    <header className="mb-6 flex min-h-9 flex-wrap items-center justify-between gap-3">
+      <h1 className="page-title text-xl font-bold tracking-tight">{title}</h1>
+      {children && <div className="flex items-center gap-2">{children}</div>}
+    </header>
   );
 }
 

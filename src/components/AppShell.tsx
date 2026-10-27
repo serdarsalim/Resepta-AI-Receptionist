@@ -910,7 +910,7 @@ const USER_MENU_WIDTH = 224; // w-56, used for the viewport clamp
 // pins the far edge, so this being approximate costs nothing.
 const USER_MENU_MIN_ROOM = 280;
 
-function UserMenu({
+export function UserMenu({
   name,
   email,
   image,
@@ -929,7 +929,8 @@ function UserMenu({
   remoteTheme?: Theme;
   variant?: "avatar" | "row";
   collapsed?: boolean;
-  onOpenAccount: () => void;
+  // Absent in the operator console, which has no Account page to open.
+  onOpenAccount?: () => void;
 }) {
   const { t } = useLanguage();
   const { signOut } = useAuthActions();
@@ -1072,6 +1073,7 @@ function UserMenu({
                 </div>
               )}
             </div>
+            {onOpenAccount && (
             <button
               type="button"
               role="menuitem"
@@ -1086,6 +1088,7 @@ function UserMenu({
               </span>
               {t("nav.account")}
             </button>
+            )}
             {/* A segmented control, not three stacked rows. The three themes
                 are one setting with one answer; stacked beside Account and
                 Sign out they read as three more commands, and the checkmark

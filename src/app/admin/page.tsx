@@ -18,7 +18,7 @@
 // page has exactly one reader and translating it would mean maintaining a
 // second copy of every operational term for nobody.
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import Link from "next/link";
@@ -34,10 +34,11 @@ import {
   Row,
   Section,
   SecretRow,
-  TabStrip,
+  PageHead,
 } from "./parts";
 import { OnboardingTab } from "./onboarding";
 import { TemplatesTab } from "./templates";
+import { sectionLabel, useAdminSection } from "./shell";
 import { InfoTip } from "@/components/InfoTip";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { SearchInput } from "@/components/DataTable";
@@ -68,36 +69,8 @@ export default function AdminPage() {
   // The model pickers' option source: each provider's own /v1/models, read
   // with the platform key, fetched lazily on first focus (see ModelRow).
   const listModels = useAction(api.platformConfig.listModels);
-  // Two rooms, not one scroll: the tenant list is what the operator opens
-  // this page FOR, and deployment settings are visited a handful of times
-  // ever. Living below the table meant the settings had no address and the
-  // table had a basement. Same pill pattern as the org detail page.
-  //
-  // The tab rides the URL (Serdar, 2026-08-28: refresh must not dump him
-  // back on Businesses). Read once on mount, written with replaceState —
-  // not useSearchParams, which would demand a Suspense boundary around the
-  // whole page for one string.
-  const [tab, setTabState] = useState<
-    "businesses" | "onboarding" | "templates" | "platform"
-  >("businesses");
-  useEffect(() => {
-    const raw = new URLSearchParams(window.location.search).get("tab");
-    if (
-      raw === "onboarding" ||
-      raw === "templates" ||
-      raw === "platform"
-    ) {
-      setTabState(raw);
-    }
-  }, []);
-  const setTab = (next: typeof tab) => {
-    setTabState(next);
-    window.history.replaceState(
-      null,
-      "",
-      next === "businesses" ? "/admin" : `/admin?tab=${next}`,
-    );
-  };
+  // The section is the rail's (./shell), and rides the URL there.
+  const { section: tab, setSection: setTab } = useAdminSection();
   // One box, three jobs, decided by the tab under it: on Businesses it narrows
   // the table, on Onboarding the vertical list, on Platform the settings rows.
   // The salon app's own search box, so the console does not invent a second.
@@ -124,14 +97,10 @@ export default function AdminPage() {
 
   return (
     <Plane>
-      <header className="mb-4 flex items-center justify-between gap-3">
-        {/* page-title, like every header in the salon app: one variable owns
-            what a page heading looks like in both themes. */}
-        <h1 className="page-title text-lg font-semibold">Resepta admin</h1>
-        {/* The org count and sort order used to sit here. Both were facts the
-            table states by being a table, and they were holding the only spot
-            on the page where a control can go. Same box as the salon app's
-            header search, so the console does not invent a second one. */}
+      <PageHead title={sectionLabel(tab)}>
+        {/* One box, scoped by the section: businesses, verticals, settings.
+            The salon app's own search box, so the console does not invent a
+            second one. */}
         <SearchInput
           value={search.query}
           onChange={search.setQuery}
@@ -143,25 +112,7 @@ export default function AdminPage() {
                 : "Search settings"
           }
         />
-      </header>
-
-      <div className="mb-4">
-        <TabStrip
-          tabs={[
-            { id: "businesses" as const, label: "Businesses" },
-            // Between the fleet and the deployment plumbing, which is where it
-            // belongs: a vertical is neither one business nor a provider key.
-            { id: "onboarding" as const, label: "Onboarding" },
-            // Fleet-level by design (2026-08-27): one wording for everyone is
-            // what keeps approval per WABA, so the desk that edits it and
-            // reads the fleet's approval state is not a per-client page.
-            { id: "templates" as const, label: "Templates" },
-            { id: "platform" as const, label: "Platform" },
-          ]}
-          active={tab}
-          onSelect={setTab}
-        />
-      </div>
+      </PageHead>
 
       {/* One line for the whole deployment. Email is operator plumbing that
           arrives for every org at once, so a missing key is one fact stated
@@ -210,7 +161,7 @@ export default function AdminPage() {
         // Customers table uses is for four short columns; this is nine you
         // track across to the last cell, which makes each rule a reading rail.
         // Same language, opposite call, decided by column count.
-        <div className="overflow-hidden rounded-lg bg-[var(--card)] shadow-[var(--card-shadow)]">
+        <div className="overflow-hidden rounded-xl bg-[var(--card)] shadow-[var(--card-shadow)]">
           <div className="thin-scroll overflow-x-auto overscroll-x-contain">
           <table className="w-full text-sm">
             {/* No fill behind the header. Weight and one rule separate it, and
@@ -218,7 +169,7 @@ export default function AdminPage() {
                 gets one continuous line. font-semibold is the compensation for
                 the fill being gone, not taste. pt-3.5 pb-2 because a column
                 name flush against the card's top edge reads as clipped. */}
-            <thead className="text-left text-xs">
+            <thead className="text-left text-[11px] text-[var(--muted-strong)]">
               <tr>
                 {/* No w-full here, and that is a correction rather than an
                     omission. Handing this column the slack is the rule for a
@@ -233,9 +184,9 @@ export default function AdminPage() {
                     this table always did and what nobody complained about. The
                     button that made it look crowded is a w-px cell now, which
                     was the actual fault. */}
-                <th className="px-3 pb-2 pt-3.5 font-semibold">Business</th>
+                <th className="px-4 py-2.5 font-medium">Business</th>
                 <th
-                  className="whitespace-nowrap px-3 pb-2 pt-3.5 font-semibold"
+                  className="whitespace-nowrap px-3 py-2.5 text-right font-medium"
                   title="People who can sign in"
                 >
                   Members
@@ -245,25 +196,25 @@ export default function AdminPage() {
                     what it counts, and a second line under four of nine
                     columns cost every row its height to tell him. */}
                 <th
-                  className="whitespace-nowrap px-3 pb-2 pt-3.5 font-semibold"
+                  className="whitespace-nowrap px-3 py-2.5 text-right font-medium"
                   title="Emails sent, all time"
                 >
                   Email
                 </th>
                 <th
-                  className="whitespace-nowrap px-3 pb-2 pt-3.5 font-semibold"
+                  className="whitespace-nowrap px-3 py-2.5 text-right font-medium"
                   title="WhatsApp messages sent, all time: count, what we bill them for template sends, and what Meta charges us. Session replies and Evolution sends are free."
                 >
                   WhatsApp
                 </th>
                 <th
-                  className="whitespace-nowrap px-3 pb-2 pt-3.5 font-semibold"
+                  className="whitespace-nowrap px-3 py-2.5 text-right font-medium"
                   title="Voice calls, all time: count, minutes, what we bill them, and what Retell charges us. The month-by-month breakdown is on the business's own page."
                 >
                   Calls
                 </th>
                 <th
-                  className="whitespace-nowrap px-3 pb-2 pt-3.5 font-semibold"
+                  className="whitespace-nowrap px-3 py-2.5 text-right font-medium"
                   title="Appointments in the book from now on"
                 >
                   Booked
@@ -277,7 +228,7 @@ export default function AdminPage() {
                     "Stuck" ever did. Sorting is unchanged: the query still
                     orders by dead letters, then failures, then stuck. */}
                 <th
-                  className="whitespace-nowrap px-3 pb-2 pt-3.5 font-semibold"
+                  className="whitespace-nowrap px-3 py-2.5 font-medium"
                   title="Sends that broke: refused in the last 24h, dead-lettered after retries, stuck mid-send, or backing off for another attempt"
                 >
                   Errors
@@ -285,10 +236,10 @@ export default function AdminPage() {
                 {/* One word and pushed to the wall: the age is the narrowest
                     fact on the row, and "Last activity" spent its width on
                     the label rather than the answer (Serdar, 2026-08-28). */}
-                <th className="whitespace-nowrap px-3 pb-2 pt-3.5 text-right font-semibold">Activity</th>
+                <th className="whitespace-nowrap px-3 py-2.5 text-right font-medium">Activity</th>
                 {/* No header word, and barely a column: w-px collapses it to
                     its content so the action cannot buy width from the data. */}
-                <th className="w-px px-2 pb-2 pt-3.5" />
+                <th className="w-px px-3 py-2.5" />
               </tr>
             </thead>
             <tbody>
@@ -303,11 +254,11 @@ export default function AdminPage() {
                   onClick={() => router.push(`/admin/${org.orgId}`)}
                   className="group cursor-pointer border-t border-[var(--table-divider)] hover:bg-[var(--row-hover-bg)]"
                 >
-                  <td className="px-3 py-2">
+                  <td className="px-4 py-3">
                     <Link
                       href={`/admin/${org.orgId}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="font-medium hover:underline"
+                      className="font-semibold hover:underline"
                     >
                       {org.name}
                     </Link>
@@ -320,7 +271,7 @@ export default function AdminPage() {
                       read DOWN — the whole point of asking who uses this most.
                       It goes to the tab that can change it rather than the
                       business's front page. */}
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-3 text-right">
                     <Link
                       href={`/admin/${org.orgId}?tab=members`}
                       onClick={(e) => e.stopPropagation()}
@@ -329,10 +280,10 @@ export default function AdminPage() {
                       {org.members}
                     </Link>
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-3 text-right">
                     <Count value={org.emailSentTotal} tone="plain" />
                   </td>
-                  <td className="px-3 py-2 tabular-nums">
+                  <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">
                     <Count value={org.waSentTotal} tone="plain" />
                     {/* The Calls column's billed · cost line, for the lane
                         Meta charges. Only when money actually moved: most
@@ -347,35 +298,31 @@ export default function AdminPage() {
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-2 tabular-nums">
+                  <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">
                     {org.voiceCallsTotal === 0 && org.voiceSecondsTotal === 0 ? (
                       <span className="text-[var(--muted)]">—</span>
                     ) : (
                       <>
-                        <div className="font-medium">
-                          {org.voiceCallsTotal}
-                          <span className="ml-1.5 font-normal text-[var(--muted)]">
-                            {Math.round(org.voiceSecondsTotal / 60)} min
-                          </span>
-                        </div>
+                        <div className="font-medium">{org.voiceCallsTotal}</div>
                         <div className="text-xs text-[var(--muted)]">
-                          ${(org.voiceBilledMicroUsdTotal / 1_000_000).toFixed(2)} · Retell $
+                          {Math.round(org.voiceSecondsTotal / 60)} min · $
+                          {(org.voiceBilledMicroUsdTotal / 1_000_000).toFixed(2)} · Retell $
                           {(org.voiceCostMicroUsdTotal / 1_000_000).toFixed(2)}
                         </div>
                       </>
                     )}
                   </td>
-                  <td className="px-3 py-2 tabular-nums text-[var(--muted-strong)]">
+                  <td className="px-3 py-3 text-right tabular-nums">
                     {org.upcomingAppointments === 0 ? (
                       <span className="text-[var(--muted)]">—</span>
                     ) : (
                       org.upcomingAppointments
                     )}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-3">
                     <Errors org={org} />
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-[var(--muted-strong)]">
+                  <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-[var(--muted)]">
                     {ago(org.lastActivityAt)}
                   </td>
                   {/* Into the client's OWN app, from the list. This existed
@@ -400,7 +347,7 @@ export default function AdminPage() {
                       the mutation lands: window.open after an await has lost
                       the user gesture and is a popup blocker's exact
                       definition of a popup. */}
-                  <td className="w-px px-2 py-2">
+                  <td className="w-px px-3 py-3">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -421,7 +368,7 @@ export default function AdminPage() {
                       // has exactly one.
                       title="Open this business's own app in a new tab. Only one at a time — opening another repoints it."
                       aria-label="Open this business's own app in a new tab"
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted-strong)] opacity-0 transition-opacity hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--raised)] text-[var(--muted-strong)] shadow-[var(--raised-shadow)] opacity-0 transition-opacity hover:bg-[var(--muted-bg)] hover:text-[var(--foreground)] focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                     >
                       <svg
                         width="13"
