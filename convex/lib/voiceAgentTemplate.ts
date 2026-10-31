@@ -446,7 +446,9 @@ export const VOICE_SUMMARY_FIELD = "resepta_call_summary";
 // (Serdar). And the agent's language was compiled in here at publish time, so
 // Estate Emlak's agent, born English and switched to Turkish in the provider's
 // dashboard, kept writing English. The caller's exact words are still in the
-// transcript beside it.
+// transcript beside it. The appointment sentence is conditional (2026-10-31):
+// told to always name the booking, every agency pitch and hang-up on Estate
+// Emlak's line ended "no appointment was made".
 export function summaryAnalysisField(language: string) {
   const key = (language ?? "").toLowerCase().slice(0, 2);
   const name =
@@ -457,8 +459,8 @@ export function summaryAnalysisField(language: string) {
     description: [
       `Two or three sentences on what the caller wanted and what happened.`,
       `Write it in ${name}. Always ${name}, whatever language this instruction is in.`,
-      `Name the service, the date and time, and whether it was booked, moved or cancelled.`,
-      `If nothing was settled, say what was missing.`,
+      `If the call was about an appointment, name the service, the date and time, and whether it was booked, moved or cancelled.`,
+      `If it was not (a question, an offer, a wrong number, a hang-up), say only what it was about; never mention an appointment that nobody asked for.`,
     ].join(" "),
   };
 }
