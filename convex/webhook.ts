@@ -7,6 +7,7 @@ import { applyWamidStatus, logInboundRow } from "./messages";
 import { REPEAT_WINDOW_MS, withChange } from "./lib/agentChange";
 import { channelOfMessage, noteMessageById } from "./lib/thread";
 import { learnCustomerLanguage } from "./lib/customerLanguage";
+import { queueChatRewrite } from "./nextTimeNotes";
 import { detectTextLanguage } from "./lib/textLanguage";
 import { scheduleLifecycleMessages } from "./appointments";
 import { queueOrgAlert } from "./lib/alerts";
@@ -578,6 +579,12 @@ export async function processInboundMessage(
   // tapped button is the template's words, not theirs, so it never counts.
   if (!payload) {
     await learnCustomerLanguage(ctx, contactId, detectTextLanguage(text || media?.caption));
+    // The same typed words start the For next time note's quiet wait
+    // (nextTimeNotes.ts): one rewrite once the chat has been quiet 15
+    // minutes, however many messages it took. A tapped button never does.
+    if ((text || media?.caption || "").trim()) {
+      await queueChatRewrite(ctx, orgId, contactId, loggedId);
+    }
   }
 
   // Tell the staff who opted in. Scheduled, never inline: a broken

@@ -87,6 +87,7 @@ export const FOOTPRINT_KINDS = [
   "callbacks",
   "chatTurns",
   "notes",
+  "nextTimeNotes",
   "bulkRunItems",
   "inboxPins",
   "inboxReads",
@@ -107,6 +108,7 @@ export const footprintValidator = v.object({
     callbacks: v.number(),
     chatTurns: v.number(),
     notes: v.number(),
+    nextTimeNotes: v.number(),
     bulkRunItems: v.number(),
     inboxPins: v.number(),
     inboxReads: v.number(),
@@ -394,6 +396,23 @@ const FOOTPRINT: Source[] = [
           q.eq("orgId", customer.orgId).eq("customerId", customer._id),
         ),
     clear: async (ctx, row) => {
+      await ctx.db.delete(row._id);
+    },
+  }),
+  // The For next time note's bookkeeping (nextTimeNotes.ts): the words the AI
+  // last wrote and the chat's read mark. The note itself is on the customer
+  // row, blanked by beginCustomerDeletion's first transaction; a rewrite
+  // still in flight lands on a deleting customer and writes nothing.
+  source({
+    kind: "nextTimeNotes",
+    rows: (ctx, customer) =>
+      ctx.db
+        .query("nextTimeNotes")
+        .withIndex("by_org_customer", (q) =>
+          q.eq("orgId", customer.orgId).eq("customerId", customer._id),
+        ),
+    clear: async (ctx, row) => {
+      if (row.dueJobId) await ctx.scheduler.cancel(row.dueJobId);
       await ctx.db.delete(row._id);
     },
   }),

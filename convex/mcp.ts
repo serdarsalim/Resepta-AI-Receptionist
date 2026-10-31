@@ -541,6 +541,7 @@ const TOOLS: ToolDef[] = [
           calls: counts.calls,
           requestedCallbacks: counts.callbacks,
           notes: counts.notes,
+          forNextTimeNotes: counts.nextTimeNotes,
           assistantReplies: counts.chatTurns,
           bulkSendEntries: counts.bulkRunItems,
           inboxPins: counts.inboxPins,

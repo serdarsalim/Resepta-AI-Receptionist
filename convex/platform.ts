@@ -2209,6 +2209,7 @@ const ORG_TABLES = [
   { table: "bulkRuns", rows: (ctx, orgId) => ctx.db.query("bulkRuns").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
   { table: "customers", rows: (ctx, orgId) => ctx.db.query("customers").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
   { table: "notes", rows: (ctx, orgId) => ctx.db.query("notes").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
+  { table: "nextTimeNotes", rows: (ctx, orgId) => ctx.db.query("nextTimeNotes").withIndex("by_org_customer", (q) => q.eq("orgId", orgId)) },
   { table: "inboxReads", rows: (ctx, orgId) => ctx.db.query("inboxReads").withIndex("by_org_user_customer", (q) => q.eq("orgId", orgId)) },
   { table: "inboxPins", rows: (ctx, orgId) => ctx.db.query("inboxPins").withIndex("by_org_user", (q) => q.eq("orgId", orgId)) },
   { table: "inboxVisits", rows: (ctx, orgId) => ctx.db.query("inboxVisits").withIndex("by_org_user", (q) => q.eq("orgId", orgId)) },

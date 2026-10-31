@@ -32,7 +32,7 @@ const DELETED_ROWS: { label: TranslationKey; kinds: Kind[] }[] = [
   { label: "appointments.title", kinds: ["appointments"] },
   { label: "customers.deleteKindMessages", kinds: ["messages"] },
   { label: "customers.deleteKindCalls", kinds: ["calls", "agentTests", "callbacks"] },
-  { label: "notes.title", kinds: ["notes"] },
+  { label: "notes.title", kinds: ["notes", "nextTimeNotes"] },
   { label: "customers.deleteKindChatTurns", kinds: ["chatTurns"] },
   { label: "customers.deleteKindBulk", kinds: ["bulkRunItems"] },
   { label: "customers.deleteKindInboxMarks", kinds: ["inboxPins", "inboxReads"] },

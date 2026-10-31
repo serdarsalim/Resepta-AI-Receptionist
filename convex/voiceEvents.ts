@@ -398,6 +398,18 @@ export const process = internalAction({
         });
       }
 
+      // The For next time note (convex/nextTimeNotes.ts): rewritten from
+      // this call's transcript, after recordCall, which stored it. Only on
+      // the event whose disconnect code says answered, for the reason just
+      // above; the rewrite re-checks the row and skips a call it already
+      // took in, so a replayed event costs nothing.
+      if (callOutcome(String(call.disconnection_reason ?? "") || undefined) === "answered") {
+        await ctx.scheduler.runAfter(0, internal.nextTimeNotes.rewriteAfterCall, {
+          retellCallId: row.retellCallId,
+          ...(spoken ? { language: spoken } : {}),
+        });
+      }
+
       await ctx.runMutation(internal.voiceEvents.complete, { eventId });
       if (row.eventType === "call_ended") {
         // The bulk call queue's continuation, and the ONLY thing that

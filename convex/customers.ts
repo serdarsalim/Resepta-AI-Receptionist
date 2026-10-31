@@ -40,6 +40,8 @@ const customerFields = {
   consentAt: v.optional(v.number()),
   lastInboundAt: v.optional(v.number()),
   custom: v.optional(v.record(v.string(), v.string())),
+  // The "For next time" note (schema customers.nextTimeNote, nextTimeNotes.ts).
+  nextTimeNote: v.optional(v.string()),
   // When someone last cleared this customer's dot in the inbox. Convex
   // validates RETURNS as strictly as arguments, so a column added to the
   // schema and not added here makes every read of the table throw.

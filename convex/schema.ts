@@ -1464,6 +1464,13 @@ export default defineSchema({
     // Values for the org-defined contact fields, keyed by contactFields.key.
     // Stored as strings; the field's type drives the editor, not the storage.
     custom: v.optional(v.record(v.string(), v.string())),
+    // The "For next time" note (2026-10-31, Nudge's): one short paragraph of
+    // what should change the NEXT call or chat. Rewritten by the business's
+    // AI after an answered call and a quiet WhatsApp chat
+    // (convex/nextTimeNotes.ts), editable by any member on the record, read
+    // by the phone agent as {{for_next_time}} and by the WhatsApp assistant.
+    // Who wrote the words now is bookkeeping in nextTimeNotes.aiText.
+    nextTimeNote: v.optional(v.string()),
     // Inbox attention, cleared by hand. The dot on a conversation row means
     // "someone still has to look at this"; tapping it stamps the moment it was
     // dismissed, and anything that arrives afterwards lights it again. Stored
@@ -3149,4 +3156,25 @@ export default defineSchema({
   })
     .index("by_org", ["orgId"])
     .index("by_customer", ["customerId"]),
+
+  // The bookkeeping behind customers.nextTimeNote (convex/nextTimeNotes.ts),
+  // one row per customer the AI has written for or who has typed on
+  // WhatsApp. NOT the note: the note is on the customer. This says which
+  // words the AI last wrote there (aiText; when the note no longer equals
+  // them, a person changed it, and the AI treats it as theirs), from which
+  // call (callId, so a repeated webhook does not rewrite twice), and where
+  // the WhatsApp rewrite stands: the typed reply whose quiet wait is
+  // running, its scheduled job, and the newest customer message a chat
+  // rewrite has read. In customerDeletion's FOOTPRINT.
+  nextTimeNotes: defineTable({
+    orgId: v.id("orgs"),
+    customerId: v.id("customers"),
+    aiText: v.optional(v.string()),
+    source: v.optional(v.union(v.literal("call"), v.literal("chat"))),
+    callId: v.optional(v.string()),
+    updatedAt: v.optional(v.number()),
+    dueMessageId: v.optional(v.id("messages")),
+    dueJobId: v.optional(v.id("_scheduled_functions")),
+    readThrough: v.optional(v.number()),
+  }).index("by_org_customer", ["orgId", "customerId"]),
 });
