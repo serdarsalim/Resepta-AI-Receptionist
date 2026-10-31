@@ -11,6 +11,7 @@
 // line says which, and overrides the Talimat's fixed "always speak X".
 
 import type { LlmTool } from "./llm";
+import { assistantNoteSection } from "./nextTimeNote";
 
 export const CHAT_AGENT_TEMPLATE_KEY = "whatsapp_receptionist";
 // v2 (2026-08-12): book_appointment takes SERVICES, plural, matching the voice
@@ -323,6 +324,10 @@ export function chatAgentSystemPrompt(args: {
   // see docs/agent-core.md on one-way memory.
   appointments: { spoken: string; service?: string }[];
   recentCalls: { when: string; summary: string }[];
+  // The customer's For next time note (customers.nextTimeNote): what earlier
+  // calls and chats said should change this one. Written under its own rule
+  // (assistantNoteSection): asked about, never recited.
+  forNextTime?: string;
   // Whether this business sells PRODUCTS at all (a service row with no
   // duration). False for a salon selling nothing but hours, and then the
   // product section below is not written: a prompt explaining how to sell
@@ -426,6 +431,9 @@ export function chatAgentSystemPrompt(args: {
       }
     }
   }
+
+  const note = assistantNoteSection(args.forNextTime);
+  if (note) lines.push("", note);
 
   lines.push(
     "",

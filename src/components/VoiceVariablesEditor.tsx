@@ -316,6 +316,14 @@ export function injectedVoiceContext(t: ProvidedT): ProvidedVariable[] {
       description: t("voiceVariables.descMinutesSinceAttempt"),
       kind: "text",
     },
+    // The For next time note (convex/nextTimeNotes.ts), always sent by
+    // retell.beforeCallContext, empty when the customer has none.
+    {
+      key: "for_next_time",
+      label: t("voiceVariables.forNextTime"),
+      description: t("voiceVariables.descForNextTime"),
+      kind: "text",
+    },
   ];
 }
 

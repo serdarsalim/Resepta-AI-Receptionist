@@ -4407,6 +4407,16 @@ const dictionary = {
     en: "The first sentence chosen for this call: spoken before, only tried, they rang you, or none of these.",
     de: "Der für diesen Anruf gewählte erste Satz: schon gesprochen, nur versucht, sie rufen an oder nichts davon.",
   },
+  "voiceVariables.forNextTime": {
+    tr: "Bir dahaki sefere",
+    en: "For next time",
+    de: "Fürs nächste Mal",
+  },
+  "voiceVariables.descForNextTime": {
+    tr: "Müşterinin kartındaki kısa not: önceki aramalara ve WhatsApp yazışmalarına göre bir sonraki görüşmede neyin farklı olması gerektiği. Not yoksa boş.",
+    en: "The short note on the customer's record: what earlier calls and WhatsApp chats said should change the next conversation. Empty when there is none.",
+    de: "Die kurze Notiz im Kundenprofil: was frühere Anrufe und WhatsApp-Chats für das nächste Gespräch ändern sollten. Leer, wenn es keine gibt.",
+  },
   "voiceVariables.when": {
     tr: "Ne zaman",
     en: "When",

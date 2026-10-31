@@ -48,6 +48,7 @@ import {
   supersedePendingSuggestions,
 } from "./lib/agentDrafts";
 import { builtinAgentVariables } from "./lib/agentVariables";
+import { NEXT_TIME_VAR, normaliseNote } from "./lib/nextTimeNote";
 import { codePrompt, type VoiceAgentLanguage } from "./lib/voiceAgentTemplate";
 import {
   type ActiveWindow,
@@ -421,6 +422,10 @@ export const loadTurnContext = internalQuery({
       knowledgeRows: knowledge,
       contactFields: fields,
     });
+    // The Talimat is the voice agent's, so a prompt that reads
+    // {{for_next_time}} gets the note here too, as the phone does, rather
+    // than the braces. The prompt's own section below adds the rule.
+    variables[NEXT_TIME_VAR] = normaliseNote(customer.nextTimeNote ?? "");
 
     return {
       skip,
@@ -498,6 +503,9 @@ export const loadTurnContext = internalQuery({
         spoken: formatAppointmentTime(a.startAt, org.timezone, language),
         service: a.items?.map((i) => i.name).join(", ") || undefined,
       })),
+      // The For next time note (nextTimeNotes.ts), read under its own
+      // "use it quietly" rule (lib/nextTimeNote.assistantNoteSection).
+      forNextTime: customer.nextTimeNote ?? "",
       recentCalls: calls
         .filter((c) => c.summary)
         .map((c) => ({
@@ -1518,6 +1526,7 @@ type LoadedTurn = TurnContext & {
   variables: SystemPromptArgs["variables"];
   upcoming: SystemPromptArgs["appointments"];
   recentCalls: SystemPromptArgs["recentCalls"];
+  forNextTime: NonNullable<SystemPromptArgs["forNextTime"]>;
   org: TurnContext["org"] & {
     sellsGoods: SystemPromptArgs["sellsGoods"];
     pickup: SystemPromptArgs["pickup"];
@@ -1580,6 +1589,7 @@ async function runTurn(
     variables: context.variables,
     appointments: context.upcoming,
     recentCalls: context.recentCalls,
+    forNextTime: context.forNextTime,
     sellsGoods: context.org.sellsGoods,
     pickup: context.org.pickup,
     delivery: context.org.delivery,

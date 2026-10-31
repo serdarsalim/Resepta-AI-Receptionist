@@ -2,6 +2,7 @@ import { v, type Infer, type ObjectType } from "convex/values";
 import { syncCustomerSearch } from "./lib/customerSearch";
 import { builtinAgentVariables } from "./lib/agentVariables";
 import { OPENER_KEY, chooseOpener, clockVariables } from "./lib/opener";
+import { NEXT_TIME_VAR, normaliseNote } from "./lib/nextTimeNote";
 import { callOutcome, reachedPhone } from "./lib/callOutcome";
 import {
   action,
@@ -1441,6 +1442,10 @@ export const beforeCallContext = internalQuery({
       dynamicVariables,
       clockVariables(customer, org.language, org.timezone),
     );
+    // The For next time note (nextTimeNotes.ts): always set, "" when there
+    // is none, so a prompt reading {{for_next_time}} never hears the braces.
+    // Resepta's own like {{opener}}: a registry row of that name never wins.
+    dynamicVariables[NEXT_TIME_VAR] = normaliseNote(customer?.nextTimeNote ?? "");
     dynamicVariables[OPENER_KEY] = chooseOpener({
       direction: direction ?? "inbound",
       openers: openers ?? agent.openers,
