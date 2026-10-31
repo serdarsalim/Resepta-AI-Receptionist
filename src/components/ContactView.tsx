@@ -375,6 +375,7 @@ export function ContactRecord({
   const currency = settings?.org.currency ?? DEFAULT_CURRENCY;
   const updateCustomer = useMutation(api.customers.update);
   const setCustomValue = useMutation(api.customers.setCustomValue);
+  const setNextTimeNote = useMutation(api.nextTimeNotes.setForCustomer);
   const setMuted = useMutation(api.customers.setMuted);
   const setNoAiCalls = useMutation(api.customers.setNoAiCalls);
   const setMarketingEmailOptOut = useMutation(api.customers.setMarketingEmailOptOut);
@@ -563,6 +564,21 @@ export function ContactRecord({
               Same `fields` query the Contact fields table reads, so the two
               are one list, and its drag-reorder is the single answer to
               what sits where on both. */}
+          {/* For next time (convex/nextTimeNotes.ts): what the AI kept from
+              earlier calls and chats for the next one. ONLY when there is
+              a note: no row and no placeholder otherwise, because most
+              customers will never have one (Nudge, Serdar 2026-10-28,
+              after a box on every one of 14,000 contacts). Edited like any
+              value; emptying it removes the row. */}
+          {customer.nextTimeNote && (
+            <FieldRow label={t("customers.forNextTime")} hint={t("customers.forNextTimeHint")}>
+              <InlineEditValue
+                dense
+                value={customer.nextTimeNote}
+                onSave={(next) => setNextTimeNote({ customerId, text: next })}
+              />
+            </FieldRow>
+          )}
           {orgFields.map((field) => (
             <CustomFieldRow
               key={field._id}

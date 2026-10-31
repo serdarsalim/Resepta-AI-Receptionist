@@ -1183,6 +1183,18 @@ const dictionary = {
     en: "They asked not to be called by the voice agent. Bulk call runs skip them, and placing a call from here asks first. Reminders and messages still go. The voice agent turns this on when a caller asks on a call; only a person can turn it off.",
     de: "Der Kunde möchte nicht vom Sprachassistenten angerufen werden. Sammelaktionen per Anruf überspringen ihn, und ein Anruf von hier fragt vorher nach. Erinnerungen und Nachrichten gehen weiter. Bittet ein Anrufer im Gespräch darum, setzt der Assistent das selbst; aufheben kann es nur ein Mensch.",
   },
+  // The For next time note (customers.nextTimeNote), a record row shown only
+  // when the customer has one.
+  "customers.forNextTime": {
+    tr: "Bir dahaki sefere",
+    en: "For next time",
+    de: "Fürs nächste Mal",
+  },
+  "customers.forNextTimeHint": {
+    tr: "Yapay zekâ, cevaplanan her aramadan ve WhatsApp yazışması sessizleştikten sonra bu notu yeniden yazar: bir sonraki görüşmede neyin farklı olması gerektiğini. Sesli asistan ve WhatsApp asistanı görüşmeden önce okur. Düzeltebilirsiniz; bir sonraki yeniden yazım sizin cümlelerinizden başlar ve onları silmez.",
+    en: "The AI rewrites this after every answered call and once a WhatsApp chat goes quiet: what should change the next conversation. The voice agent and the WhatsApp assistant read it beforehand. Correct it freely; the next rewrite starts from your words and never deletes them.",
+    de: "Die KI schreibt das nach jedem angenommenen Anruf und nach jedem verstummten WhatsApp-Chat neu: was sich beim nächsten Gespräch ändern sollte. Sprachassistent und WhatsApp-Assistent lesen es vorher. Korrigieren Sie es ruhig; die nächste Fassung baut auf Ihren Worten auf und löscht sie nie.",
+  },
   // The marketing opt-out (customers.marketingEmailOptOutAt), the footer's
   // first switch. On = unsubscribed, the same direction as Mute and No AI
   // calls beside it. Nudge's word in all three languages: one word every CRM

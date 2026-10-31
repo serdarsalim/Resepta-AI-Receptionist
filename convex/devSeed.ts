@@ -48,6 +48,12 @@ const SERVICES: { name: string; durationMinutes: number; price?: number }[] = [
 ];
 const STAFF = ["Sophie Bennett", "Marcus Reid", "Priya Shah"];
 
+// customers.nextTimeNote for two of the twenty, as the AI would have kept it.
+const DEMO_NEXT_TIME_NOTES: Record<number, string> = {
+  0: "Her lease ends on 15 January, so nothing that starts before then. Prefers WhatsApp to calls during work hours.",
+  5: "Asked to hear back once the asking price on the riverside flat is confirmed. His partner decides and wants to come to the next viewing.",
+};
+
 export const seed = internalMutation({
   args: { orgId: v.optional(v.id("orgs")), force: v.optional(v.boolean()) },
   returns: v.object({
@@ -218,6 +224,9 @@ export const seed = internalMutation({
         ...(i % 10 === 9 ? {} : { email: `${firstName}.${lastName}@example.com`.toLowerCase() }),
         marketingEmailOptOutAt: unsubscribed ? now - (i + 1) * DAY : undefined,
         lastInboundAt: i % 3 === 0 ? now - (i % 5) * HOUR : undefined,
+        // Two For next time notes, so the record's row shows on somebody.
+        // The demo never writes one itself (nextTimeNotes.ts skips it).
+        nextTimeNote: DEMO_NEXT_TIME_NOTES[i],
       });
       await syncCustomerSearch(ctx, customerId);
       customerIds.push(customerId);

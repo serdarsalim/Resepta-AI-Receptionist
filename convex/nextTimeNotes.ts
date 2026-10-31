@@ -481,7 +481,8 @@ export const chatRewriteContext = internalQuery({
       llm: guards.llm,
       lines: rows.map((m) => ({
         from: m.direction === "in" ? ("customer" as const) : ("us" as const),
-        at: m._creationTime,
+        // When it happened: an imported row carries its own moment.
+        at: m.occurredAt ?? m._creationTime,
         text: m.body ?? "",
       })),
       through: theirs[theirs.length - 1]._creationTime,
