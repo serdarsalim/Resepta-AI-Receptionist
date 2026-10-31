@@ -395,10 +395,25 @@ export const seed = internalMutation({
       await recomputeThread(ctx, customerId);
     }
 
+    // Two callers who rang and never said their name: the list, the record
+    // and the Inbox show their number where the name goes. Their only trace
+    // is a call (demoVoice, indices 20 and 21), so no appointments.
+    for (const phone of ["+447700900140", "+447700900141"]) {
+      const customerId = await ctx.db.insert("customers", {
+        orgId: org._id,
+        firstName: "",
+        phone,
+        lastInboundAt: now - HOUR,
+      });
+      await syncCustomerSearch(ctx, customerId);
+      customerIds.push(customerId);
+      phones.push(phone);
+    }
+
     callCount = await seedDemoVoice(ctx, org._id, customerIds, phones, now);
 
     return {
-      customers: 20,
+      customers: customerIds.length,
       appointments: appointmentCount,
       messages: messageCount,
       calls: callCount,

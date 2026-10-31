@@ -220,6 +220,36 @@ export type DemoCall = {
 };
 
 export const DEMO_CALLS: DemoCall[] = [
+  // The two nameless callers devSeed adds after the twenty.
+  {
+    agent: "frontDesk",
+    direction: "inbound",
+    customer: 20,
+    minutesAgo: 45,
+    durationSec: 9,
+    successful: false,
+    disconnectionReason: "user_hangup",
+    summary: "The caller hung up after the greeting without saying who they were or what they needed.",
+    transcript: `Agent: Real Estate Co., Ellie speaking. How can I help?
+User: Oh, sorry, wrong number.`,
+  },
+  {
+    agent: "frontDesk",
+    direction: "inbound",
+    customer: 21,
+    minutesAgo: 60 * 2,
+    durationSec: 41,
+    successful: false,
+    disconnectionReason: "user_hangup",
+    summary:
+      "The caller asked whether the Canonbury Grove flat is still available, then hung up before giving a name or booking a viewing.",
+    transcript: `Agent: Real Estate Co., Ellie speaking. How can I help?
+User: Is the flat on Canonbury Grove still on the market?
+Agent: It is. Would you like to come and see it?
+User: Maybe. I'll call back.
+Agent: Of course. Can I take your name?
+User: I'll call back, thanks.`,
+  },
   {
     agent: "frontDesk",
     direction: "inbound",
