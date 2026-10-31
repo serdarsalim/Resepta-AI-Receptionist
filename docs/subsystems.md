@@ -3103,3 +3103,59 @@ rule, adapted: evidence replaces a guess, and nothing replaces a person.
   the embed asks for another, which says what the website speaks, not the
   visitor), and anything an assistant writes.
 
+
+## For next time notes (2026-10-31, Nudge's of 2026-10-27)
+
+Each customer carries a short note of what should change the NEXT call or
+chat (away until the 15th, prefers WhatsApp, a complaint, a promise), at
+most five short sentences in one paragraph. A call never reads the WhatsApp
+chat, so the note is also how what a customer typed reaches the next call.
+
+- **Stored** on the customer, `customers.nextTimeNote`, not as a contact
+  field. Nudge ended with a registry field; here `contactFields` are rows
+  each owner authors, with no notion of a system field, so seeding one would
+  mean a migration across every business, a field the owner can rename,
+  retype or delete, and a row that flows into the voice agent's capture
+  config. `nextTimeNotes` (one row per customer, `by_org_customer`) is
+  BOOKKEEPING only: `aiText`, the words the AI last wrote (when the note no
+  longer equals them, a person changed it and it is theirs), `callId` (the
+  last call taken in), and the chat's `dueMessageId` / `dueJobId` /
+  `readThrough`. In `ORG_TABLES` and the deletion's `FOOTPRINT`; the note
+  itself goes with the blanked customer row.
+- **Written after an answered call**: `voiceEvents.process` schedules
+  `nextTimeNotes.rewriteAfterCall` on the event whose disconnect code says
+  answered (`lib/callOutcome`), after `recordCall` stored the transcript. The
+  rewrite reads the `calls` row (re-checks answered, the customer spoke, the
+  call not already taken in; a row with no transcript yet is tried once more
+  two minutes later). A browser test never reaches `voiceEvents`.
+- **Written after a WhatsApp chat goes quiet**: every typed reply (no button
+  payload, words or a caption, either lane) calls `queueChatRewrite` in
+  `webhook.ts`, which schedules `rewriteAfterChat` 15 minutes out
+  (`CHAT_QUIET_MS`) and cancels the wait the previous reply started. The
+  rewrite reads the customer's WhatsApp rows after `readThrough` (both
+  sides, our sent ones included, a week back at most, 80 rows; email is not
+  read) as `[Tue 28 Oct 14:02] Us:` / `Customer:` lines in the business's
+  clock, and moves `readThrough` whatever the note did.
+- **The write** (`landNote`, both kinds) refuses when the note changed since
+  it was read (a person's edit mid-rewrite wins; the action reads again),
+  writes nothing for a customer being deleted, and treats "NONE" as clearing
+  only words the AI wrote. The prompt and the answer's rules are
+  `lib/nextTimeNote.ts` (`scripts/next-time-note.test.mjs`).
+- **The AI** is the business's own chat model (`lib/chatLlm.resolveChatLlm`);
+  no key, no note. Skipped for the demo org, a suspended business, an
+  unpriced model and a month past the assistant budget. Each request is
+  metered like the chat simulator (`chatAgent.meterSimulatedTurn`): counted
+  toward the month and its budget, not billed per turn.
+- **Read** by every call as `{{for_next_time}}` (`retell.beforeCallContext`,
+  always set, "" when none; a read-only row in the agent's variables), and by
+  the WhatsApp assistant in its prompt (`assistantNoteSection`: use it
+  quietly, never quote it, what the customer says now wins; a Talimat
+  reading `{{for_next_time}}` gets the note substituted too). A phone agent
+  uses it only once its owner puts `{{for_next_time}}` in its prompt; the
+  template was not changed.
+- **Shown** on the record as one row (`ContactRecord`), ONLY when there is a
+  note, with an (i); any member edits it (`nextTimeNotes.setForCustomer`),
+  and emptying it removes the row. Two demo customers carry a seeded note.
+- Not ported: Nudge's backfill from past calls, the property history row
+  (Resepta's activity log has no field-change kind for it), and the test
+  chat's editable note.

@@ -342,6 +342,25 @@ kept anywhere else is dialled straight through. How it runs is in
   business's calls and every inbound call. A new automated dial-out path
   takes the same guards before it reaches the provider.
 
+## The For next time note is the AI's draft and a person's last word (2026-10-31)
+
+`customers.nextTimeNote` (Nudge's, `convex/nextTimeNotes.ts`; how it runs is
+in `docs/subsystems.md` → "For next time notes"). The business's AI rewrites
+it after an answered call and once a WhatsApp chat has been quiet 15 minutes;
+the phone agent reads `{{for_next_time}}` and the WhatsApp assistant its
+prompt section.
+
+- **Every write goes through `landNote`**: it refuses when the note changed
+  since the rewrite read it (a person's edit wins), writes nothing for a
+  deleting customer, and lets "nothing worth keeping" clear only words the
+  AI wrote (`nextTimeNotes.aiText`), never a person's.
+- **Only words the customer said**: an answered call by its disconnect code,
+  a TYPED WhatsApp reply (never a button tap), never a browser test, never
+  the demo org. One AI request per call and per quiet chat, metered to the
+  month and stopped by the assistant budget; no model key, no note.
+- A new reader of the note goes through `assistantNoteSection` or the ring
+  variable, never quotes it to the customer.
+
 ## A requested callback is one call, guarded like a bulk call (2026-10-18)
 
 "Call me back tomorrow at four" (P36, `convex/callbacks.ts`; how it runs is
