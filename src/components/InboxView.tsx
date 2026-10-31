@@ -753,43 +753,6 @@ export function InboxView({
                           <span className="flex text-[var(--muted)]">
                             <FeedIcon type={c.lastChannel} size={12} tinted={false} />
                           </span>
-                          {/* Direction, on the one row that cannot imply it.
-                              A message preview is words somebody wrote, so a
-                              salon's reminder reads nothing like a customer's
-                              reply; "Arama" is the same four letters whoever
-                              dialled. This started as the words "Aradınız" /
-                              "Aradı" and Serdar's read was that it was a lot
-                              of wording for very little, which is right — a
-                              phone's own call log has never needed more than
-                              an arrow.
-
-                              Shape, NOT colour, and that is a refusal of the
-                              green-out / red-in he suggested: both colours are
-                              already spoken for within a few pixels of here.
-                              Red on this line is the failed-send ✕, and green
-                              two columns left is the unseen dot, so coloured
-                              arrows would be read as states before they were
-                              read as directions. The words survive as the
-                              hover label and the aria-label, so nothing is
-                              lost to a screen reader. */}
-                          {c.lastChannel === "call" && (
-                            <HoverTip text={t(
-                                c.lastDirection === "out"
-                                  ? "inbox.calledOut"
-                                  : "inbox.calledIn",
-                              )} className="inline-flex shrink-0">
-                            <span
-                              className="shrink-0 leading-none text-[var(--muted)]"
-                              aria-label={t(
-                                c.lastDirection === "out"
-                                  ? "inbox.calledOut"
-                                  : "inbox.calledIn",
-                              )}
-                            >
-                              {c.lastDirection === "out" ? "↗" : "↙"}
-                            </span>
-                            </HoverTip>
-                          )}
                           {c.lastFailed && (
                             <HoverTip text={t("message.failed")} className="inline-flex shrink-0">
                             <span
