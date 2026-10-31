@@ -17,6 +17,7 @@ import {
 } from "@/lib/datetime";
 import type { Rect } from "@/lib/anchoredSheet";
 import { STAFF_TINT, staffTint } from "@/lib/staffTint";
+import { customerName } from "@/lib/customerName";
 
 // The month, as a month reads: whether days are full, not what happens at
 // 14:15. The time grid answers "when exactly"; this answers "which day has
@@ -276,5 +277,5 @@ export function MonthGrid({
 
 function nameOf(row: MonthRow): string {
   if (!row.customer) return "";
-  return `${row.customer.firstName} ${row.customer.lastName ?? ""}`.trim();
+  return customerName(row.customer);
 }

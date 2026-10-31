@@ -21,6 +21,7 @@ import { Sheet } from "./Sheet";
 import { FieldsCard } from "./BusinessView";
 import { BulkComposer, BulkRunsCard, type BulkChannel } from "./BulkActions";
 import { HoverTip } from "./HoverTip";
+import { customerName, hasCustomerName } from "@/lib/customerName";
 
 // The list, and the definition of what the list HOLDS. Contact fields moved
 // here from the voice agent's strip on 2026-08-25 (Serdar: the app is for
@@ -91,7 +92,7 @@ type Column = {
 };
 
 function fullName(customer: Customer): string {
-  return `${customer.firstName} ${customer.lastName ?? ""}`.trim();
+  return customerName(customer);
 }
 
 // The same green dot the inbox rows wear, because it is the same fact:
@@ -694,7 +695,7 @@ export function CustomersView({
             >
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5">
-                  <span className="truncate font-medium">{fullName(customer)}</span>
+                  <span className={`truncate font-medium ${hasCustomerName(customer) ? "" : "text-[var(--muted)]"}`}>{fullName(customer)}</span>
                   {customer.needsAttention && (
                     <NewMark
                       onDismiss={() =>
@@ -848,7 +849,7 @@ export function CustomersView({
                     </td>
                     <td className="px-3 py-2.5 font-medium">
                       <span className="flex items-center gap-1.5">
-                        <span className="truncate">{fullName(customer)}</span>
+                        <span className={`truncate ${hasCustomerName(customer) ? "" : "text-[var(--muted)]"}`}>{fullName(customer)}</span>
                         {customer.needsAttention && (
                           <NewMark
                             onDismiss={() =>

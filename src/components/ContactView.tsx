@@ -28,6 +28,7 @@ import { useBookingSheet } from "./useBookingSheet";
 import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { useHeaderPanes, type HeaderPaneTarget } from "@/lib/HeaderPanes";
 import { rememberCustomer } from "@/lib/recentCustomers";
+import { customerName } from "@/lib/customerName";
 
 type CustomerAppointment = FunctionReturnType<
   typeof api.appointments.listForCustomer
@@ -243,7 +244,7 @@ export function ContactView({
   // Feed the recents list at the point of OPENING, whatever route opened this
   // page — that's what makes recents useful on their very first use.
   const recentName = customer
-    ? `${customer.firstName} ${customer.lastName ?? ""}`.trim()
+    ? customerName(customer)
     : null;
   const recentPhone = customer?.phone ?? null;
   useEffect(() => {
@@ -252,7 +253,7 @@ export function ContactView({
   }, [customerId, recentName, recentPhone]);
 
   // The shell header carries this person's name, so it has to travel up. Up
-  // here with recentName rather than beside customerName below, because that
+  // here with recentName rather than beside customerLabel below, because that
   // one is computed AFTER the loading early-returns and a hook cannot be.
   useEffect(() => {
     if (recentName === null) return;
@@ -309,7 +310,7 @@ export function ContactView({
         >
           <ConversationPanel
             customerId={customerId}
-            contactName={`${customer.firstName} ${customer.lastName ?? ""}`.trim()}
+            contactName={customerName(customer)}
             lastInboundAt={customer.lastInboundAt}
             filter={filter}
             initialItemId={initialItemId}
@@ -430,7 +431,7 @@ export function ContactRecord({
 
   // Built once. Four places wanted it and each carried its own copy of the
   // same `${first} ${last ?? ""}`.trim().
-  const customerName = `${customer.firstName} ${customer.lastName ?? ""}`.trim();
+  const customerLabel = customerName(customer);
 
   return (
     <>
@@ -470,11 +471,11 @@ export function ContactRecord({
                 startAt: Math.ceil(Date.now() / 3_600_000) * 3_600_000,
                 durationMinutes: DEFAULT_DURATION,
                 customerId,
-                customerName: customerName,
+                customerName: customerLabel,
               })
             }
             onOpen={(draft, anchor) =>
-              booking.open({ ...draft, customerId, customerName }, anchor)
+              booking.open({ ...draft, customerId, customerName: customerLabel }, anchor)
             }
           />
           <FieldRow label={t("customers.firstName")}>

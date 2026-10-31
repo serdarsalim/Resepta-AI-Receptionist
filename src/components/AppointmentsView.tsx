@@ -48,6 +48,7 @@ import { conflictText } from "@/lib/slotVerdict";
 import type { Rect } from "@/lib/anchoredSheet";
 import { HoverTip } from "./HoverTip";
 import { gmtLabel } from "@/lib/gmtLabel";
+import { customerName } from "@/lib/customerName";
 
 const STATUS_KEY: Record<string, TranslationKey> = {
   scheduled: "status.scheduled",
@@ -514,7 +515,7 @@ export function AppointmentsView({
       if (!passesFilters(appointment)) continue;
       const customer = appointment.customer;
       const matches = search.matches(
-        customer ? `${customer.firstName} ${customer.lastName ?? ""}` : "",
+        customer ? customerName(customer) : "",
         customer?.phone,
         appointment.serviceName,
         appointment.staffName,
@@ -732,7 +733,7 @@ export function AppointmentsView({
                 durationMinutes: row.durationMinutes ?? DEFAULT_DURATION,
                 customerId: row.customerId,
                 customerName: row.customer
-                  ? `${row.customer.firstName} ${row.customer.lastName ?? ""}`.trim()
+                  ? customerName(row.customer)
                   : undefined,
                 lines: (row.items ?? []).flatMap((item) =>
                   item.serviceId
@@ -785,7 +786,7 @@ export function AppointmentsView({
               durationMinutes: row.durationMinutes ?? 30,
               customerId: row.customerId,
               customerName: row.customer
-                ? `${row.customer.firstName} ${row.customer.lastName ?? ""}`.trim()
+                ? customerName(row.customer)
                 : undefined,
               // Snapshotted lines, not ids resolved fresh: the sheet has to
               // show what this visit recorded, not what the service costs now.
@@ -860,7 +861,7 @@ export function AppointmentsView({
                 body:
                   conflictText(t, result.verdict, {
                     customer: row.customer
-                      ? `${row.customer.firstName} ${row.customer.lastName ?? ""}`.trim()
+                      ? customerName(row.customer)
                       : undefined,
                     staff: row.staffName,
                   }) ??
@@ -919,7 +920,7 @@ export function AppointmentsView({
                     onClick={() => onOpenContact(appointment.customerId)}
                   >
                     {appointment.customer
-                      ? `${appointment.customer.firstName} ${appointment.customer.lastName ?? ""}`.trim()
+                      ? customerName(appointment.customer)
                       : ""}
                   </button>
                   <span className="block truncate text-xs text-[var(--muted)]">
@@ -2222,7 +2223,7 @@ function Calendar({
                     20,
                   );
                   const name = row.customer
-                    ? `${row.customer.firstName} ${row.customer.lastName ?? ""}`.trim()
+                    ? customerName(row.customer)
                     : "";
                   // Two lanes in a week column is about 75px each, and a name
                   // in 75px minus padding is three letters and an ellipsis.

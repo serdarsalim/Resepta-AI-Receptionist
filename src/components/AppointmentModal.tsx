@@ -37,6 +37,7 @@ import { staffSwatch } from "@/lib/staffTint";
 import { conflictText, type SlotVerdict } from "@/lib/slotVerdict";
 import { insideNotice } from "../../convex/lib/minNotice";
 import type { Id } from "../../convex/_generated/dataModel";
+import { customerName } from "@/lib/customerName";
 
 // The appointment sheet, opened by clicking a slot or a block on the grid,
 // or from a customer's record.
@@ -728,14 +729,14 @@ export function AppointmentModal({
                               onClick={() => {
                                 setPicked(customer._id);
                                 setCustomerQuery(
-                                  `${customer.firstName} ${customer.lastName ?? ""}`.trim(),
+                                  customerName(customer),
                                 );
                                 setListOpen(false);
                               }}
                               className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--row-hover-bg)]"
                             >
                               <span className="min-w-0 flex-1 truncate">
-                                {`${customer.firstName} ${customer.lastName ?? ""}`.trim()}
+                                {customerName(customer)}
                               </span>
                               <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">
                                 {customer.phone}
