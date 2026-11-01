@@ -22,6 +22,7 @@ import { InfoTip } from "@/components/InfoTip";
 import { buttonClass, fieldClass } from "@/components/Control";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import type { Search } from "@/lib/useTableState";
+import { TabLabel, tabClass } from "@/components/TabLabel";
 
 // The console's plane, and the reason /admin now looks like the product it
 // administers. The salon app gets its wash from AppShell's content pane
@@ -490,13 +491,9 @@ export function TabStrip<T extends string>({
           type="button"
           onClick={() => onSelect(entry.id)}
           aria-current={active === entry.id ? "page" : undefined}
-          className={`-mb-px border-b-2 px-0.5 py-2.5 text-sm transition-colors ${
-            active === entry.id
-              ? "border-[var(--foreground)] text-[var(--foreground)]"
-              : "border-transparent text-[var(--muted-strong)] hover:text-[var(--foreground)]"
-          }`}
+          className={tabClass(active === entry.id)}
         >
-          {entry.label}
+          <TabLabel text={entry.label} />
         </button>
       ))}
     </div>

@@ -12,6 +12,7 @@ import { AGENT_TAB_PARAM, VoiceAgentPage } from "./VoiceAgentPage";
 import { REVIEW_PARAM } from "./AgentNotes";
 import { VoiceCard } from "./VoiceCard";
 import { NumberRequestCard } from "./NumberRequestCard";
+import { TabLabel, tabClass } from "./TabLabel";
 
 // The voice agent's own sidebar destination. Two sections: the agents and the
 // calls themselves, including recording, transcript and summary. The provider
@@ -223,13 +224,9 @@ export function VoiceView() {
             type="button"
             onClick={() => setSection(entry.id)}
             aria-current={section === entry.id ? "page" : undefined}
-            className={`-mb-px border-b-2 px-0.5 py-2.5 text-sm transition-colors ${
-              section === entry.id
-                ? "border-[var(--foreground)] text-[var(--foreground)]"
-                : "border-transparent text-[var(--muted-strong)] hover:text-[var(--foreground)]"
-            }`}
+            className={tabClass(section === entry.id)}
           >
-            {entry.label}
+            <TabLabel text={entry.label} />
           </button>
         ))}
       </div>

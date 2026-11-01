@@ -43,6 +43,7 @@ import { ADDRESS_MAX_LINES, normaliseAddress } from "../../convex/lib/businessAd
 import { MAX_MIN_NOTICE_HOURS, type NoticeUnit } from "../../convex/lib/minNotice";
 import { HoverTip } from "./HoverTip";
 import { embedSnippet } from "@/lib/embed";
+import { TabLabel, tabClass } from "./TabLabel";
 
 // Business: how this business is SHAPED. Its identity, who works here, what it
 // sells, and what a customer record holds. Settings next door is the other
@@ -282,8 +283,7 @@ export function BusinessView() {
     <div className="mx-auto max-w-3xl space-y-4 page-stack">
       {/* Underline tabs, VoiceView's strip: the hairline belongs to the STRIP
           and each tab overlaps it with -mb-px, so the active underline
-          replaces that segment of the rule, and the weight never changes
-          between states. A member's View only pill rides the strip's right
+          replaces that segment of the rule (tabClass). A member's View only pill rides the strip's right
           end rather than taking a row of its own above it. */}
       <div className="flex flex-wrap items-center gap-5 border-b border-[var(--border)]">
         {SECTIONS.map((id) => (
@@ -292,13 +292,9 @@ export function BusinessView() {
             type="button"
             onClick={() => openSection(id)}
             aria-current={section === id ? "page" : undefined}
-            className={`-mb-px border-b-2 px-0.5 py-2.5 text-sm transition-colors ${
-              section === id
-                ? "border-[var(--foreground)] text-[var(--foreground)]"
-                : "border-transparent text-[var(--muted-strong)] hover:text-[var(--foreground)]"
-            }`}
+            className={tabClass(section === id)}
           >
-            {t(SECTION_LABEL[id])}
+            <TabLabel text={t(SECTION_LABEL[id])} />
           </button>
         ))}
         {!isOwner && (

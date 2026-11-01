@@ -573,10 +573,14 @@ chip (`TOOLTIP_LOOK`), instant, centred and clamped, via a portal.
 Canonical in Mana, `50_Knowledge/design-language.md`.
 
 - Strip: `flex items-center gap-5 border-b border-[var(--border)]`.
-- Tab: `-mb-px border-b-2 px-0.5 py-2.5 text-sm`.
-- Active: `border-[var(--foreground)] text-[var(--foreground)]`.
-- Idle: `border-transparent text-[var(--muted-strong)]`, hover `--foreground`.
-- **Weight never changes between states** (400 in both).
+- Tab: `tabClass(active)` with `<TabLabel text=… />` inside
+  (`src/components/TabLabel.tsx`); never a spelled copy.
+- Active: `--foreground` underline and text, **semibold** (Serdar,
+  2026-11-01, after Nudge; it was 400 in both states).
+- Idle: transparent underline, `--muted-strong`, regular, hover
+  `--foreground`.
+- **A click moves nothing**: `.tab-label` reserves each label's bold width
+  with an invisible bold copy.
 
 `VoiceView` is the reference. Value pickers that look like a strip (channel
 pills, feed filters) are NOT tabs.

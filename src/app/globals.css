@@ -330,6 +330,30 @@ thead {
   color: var(--page-title);
 }
 
+/* A tab's label (TabLabel.tsx): the open tab is semibold, so every label
+   reserves its bold width with an invisible bold copy and a click shifts
+   nothing (Nudge, 2026-11-01). The display rule sits in a layer so
+   `hidden` / `sm:hidden` utilities still win. */
+@layer components {
+  .tab-label {
+    display: inline-flex;
+    flex-direction: column;
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+.tab-label::after {
+  content: attr(data-label);
+  font-weight: 600;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  user-select: none;
+  pointer-events: none;
+}
+
 /* A record's NAME that opens it (2026-11-01, Serdar, after LinkedIn; Nudge's
    class): the ink colour and semibold in both themes, underlined on hover.
    Blue is for actions and real links (a website, an email); a name is

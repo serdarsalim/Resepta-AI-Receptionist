@@ -23,6 +23,7 @@ import { HoverTip } from "./HoverTip";
 import { buttonClass, fieldClass, iconButtonClass } from "./Control";
 import { useConfirm } from "./ConfirmDialog";
 import { customerName, hasCustomerName } from "@/lib/customerName";
+import { TabLabel, tabClass } from "./TabLabel";
 
 // The list and what was done to it. Contact fields lived on this strip from
 // 2026-08-25 (moved off the voice agent's strip so an owner could find them)
@@ -676,13 +677,9 @@ export function CustomersView({
               type="button"
               onClick={() => openTab(tab.key)}
               aria-current={activeTab === tab.key ? "page" : undefined}
-              className={`-mb-px max-w-[14rem] truncate border-b-2 px-0.5 py-2.5 text-sm transition-colors ${
-                activeTab === tab.key
-                  ? "border-[var(--foreground)] text-[var(--foreground)]"
-                  : "border-transparent text-[var(--muted-strong)] hover:text-[var(--foreground)]"
-              }`}
+              className={tabClass(activeTab === tab.key, "flex max-w-[14rem] min-w-0")}
             >
-              {tab.label}
+              <TabLabel text={tab.label} />
             </button>
           ))}
           <HoverTip text={t("views.new")} className="mb-1.5 inline-flex shrink-0">

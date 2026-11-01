@@ -27,6 +27,7 @@ import {
   type VoiceEditorSaveState,
   type VoiceVariable,
 } from "./VoiceVariablesEditor";
+import { TabLabel, tabClass } from "./TabLabel";
 
 // Everything about one voice agent that couples to this salon's data: the
 // prompt it speaks from, the variables it uses before/during/after a call,
@@ -786,20 +787,16 @@ export function VoiceAgentPage({
             with the version the provider has. On a phone the state takes a
             line of its own ABOVE the tabs, so the rule stays under them. */}
         <div className="flex flex-col-reverse gap-y-2 border-b border-[var(--border)] sm:flex-row sm:items-end sm:justify-between sm:gap-x-4">
-          <div className="-mb-px flex items-end gap-5">
+          <div className="flex items-end gap-5">
             {AGENT_TABS.map((entry) => (
               <button
                 key={entry.id}
                 type="button"
                 onClick={() => chooseTab(entry.id)}
                 aria-current={tab === entry.id ? "page" : undefined}
-                className={`border-b-2 px-0.5 py-2.5 text-sm transition-colors ${
-                  tab === entry.id
-                    ? "border-[var(--foreground)] text-[var(--foreground)]"
-                    : "border-transparent text-[var(--muted-strong)] hover:text-[var(--foreground)]"
-                }`}
+                className={tabClass(tab === entry.id)}
               >
-                {t(entry.label)}
+                <TabLabel text={t(entry.label)} />
               </button>
             ))}
           </div>

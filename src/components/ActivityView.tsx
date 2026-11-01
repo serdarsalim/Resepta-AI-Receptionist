@@ -14,6 +14,7 @@ import {
   BulkRunsCard,
   type BulkChannel,
 } from "./BulkActions";
+import { TabLabel, tabClass } from "./TabLabel";
 
 // What already happened in this business: who did what, and every bulk send
 // (Serdar, 2026-11-01). Opened from the clock in the top bar, never from the
@@ -82,7 +83,7 @@ export function ActivityView({
   return (
     <div className="space-y-4 page-stack">
       {/* VoiceView's strip: the hairline belongs to the strip, each tab
-          overlaps it with -mb-px, and the weight never changes. */}
+          overlaps it with -mb-px (tabClass). */}
       <div className="flex flex-wrap items-center gap-5 border-b border-[var(--border)]">
         {SECTIONS.map((entry) => (
           <button
@@ -93,13 +94,9 @@ export function ActivityView({
               setOpenRun(null);
             }}
             aria-current={section === entry.id ? "page" : undefined}
-            className={`-mb-px border-b-2 px-0.5 py-2.5 text-sm transition-colors ${
-              section === entry.id
-                ? "border-[var(--foreground)] text-[var(--foreground)]"
-                : "border-transparent text-[var(--muted-strong)] hover:text-[var(--foreground)]"
-            }`}
+            className={tabClass(section === entry.id)}
           >
-            {t(entry.label)}
+            <TabLabel text={t(entry.label)} />
           </button>
         ))}
       </div>
