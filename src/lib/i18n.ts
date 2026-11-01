@@ -7002,6 +7002,21 @@ const dictionary = {
     de: "Noch nichts aufgezeichnet.",
   },
   "activity.system": { tr: "Sistem", en: "System", de: "System" },
+  "nav.activity": { tr: "Hareketler", en: "Activity", de: "Aktivität" },
+  "activity.tabAll": { tr: "Tümü", en: "All", de: "Alle" },
+  "activity.tabBulk": { tr: "Toplu gönderimler", en: "Bulk sends", de: "Sammelversand" },
+  "activity.bulkSent": { tr: "Toplu gönderim", en: "Bulk send", de: "Sammelversand" },
+  "activity.other": { tr: "Değişiklik", en: "Change", de: "Änderung" },
+  "activity.customer_updated": {
+    tr: "Müşteri bilgileri değişti",
+    en: "Customer details changed",
+    de: "Kundendaten geändert",
+  },
+  "activity.note_added": {
+    tr: "Not eklendi",
+    en: "Note added",
+    de: "Notiz hinzugefügt",
+  },
   "activity.appointment_created": {
     tr: "Randevu oluşturuldu",
     en: "Appointment created",

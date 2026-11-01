@@ -19,6 +19,7 @@ import { HeaderSearchProvider, useHeaderSearchSlot } from "@/lib/HeaderSearch";
 import { useHeaderPanesSlot, HeaderPanesProvider } from "@/lib/HeaderPanes";
 import { FeedIcon } from "./FeedIcon";
 import { SegmentedControl } from "./SegmentedControl";
+import { iconButtonClass } from "./Control";
 import { Avatar } from "./Avatar";
 import { useAnchoredPanel } from "@/lib/useAnchoredPanel";
 import { SearchInput } from "./DataTable";
@@ -46,7 +47,8 @@ export type TabId =
   | "knowledge"
   | "billing"
   | "business"
-  | "account";
+  | "account"
+  | "activity";
 
 const SIDEBAR_COLLAPSED_KEY = "randevu.sidebar-collapsed";
 
@@ -323,8 +325,8 @@ const NAV_TABS: {
 // its own tab). One config destination remains.
 // Below the divider: "about this workspace", as opposed to today's work above
 // it. Recent activity spent an hour here on 2026-08-12 and went to the platform
-// admin's org page instead: an audit log is a debugging surface whose readers
-// are operators, and a salon owner has no use for a page of "settings changed".
+// admin's org page; it came back on 2026-11-01 as Activity, opened from the
+// header's clock rather than a row here, because the sidebar does not grow.
 const FOOT_TABS: typeof NAV_TABS = [
   {
     id: "business",
@@ -537,6 +539,8 @@ function ShellHeader({
   crumbs,
   overrideContactId,
   onOpenMenu,
+  onOpenActivity,
+  activityActive,
 }: {
   titleKey: TranslationKey;
   // A record opened ON TOP of a tab, naming itself here instead of letting the
@@ -563,6 +567,10 @@ function ShellHeader({
   // depend on a child under it handing elements or closures back up.
   overrideContactId?: Id<"customers">;
   onOpenMenu: () => void;
+  // The clock: Activity, which has no sidebar row (Serdar, 2026-11-01: the
+  // sidebar does not grow). Nudge's header carries the same door.
+  onOpenActivity: () => void;
+  activityActive: boolean;
 }) {
   const { t } = useLanguage();
   const { query, setQuery, placeholder, jumpToCustomer } = useHeaderSearchSlot();
@@ -752,6 +760,22 @@ function ShellHeader({
             )}
           </div>
         )}
+        <HoverTip text={t("nav.activity")}>
+          <button
+            type="button"
+            onClick={onOpenActivity}
+            aria-label={t("nav.activity")}
+            aria-current={activityActive ? "page" : undefined}
+            className={iconButtonClass(activityActive ? "ghost" : "quiet", "sm")}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              {/* A clock turning back: what already happened. Nudge's glyph. */}
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M12 7v5l4 2" />
+            </svg>
+          </button>
+        </HoverTip>
         {/* No avatar here, on any width (Serdar, 2026-08-31). The phone used
             to keep one on the reasoning that no sidebar was showing — but the
             drawer carries the same profile row, so the header avatar was a
@@ -1576,7 +1600,9 @@ export function AppShell({
   const titleKey: TranslationKey =
     tab === "account"
       ? "account.title"
-      : ([...NAV_TABS, ...FOOT_TABS, BILLING_TAB].find(
+      : tab === "activity"
+        ? "nav.activity"
+        : ([...NAV_TABS, ...FOOT_TABS, BILLING_TAB].find(
           (entry) => entry.id === tab,
         )?.key ?? "app.name");
 
@@ -1822,6 +1848,8 @@ export function AppShell({
             crumbs={crumbs}
             overrideContactId={overrideContactId}
             onOpenMenu={() => setMobileOpen(true)}
+            onOpenActivity={() => goTo("activity")}
+            activityActive={tab === "activity"}
           />
           {/* Nudge's rule for the bottom edge, ported: a view whose cards scroll
             INSIDE themselves has no content end to breathe after, so padding

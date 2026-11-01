@@ -18,7 +18,7 @@ import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { ColumnPicker, HeaderFilter, MenuItem, Th } from "./DataTable";
 import { PhoneInput } from "./PhoneField";
 import { Sheet } from "./Sheet";
-import { BulkComposer, BulkRunsCard, type BulkChannel } from "./BulkActions";
+import { BulkComposer, type BulkChannel } from "./BulkActions";
 import { HoverTip } from "./HoverTip";
 import { customerName, hasCustomerName } from "@/lib/customerName";
 
@@ -28,11 +28,10 @@ import { customerName, hasCustomerName } from "@/lib/customerName";
 // business records about a customer is setup, done once, and setup lives with
 // the other settings rather than beside the daily list.
 //
-// Bulk sits beside List rather than earning a sidebar door of its own
-// (Serdar, 2026-08-29). It acts on the selection made in the list one tab
-// over, and a history of what that selection did is not a destination anybody
-// navigates to cold.
-type CustomersSection = "list" | "bulk";
+// Bulk sends started here as a tab too (2026-08-29) and moved to Activity on
+// 2026-11-01: a history of what a selection did belongs with the rest of what
+// happened. Starting one stays here, on the selection; a sent run lands on
+// Activity's Bulk sends.
 
 type Customer = FunctionReturnType<typeof api.customers.listPage>["page"][number];
 type ContactField = Doc<"contactFields">;
@@ -180,15 +179,16 @@ function csvCell(value: string): string {
 
 export function CustomersView({
   onOpenContact,
+  onOpenBulkSends,
 }: {
   onOpenContact: (id: Id<"customers">) => void;
+  onOpenBulkSends: () => void;
 }) {
   const { t, language } = useLanguage();
   const customers = useCustomerBook();
   const contactFields = useQuery(api.contactFields.list, {});
   const setAttention = useMutation(api.messages.setAttention);
   const [adding, setAdding] = useState(false);
-  const [section, setSection] = useState<CustomersSection>("list");
   // Ticked rows, and the anchor a shift-click sweeps from. Both ported from
   // RevenueView, which is this app's only prior multi-select and already
   // settled the two decisions that matter: the anchor is an index into the
@@ -204,9 +204,6 @@ export function CustomersView({
   const anchor = useRef<number | null>(null);
   // Which composer is open over the list, if any. Null is the resting state.
   const [composing, setComposing] = useState<BulkChannel | null>(null);
-  // A follow-up's recipients (P13b): the people a past run's detail showed,
-  // composed to instead of the list's selection, which stays as it was.
-  const [followUp, setFollowUp] = useState<Doc<"customers">[] | null>(null);
   const me = useQuery(api.orgs.current, {});
 
   // Opening the record IS reading it, so the dot goes out on the way in — the
@@ -872,43 +869,7 @@ export function CustomersView({
 
   return (
     <div className="space-y-4 page-stack">
-      {/* Ported from VoiceView, which is this app's reference tab strip: the
-          hairline belongs to the STRIP and each tab overlaps it with -mb-px,
-          so the active underline replaces that segment of the rule rather than
-          sitting under it, and the weight never changes between states. */}
-      <div className="flex flex-wrap items-center gap-5 border-b border-[var(--border)]">
-        {(
-          [
-            { id: "list" as const, label: t("customers.tabList") },
-            { id: "bulk" as const, label: t("bulk.title") },
-          ] as { id: CustomersSection; label: string }[]
-        ).map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            onClick={() => setSection(entry.id)}
-            aria-current={section === entry.id ? "page" : undefined}
-            className={`-mb-px border-b-2 px-0.5 py-2.5 text-sm transition-colors ${
-              section === entry.id
-                ? "border-[var(--foreground)] text-[var(--foreground)]"
-                : "border-transparent text-[var(--muted-strong)] hover:text-[var(--foreground)]"
-            }`}
-          >
-            {entry.label}
-          </button>
-        ))}
-      </div>
-
-      {section === "list" && list}
-      {section === "bulk" && (
-        <BulkRunsCard
-          onOpenContact={onOpenContact}
-          onFollowUp={(channel, people) => {
-            setFollowUp(people);
-            setComposing(channel);
-          }}
-        />
-      )}
+      {list}
 
       {/* Mounted beside the list rather than inside it: the composer is a
           drill-in over the whole tab (AGENTS: adding is a sheet you open),
@@ -917,16 +878,12 @@ export function CustomersView({
       {composing && (
         <BulkComposer
           channel={composing}
-          customers={followUp ?? picked}
-          onClose={() => {
-            setComposing(null);
-            setFollowUp(null);
-          }}
+          customers={picked}
+          onClose={() => setComposing(null)}
           onSent={() => {
             setComposing(null);
-            if (followUp) setFollowUp(null);
-            else clearSelection();
-            setSection("bulk");
+            clearSelection();
+            onOpenBulkSends();
           }}
         />
       )}

@@ -17,6 +17,7 @@ import { KnowledgeView } from "@/components/KnowledgeView";
 import { AccountView } from "@/components/AccountView";
 import { BillingView } from "@/components/BillingView";
 import { ContactView } from "@/components/ContactView";
+import { ActivityView, type ActivitySection } from "@/components/ActivityView";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { FeedFilter } from "@/components/ConversationPanel";
 
@@ -70,6 +71,10 @@ export function AppHome() {
   // click was meant to solve. WhatsApp and notes need nothing: those channels
   // open as a thread with the newest message already at the bottom.
   const [contactItem, setContactItem] = useState<string | undefined>(undefined);
+  // Which Activity tab opens: Bulk sends after a send from Customers, All
+  // from the clock. Bumped with the tab so a second send remounts onto it.
+  const [activitySection, setActivitySection] = useState<ActivitySection>("all");
+  const [activityKey, setActivityKey] = useState(0);
   // Which business the ids above belong to. AppShell subscribes to this same
   // query, so reading it here opens no second subscription.
   //
@@ -189,6 +194,8 @@ export function AppHome() {
   // hatch for anyone trained on it.
   const setTab = (next: TabId) => {
     if (next === tab) setContactId(null);
+    // The clock opens Activity on All; only a send lands it on Bulk sends.
+    if (next === "activity" && tab !== "customers") setActivitySection("all");
     setTabState(next);
     window.localStorage.setItem(TAB_STORAGE_KEY, next);
     // replaceState, not push: the tab strip is not history. Filling the back
@@ -244,7 +251,16 @@ export function AppHome() {
             {tab === "appointments" && (
               <AppointmentsView onOpenContact={openContact} />
             )}
-            {tab === "customers" && <CustomersView onOpenContact={openContact} />}
+            {tab === "customers" && (
+              <CustomersView
+                onOpenContact={openContact}
+                onOpenBulkSends={() => {
+                  setActivitySection("bulk");
+                  setActivityKey((n) => n + 1);
+                  setTab("activity");
+                }}
+              />
+            )}
             {tab === "inbox" && <InboxView onOpenContact={openContact} />}
             {tab === "voice" && <VoiceView />}
             {/* Content the business maintains, not configuration: every agent
@@ -262,6 +278,14 @@ export function AppHome() {
             {tab === "business" && <BusinessView />}
             {/* Personal, not org config. Only the avatar menu routes here. */}
             {tab === "account" && <AccountView />}
+            {/* What already happened. Only the header's clock routes here. */}
+            {tab === "activity" && (
+              <ActivityView
+                key={activityKey}
+                initialSection={activitySection}
+                onOpenContact={openContact}
+              />
+            )}
           </>
         )}
       </ErrorBoundary>
@@ -297,4 +321,5 @@ const TAB_IDS: TabId[] = [
   "billing",
   "business",
   "account",
+  "activity",
 ];

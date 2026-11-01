@@ -340,7 +340,7 @@ export function BulkComposer({
 //
 // Read-only by design. Composing here would mean choosing recipients on a
 // screen with no contact list, which is how nudge ended up with two screens
-// wearing one tab. The verbs live on the selection in the list one tab over;
+// wearing one tab. The verbs live on the selection in the Customers list;
 // what lives here is pause, resume, stop, and the answer to "what actually
 // happened to these people".
 export function BulkRunsCard({
@@ -364,6 +364,7 @@ export function BulkRunsCard({
       <RunDetail
         runId={openRun}
         onBack={() => setOpenRun(null)}
+        backLabel={t("activity.tabBulk")}
         onOpenContact={onOpenContact}
         onFollowUp={onFollowUp}
       />
@@ -451,25 +452,33 @@ function StatusPill({ status, held }: { status: string; held?: boolean }) {
   );
 }
 
+// Exported for Activity's All feed, which opens a run from its own list.
+export { RunDetail as BulkRunDetail };
+
 function RunDetail({
   runId,
   onBack,
+  backLabel,
   onOpenContact,
   onFollowUp,
 }: {
   runId: Id<"bulkRuns">;
   onBack: () => void;
+  // The list the breadcrumb leads back to. Unset is the tab's own title,
+  // which is right when the run was opened from Activity's All feed.
+  backLabel?: string;
   onOpenContact: (id: Id<"customers">) => void;
   onFollowUp: (channel: BulkChannel, customers: Doc<"customers">[]) => void;
 }) {
   const { t, language } = useLanguage();
   const detail = useQuery(api.bulkRuns.detail, { runId });
-  // "Bulk › <run>" in the title bar, and the breadcrumb is the way back to
-  // the runs (P25). Customers is the tab, so the list's own name is given.
+  // "Bulk sends › <run>" in the title bar, and the breadcrumb is the way
+  // back to the runs (P25). Activity is the tab, so the list's own name is
+  // given when the run was opened from the Bulk sends list.
   useHeaderTrail({
-    title: detail?.run.label ?? t("bulk.title"),
+    title: detail?.run.label ?? t("activity.tabBulk"),
     back: onBack,
-    backLabel: t("bulk.title"),
+    backLabel,
   });
   // Which answers the list shows; empty is everyone. Several at once, the
   // way every filter here works (Nudge 2eeef0a7).
