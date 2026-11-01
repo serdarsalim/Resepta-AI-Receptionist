@@ -2652,6 +2652,8 @@ function CallRow({
   );
   const answers = collectedEntries(c.collected, t);
   const hasCollected = answers.length > 0;
+  const showFacts =
+    hasCollected || (!missed && (facts.length > 0 || provenance.length > 0));
   // The actions at the meta line's size and weight, so the summary stays the
   // loudest thing on the row (Serdar, 2026-11-01). Written out rather than a
   // Control variant, since stacking text-xs on one is a bet on Tailwind's
@@ -2732,11 +2734,10 @@ function CallRow({
           agent collected, one per line. A call that never reached anyone and
           has nothing to say stays one line. Narrow, the column drops under
           the summary. */}
-      {(c.summary ||
-        setOff.length > 0 ||
-        hasCollected ||
-        (!missed && (facts.length > 0 || provenance.length > 0))) && (
-        <div className="mt-1.5 grid gap-x-8 gap-y-3 @2xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      {/* The actions and what they open live in the summary's column, under
+          it, at its width (Serdar, 2026-11-01); the right column never pushes
+          them down. Narrow: summary, actions, the opened panel, the answers. */}
+      <div className="mt-1.5 grid gap-x-8 gap-y-3 @2xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <div className="min-w-0 max-w-[65ch]">
             {c.summary && (
               <p className="whitespace-pre-wrap break-words leading-6 text-[var(--foreground)]">
@@ -2750,7 +2751,100 @@ function CallRow({
                 ))}
               </ul>
             )}
+            <div className={`-ml-2 flex items-center gap-0.5 ${c.summary || setOff.length > 0 ? "mt-3" : ""}`}>
+              {c.recordingUrl && (
+                <button
+                  type="button"
+                  aria-expanded={playerOpen}
+                  onClick={() => setPlayerOpen((open) => !open)}
+                  className={action(playerOpen)}
+                >
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden>
+                    <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" />
+                  </svg>
+                  {t("calls.play")}
+                  {/* The length rides Play (Serdar, 2026-11-01), not a facts row. */}
+                  {c.durationSec ? (
+                    <span className="tabular-nums text-[var(--muted)]">{formatDuration(c.durationSec)}</span>
+                  ) : null}
+                </button>
+              )}
+              {c.transcript && (
+                <button
+                  type="button"
+                  aria-expanded={transcriptOpen}
+                  onClick={() => setTranscriptOpen((open) => !open)}
+                  className={action(transcriptOpen)}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="12"
+                    height="12"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                  {t("calls.transcript")}
+                </button>
+              )}
+              <button
+                type="button"
+                aria-expanded={reviewOpened}
+                onClick={() => {
+                  if (reviewOpened) return setReviewOpened(false);
+                  setReviewOpened(true);
+                  setNoteSignal((n) => n + 1);
+                }}
+                className={action(reviewOpened)}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="12"
+                  height="12"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <rect x="8" y="2" width="8" height="4" rx="1" />
+                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                  <path d="m9 14 2 2 4-4" />
+                </svg>
+                {t("review.title")}
+                {c.verdict ? (
+                  <VerdictMark verdict={c.verdict} />
+                ) : hasNote ? (
+                  <span aria-hidden className="size-1.5 rounded-full bg-[var(--muted-strong)]" />
+                ) : null}
+              </button>
+            </div>
+            {reviewOpened && <div className="mt-2">{review}</div>}
+            {/* Ours rather than the browser's player: it knows the length before a
+                byte is fetched (CallRecording). Mounted by the press, so it plays. */}
+            {playerOpen && c.recordingUrl && (
+              <CallRecording
+                url={c.recordingUrl}
+                durationMs={c.durationSec !== undefined ? c.durationSec * 1000 : undefined}
+                autoPlay
+                className="mt-2"
+              />
+            )}
+            {/* The transcript straight on the paper, the bubbles' own surfaces
+                doing the work, as the WhatsApp thread beside it does. */}
+            {transcriptOpen && c.transcript && (
+              <div className="mt-3">
+                <CallTranscript flow transcript={c.transcript} contactName={contactName} />
+              </div>
+            )}
           </div>
+          {showFacts && (
           <div className="min-w-0 @2xl:pt-0.5">
             {/* One grid for the call's facts and its answers, so every
                 value starts at one edge; a hairline between the two groups
@@ -2784,100 +2878,8 @@ function CallRow({
               </p>
             )}
           </div>
-        </div>
-      )}
-      <div className="-ml-2 mt-2 flex items-center gap-0.5">
-        {c.recordingUrl && (
-          <button
-            type="button"
-            aria-expanded={playerOpen}
-            onClick={() => setPlayerOpen((open) => !open)}
-            className={action(playerOpen)}
-          >
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden>
-              <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" />
-            </svg>
-            {t("calls.play")}
-            {/* The length rides Play (Serdar, 2026-11-01), not a facts row. */}
-            {c.durationSec ? (
-              <span className="tabular-nums text-[var(--muted)]">{formatDuration(c.durationSec)}</span>
-            ) : null}
-          </button>
-        )}
-        {c.transcript && (
-          <button
-            type="button"
-            aria-expanded={transcriptOpen}
-            onClick={() => setTranscriptOpen((open) => !open)}
-            className={action(transcriptOpen)}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="12"
-              height="12"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-            {t("calls.transcript")}
-          </button>
-        )}
-        <button
-          type="button"
-          aria-expanded={reviewOpened}
-          onClick={() => {
-            if (reviewOpened) return setReviewOpened(false);
-            setReviewOpened(true);
-            setNoteSignal((n) => n + 1);
-          }}
-          className={action(reviewOpened)}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            width="12"
-            height="12"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden
-          >
-            <rect x="8" y="2" width="8" height="4" rx="1" />
-            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-            <path d="m9 14 2 2 4-4" />
-          </svg>
-          {t("review.title")}
-          {c.verdict ? (
-            <VerdictMark verdict={c.verdict} />
-          ) : hasNote ? (
-            <span aria-hidden className="size-1.5 rounded-full bg-[var(--muted-strong)]" />
-          ) : null}
-        </button>
+          )}
       </div>
-      {reviewOpened && <div className="mt-2">{review}</div>}
-      {/* Ours rather than the browser's player: it knows the length before a
-          byte is fetched (CallRecording). Mounted by the press, so it plays. */}
-      {playerOpen && c.recordingUrl && (
-        <CallRecording
-          url={c.recordingUrl}
-          durationMs={c.durationSec !== undefined ? c.durationSec * 1000 : undefined}
-          autoPlay
-          className="mt-2"
-        />
-      )}
-      {/* The transcript straight on the paper, the bubbles' own surfaces
-          doing the work, as the WhatsApp thread beside it does. */}
-      {transcriptOpen && c.transcript && (
-        <div className="mt-3">
-          <CallTranscript flow transcript={c.transcript} contactName={contactName} />
-        </div>
-      )}
     </div>
   );
 }
