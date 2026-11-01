@@ -167,8 +167,8 @@ export function CallOutcomePill({
 
 // The conversation pane's call row leads with the same verdict as a dot and a
 // word rather than a pill (2026-11-01): a row in a timeline, not a tag on a
-// card. Successful is emerald, Unsuccessful a soft red, since on a row of
-// plain text amber reads as "unsaved" here. A call that never reached anyone
+// card. The dot is emerald for Successful and a soft red for Unsuccessful,
+// since on a row of plain text amber reads as "unsaved" here. A call that never reached anyone
 // keeps its line's word beside a muted phone glyph struck through, because
 // "nobody picked up" is not a verdict on the agent.
 export function CallVerdictMark({
@@ -186,14 +186,11 @@ export function CallVerdictMark({
   const { label, tone, missed } = verdict;
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1.5 text-sm font-medium ${
-        missed
-          ? "text-[var(--muted-strong)]"
-          : tone === "good"
-            ? "text-emerald-700 dark:text-emerald-400"
-            : tone === "bad"
-              ? "text-red-600/90 dark:text-red-400"
-              : "text-[var(--foreground)]"
+      // The dot carries the hue and the word stays in ink at regular weight:
+      // a green or red word read too loud on a row of quiet text (Serdar,
+      // 2026-11-01).
+      className={`inline-flex shrink-0 items-center gap-1.5 text-sm ${
+        missed ? "text-[var(--muted-strong)]" : "text-[var(--foreground)]"
       }`}
       title={verdict.verdictTitle}
     >
@@ -219,9 +216,9 @@ export function CallVerdictMark({
           aria-hidden
           className={`h-2 w-2 shrink-0 rounded-full ${
             tone === "good"
-              ? "bg-emerald-500"
+              ? "bg-emerald-500/80"
               : tone === "bad"
-                ? "bg-red-400"
+                ? "bg-red-400/80"
                 : "bg-[var(--muted)]"
           }`}
         />
