@@ -2574,12 +2574,11 @@ function CallRow({
   // The Note action opens the review's box and puts the caret in it.
   const [noteSignal, setNoteSignal] = useState(0);
   // A call with a review (a note or a verdict) shows its Review line under
-  // the summary; one without shows nothing until the Review action opens it,
-  // and then UNDER the actions row, so the button pressed stays under the
-  // pointer (Serdar, 2026-11-01). Opened here, it stays there this mount.
-  const [reviewOpenedHere, setReviewOpenedHere] = useState(false);
+  // the summary; one without shows nothing until the Review action opens it
+  // in that same place, above the actions (Serdar, 2026-11-01).
+  const [reviewOpened, setReviewOpened] = useState(false);
   const hasReview = !!c.note?.trim() || !!c.verdict;
-  const reviewAbove = hasReview && !reviewOpenedHere;
+  const showReview = hasReview || reviewOpened;
 
   // What the call set in motion. Nudge titles this "Automations"; here it is
   // what the agent did on the call, and each line names itself.
@@ -2793,7 +2792,7 @@ function CallRow({
           </div>
         </div>
       )}
-      {reviewAbove && <div className="mt-3">{review}</div>}
+      {showReview && <div className="mt-3">{review}</div>}
       <div className="-ml-2 mt-2 flex items-center gap-0.5">
         {c.recordingUrl && (
           <button
@@ -2833,12 +2832,12 @@ function CallRow({
         )}
         <button
           type="button"
-          aria-expanded={reviewAbove || reviewOpenedHere}
+          aria-expanded={showReview}
           onClick={() => {
-            if (!reviewAbove && !reviewOpenedHere) setReviewOpenedHere(true);
+            setReviewOpened(true);
             setNoteSignal((n) => n + 1);
           }}
-          className={action(reviewOpenedHere)}
+          className={action(reviewOpened && !hasReview)}
         >
           <svg
             viewBox="0 0 24 24"
@@ -2857,7 +2856,6 @@ function CallRow({
           {t("review.title")}
         </button>
       </div>
-      {reviewOpenedHere && <div className="mt-3">{review}</div>}
       {/* Ours rather than the browser's player: it knows the length before a
           byte is fetched (CallRecording). Mounted by the press, so it plays. */}
       {playerOpen && c.recordingUrl && (
