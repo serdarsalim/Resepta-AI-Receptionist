@@ -25,7 +25,6 @@ import {
 } from "@/lib/datetime";
 import {
   CallTranscript,
-  CallVerdictMark,
   callVerdict,
   collectedEntries,
   humanizeCallEnd,
@@ -2608,12 +2607,12 @@ function CallFacts({ c, withStamp = false }: { c: CallCardItem; withStamp?: bool
   const { line, missed } = callShape(c);
   const wordSaysEnding =
     line === "no-answer" || line === "busy" || line === "voicemail" || line === "declined";
-  const verdict = callVerdict(c.outcome, c.disconnectionReason, c.durationSec, t);
-  // A missed call's outcome is its word (Voicemail); a call that ran says how
-  // it ended (who hung up). The agent's own success verdict stays off: it was
-  // confusing and often wrong (Serdar, 2026-11-01).
+  // A missed call's pill already says its outcome (Voicemail), so its facts
+  // leave it out; a call that ran says how it ended (who hung up). The
+  // agent's own success verdict stays off: it was confusing and often wrong
+  // (Serdar, 2026-11-01).
   const ended = missed
-    ? verdict?.label ?? null
+    ? null
     : wordSaysEnding
       ? null
       : humanizeCallEnd(c.disconnectionReason, t);
@@ -2716,7 +2715,7 @@ function CallRow({
       ? t("calls.callbackRequested", { when: formatDateTime(c.callbackRequestedFor, language, tz) })
       : null,
   ].filter((fact): fact is string => !!fact);
-  const { missed } = callShape(c);
+  const { line, missed } = callShape(c);
   // Line 1's quiet half is who rang whom and nothing else (Serdar,
   // 2026-11-01: "Ahmet Ak → agent" reads faster than "Inbound call"). The
   // customer by the name on the record, or by the number while nobody has
@@ -2725,8 +2724,18 @@ function CallRow({
   const agentSide = c.agentName || t("calls.agent");
   const from = c.inbound ? customerSide : agentSide;
   const to = c.inbound ? agentSide : customerSide;
-  // The verdict word leads a missed row's top line (CallVerdictMark).
+  // How the call went, as a pill before how long ago, the word in the ink on
+  // a wash: green Answered, red for the line's word on a call that never
+  // reached a person (Voicemail, No answer). A call logged with its own
+  // outcome words has none; its facts say it (Serdar, 2026-11-01, in Nudge).
   const verdict = callVerdict(c.outcome, c.disconnectionReason, c.durationSec, t);
+  const pill = missed
+    ? verdict
+      ? { word: verdict.label, tone: "bg-red-500/15 dark:bg-red-400/20" }
+      : null
+    : line === "answered"
+      ? { word: t("bulk.outcomeAnswered"), tone: "bg-emerald-500/15 dark:bg-emerald-400/20" }
+      : null;
   // A missed call's summary says what its word already said, so it shows
   // only once the row is selected.
   const showSummary = !!c.summary && (selected || !missed);
@@ -2760,12 +2769,13 @@ function CallRow({
         ? "bg-[color-mix(in_srgb,var(--foreground)_10%,transparent)] text-[var(--foreground)]"
         : "text-[var(--muted)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]"
     }`;
-  // A call that never reached a person has nothing said to read or review,
-  // so it offers only its recording, when there is one (Serdar, 2026-11-01,
-  // in Nudge).
+  // A call that never reached a person has nothing said to hear, read or
+  // review: a voicemail's few seconds of greeting included, it offers no
+  // actions at all (Serdar, 2026-11-01, in Nudge).
+  const showPlay = !!c.recordingUrl && !missed;
   const showTranscript = !!c.transcript && !missed;
   const showReview = !missed;
-  const hasActions = !!c.recordingUrl || showTranscript || showReview;
+  const hasActions = showPlay || showTranscript || showReview;
 
   return (
     <div
@@ -2800,13 +2810,6 @@ function CallRow({
             }}
             className="flex min-w-0 flex-1 cursor-pointer items-baseline whitespace-nowrap rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
           >
-            {missed && (
-              <CallVerdictMark
-                outcome={c.outcome}
-                disconnectionReason={c.disconnectionReason}
-                durationSec={c.durationSec}
-              />
-            )}
             <span
               className="min-w-0 truncate text-xs text-[var(--muted)]"
               title={[
@@ -2817,8 +2820,6 @@ function CallRow({
                 .filter(Boolean)
                 .join(" · ")}
             >
-              {/* The verdict's separator, so the line reads as one. */}
-              {verdict && missed && " · "}
               {from}
               {/* Drawn, not typed: a typed arrow arrives at whatever weight
                   the font's own glyph has. */}
@@ -2840,6 +2841,13 @@ function CallRow({
               {to}
             </span>
           </button>
+          {pill && (
+            <span
+              className={`shrink-0 self-center rounded-full px-1.5 text-xs leading-4 text-[var(--foreground)] ${pill.tone}`}
+            >
+              {pill.word}
+            </span>
+          )}
           <span
             className="shrink-0 text-xs tabular-nums text-[var(--muted)]"
             title={formatDateTime(c.at, language, tz)}
@@ -2874,7 +2882,7 @@ function CallRow({
               <div
                 className={`-ml-2 flex items-center gap-0.5 ${showSummary || (selected && setOff.length > 0) ? "mt-4" : ""}`}
               >
-                {c.recordingUrl && (
+                {showPlay && (
                   <button
                     type="button"
                     aria-expanded={playerOpen}
@@ -2953,7 +2961,7 @@ function CallRow({
             {showReview && reviewOpened && <div className="mt-2">{review}</div>}
             {/* Ours rather than the browser's player: it knows the length before a
                 byte is fetched (CallRecording). Mounted by the press, so it plays. */}
-            {playerOpen && c.recordingUrl && (
+            {playerOpen && showPlay && c.recordingUrl && (
               <CallRecording
                 url={c.recordingUrl}
                 durationMs={c.durationSec !== undefined ? c.durationSec * 1000 : undefined}

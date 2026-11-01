@@ -99,19 +99,24 @@ export function formatFeedStamp(
   return `${date} · ${time}`;
 }
 
-// How long ago, in the language's own short words: "5m ago", "1h ago",
-// "yesterday", "3d ago", "2mo ago" (Turkish "3 gün önce", German "vor 3
+// How long ago, in the language's own short words: "5 min. ago", "3 days
+// ago", "2 wk. ago", "1 mo. ago" (Turkish "3 gün önce", German "vor 3
 // Tagen"). A call row says this and its facts column the exact date, so the
 // two never repeat each other (Serdar, 2026-11-01).
 export function formatAgo(ms: number, language: Language, now: number = Date.now()): string {
-  const f = new Intl.RelativeTimeFormat(LOCALE[language], { style: "narrow", numeric: "auto" });
+  // Always a number ("1 mo. ago", never "last mo."), weeks between days and
+  // months (Serdar, 2026-11-01, in Nudge).
+  const f = new Intl.RelativeTimeFormat(LOCALE[language], { style: "short", numeric: "always" });
   const minutes = Math.floor(Math.max(0, now - ms) / 60_000);
-  if (minutes < 1) return f.format(0, "second");
+  if (minutes < 1) {
+    return new Intl.RelativeTimeFormat(LOCALE[language], { numeric: "auto" }).format(0, "second");
+  }
   if (minutes < 60) return f.format(-minutes, "minute");
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return f.format(-hours, "hour");
   const days = Math.floor(hours / 24);
-  if (days < 30) return f.format(-days, "day");
+  if (days < 7) return f.format(-days, "day");
+  if (days < 30) return f.format(-Math.floor(days / 7), "week");
   if (days < 365) return f.format(-Math.floor(days / 30), "month");
   return f.format(-Math.floor(days / 365), "year");
 }
