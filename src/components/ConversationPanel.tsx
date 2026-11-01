@@ -2616,23 +2616,14 @@ function CallRow({
   // length (a zero length shows nothing) and how it ended, then who or what
   // placed the call, which says itself in a sentence.
   const ended = wordSaysEnding ? null : humanizeCallEnd(c.disconnectionReason, t);
-  // Result leads the column (Serdar, 2026-11-01): the verdict means
-  // something read beside what the call was, not as the row's first word.
+  // The verdict word leads a missed row's top line (CallVerdictMark).
   const verdict = callVerdict(c.outcome, c.disconnectionReason, c.durationSec, t);
-  // The Result's value carries the verdict's colour, softened, at regular
-  // weight (Serdar, 2026-11-01: a dot on the top line read as a puzzle).
-  const resultTone =
-    verdict?.tone === "good"
-      ? "text-emerald-700/90 dark:text-emerald-400/90"
-      : verdict?.tone === "bad"
-        ? "text-red-600/85 dark:text-red-400/90"
-        : "text-[var(--foreground)]";
+  // How the call ended leads the column, then its length. No Result line:
+  // the agent's own success verdict was confusing and often wrong (Serdar,
+  // 2026-11-01).
   const facts: Array<[string, string, string?]> = [
-    ...(verdict && !missed
-      ? [[t("calls.result"), verdict.label, resultTone] as [string, string, string]]
-      : []),
+    ...(ended ? [[t("calls.callOutcome"), ended] as [string, string]] : []),
     ...(c.durationSec ? [[t("calls.length"), formatDuration(c.durationSec)] as [string, string]] : []),
-    ...(ended ? [[t("calls.ended"), ended] as [string, string]] : []),
   ];
   const provenance = [
     c.placedBy ? t("calls.placedBy", { name: c.placedBy }) : null,
