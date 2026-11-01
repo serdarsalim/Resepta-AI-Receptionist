@@ -2766,10 +2766,9 @@ function CallRow({
                   </div>
                 ))}
                 {facts.length > 0 && hasCollected && (
-                  <div
-                    aria-hidden
-                    className="col-span-2 my-1 border-t border-[color-mix(in_srgb,var(--border)_50%,transparent)]"
-                  />
+                  // No rule over one line of facts (Serdar, 2026-11-01): a
+                  // spacer row, 4px plus the grid's own gap, sets the answers apart.
+                  <div aria-hidden className="col-span-2 h-1" />
                 )}
                 {answers.map(([label, value]) => (
                   <div key={`a-${label}`} className="contents">
