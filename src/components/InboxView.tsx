@@ -799,7 +799,7 @@ export function InboxView({
                             </HoverTip>
                           )}
                           <span
-                            className={`min-w-0 max-w-[46ch] flex-1 truncate ${
+                            className={`min-w-0 max-w-[50ch] flex-1 truncate ${
                               c.unseen
                                 ? "text-[var(--muted-strong)]"
                                 : "text-[var(--muted)]"
