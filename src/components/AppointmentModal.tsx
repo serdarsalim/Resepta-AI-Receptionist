@@ -636,7 +636,7 @@ export function AppointmentModal({
                 <button
                   type="button"
                   onClick={() => onOpenCustomer(draft.customerId!)}
-                  className="min-w-0 truncate text-left underline-offset-2 transition-colors hover:text-[var(--accent)] hover:underline"
+                  className="min-w-0 truncate text-left underline-offset-2 transition-colors hover:text-[var(--link)] hover:underline"
                 >
                   {draft.customerName}
                 </button>
@@ -756,7 +756,7 @@ export function AppointmentModal({
                               setListOpen(false);
                               document.getElementById("modal-phone")?.focus();
                             }}
-                            className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-[var(--accent)] transition-colors hover:bg-[var(--row-hover-bg)] ${
+                            className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-[var(--link)] transition-colors hover:bg-[var(--row-hover-bg)] ${
                               customerMatches.length > 0 ? "border-t border-[var(--border)]" : ""
                             }`}
                           >
@@ -966,7 +966,7 @@ export function AppointmentModal({
                 onClick={() =>
                   setLines((prev) => [...prev, { serviceId: "", price: "", quantity: "1" }])
                 }
-                className="rounded-md py-1 text-xs text-[var(--accent)] hover:underline"
+                className="rounded-md py-1 text-xs text-[var(--link)] hover:underline"
               >
                 {t("appointments.addService")}
               </button>

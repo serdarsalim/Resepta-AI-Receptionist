@@ -193,7 +193,7 @@ export function NumberRequestCard() {
                 href={request.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[var(--accent)] transition-colors hover:underline"
+                className="text-[var(--link)] transition-colors hover:underline"
               >
                 {request.fileName}
               </a>

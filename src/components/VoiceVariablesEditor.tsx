@@ -1111,7 +1111,7 @@ function SelectOptionsCell({
             <button
               type="button"
               onClick={() => setRows([...rows, ""])}
-              className="mt-1 w-full rounded-md px-2 py-1 text-left text-xs text-[var(--accent)] hover:bg-[var(--muted-bg)]"
+              className="mt-1 w-full rounded-md px-2 py-1 text-left text-xs text-[var(--link)] hover:bg-[var(--muted-bg)]"
             >
               + {t("voiceVariables.choice")}
             </button>
@@ -1300,7 +1300,7 @@ function VariablePicker({
           ref={triggerRef}
           type="button"
           onClick={toggle}
-          className="mt-1.5 rounded-md border border-transparent px-2 py-1 text-xs font-medium text-[var(--accent)] hover:bg-[var(--muted-bg)]"
+          className="mt-1.5 rounded-md border border-transparent px-2 py-1 text-xs font-medium text-[var(--link)] hover:bg-[var(--muted-bg)]"
         >
           {addLabel ?? t("voiceVariables.addRow")}
         </button>
@@ -1362,7 +1362,7 @@ function VariablePicker({
                 type="button"
                 onClick={() => pick(() => onCreate(trimmed))}
                 title={t("voiceVariables.pickerCreateHint")}
-                className="w-full rounded-lg px-2 py-1.5 text-left text-xs font-medium text-[var(--accent)] hover:bg-[var(--muted-bg)]"
+                className="w-full rounded-lg px-2 py-1.5 text-left text-xs font-medium text-[var(--link)] hover:bg-[var(--muted-bg)]"
               >
                 + {t("voiceVariables.pickerCreate", { name: trimmed })}
               </button>

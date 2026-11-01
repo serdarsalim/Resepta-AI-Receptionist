@@ -802,7 +802,7 @@ function CustomerAppointments({
           onClick={(event) =>
             onOpen(draftFor(a), event.currentTarget.getBoundingClientRect())
           }
-          className="min-w-0 flex-1 truncate rounded text-left text-sm font-medium transition-colors hover:text-[var(--accent)]"
+          className="min-w-0 flex-1 truncate rounded text-left text-sm font-medium transition-colors hover:text-[var(--link)]"
         >
           {a.serviceName || t("appointments.title")}
         </button>
@@ -946,7 +946,7 @@ function CustomerAppointments({
           <button
             type="button"
             onClick={() => setShowPast((prev) => !prev)}
-            className="text-xs text-[var(--accent)] hover:underline"
+            className="text-xs text-[var(--link)] hover:underline"
           >
             {showPast
               ? t("appointments.hidePast")

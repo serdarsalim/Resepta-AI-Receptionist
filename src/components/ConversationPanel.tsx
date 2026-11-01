@@ -3147,7 +3147,7 @@ function EmailCards({
                       <button
                         type="button"
                         onClick={() => onReply(m.subject)}
-                        className="flex items-center gap-1 font-medium text-[var(--accent)] hover:underline"
+                        className="flex items-center gap-1 font-medium text-[var(--link)] hover:underline"
                       >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                           <polyline points="9 17 4 12 9 7" />
@@ -3232,7 +3232,7 @@ function ClampedEmailContent({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="mt-1 text-xs font-medium text-[var(--accent)] hover:underline"
+          className="mt-1 text-xs font-medium text-[var(--link)] hover:underline"
         >
           {expanded ? t("email.showLess") : t("email.showMore")}
         </button>

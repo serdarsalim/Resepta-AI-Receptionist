@@ -620,7 +620,7 @@ function ImageMenu({ editor, onChange }: { editor: Editor; onChange: () => void 
                       e.preventDefault();
                       item.run();
                     }}
-                    className="whitespace-nowrap rounded px-2 py-0.5 text-[var(--accent)] hover:bg-[var(--muted-bg)]"
+                    className="whitespace-nowrap rounded px-2 py-0.5 text-[var(--link)] hover:bg-[var(--muted-bg)]"
                   >
                     {item.label}
                   </button>

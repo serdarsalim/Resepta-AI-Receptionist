@@ -153,7 +153,7 @@ export function SignatureMenu({ onApply }: { onApply: (html: string) => void }) 
                 setEditing("new");
                 close();
               }}
-              className="w-full rounded-md px-2 py-1.5 text-left text-sm text-[var(--accent)] hover:bg-[var(--row-hover-bg)]"
+              className="w-full rounded-md px-2 py-1.5 text-left text-sm text-[var(--link)] hover:bg-[var(--row-hover-bg)]"
             >
               + {t("compose.sigNew")}
             </button>

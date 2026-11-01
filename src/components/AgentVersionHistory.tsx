@@ -162,7 +162,7 @@ export function AgentVersionHistory({
                       close();
                       onRestore(row.version);
                     }}
-                    className="mt-0.5 text-xs text-[var(--accent)] hover:underline"
+                    className="mt-0.5 text-xs text-[var(--link)] hover:underline"
                   >
                     {t("voiceDetail.versionRestore")}
                   </button>

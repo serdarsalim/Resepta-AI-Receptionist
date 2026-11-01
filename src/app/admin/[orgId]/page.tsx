@@ -1017,7 +1017,7 @@ export default function TenantPage() {
                         href={req.url}
                         target="_blank"
                         rel="noopener"
-                        className="font-medium text-[var(--accent)] hover:underline"
+                        className="font-medium text-[var(--link)] hover:underline"
                       >
                         {req.fileName}
                       </a>

@@ -207,27 +207,34 @@
      on a card showed nothing. Mixed from the foreground, so one definition
      reads in both themes, the --closed-bg trick again. */
   --control-hover: color-mix(in srgb, var(--foreground) 6%, transparent);
+  /* Text links. The accent in light; dark takes its own paler blue. */
+  --link: var(--accent);
   --scrollbar-thumb: rgba(0, 0, 0, 0.18);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.32);
 }
 
 .dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
-  --card: #171717;
-  --border: #262626;
-  --muted-strong: #cccccc;
-  --muted: #a3a3a3;
-  --muted-bg: #171717;
-  /* The track goes DOWN to the pane's own black and the thumb comes UP past
-     the card, so both read on a #171717 card or menu. */
-  --segment-track: #0c0c0c;
-  --segment-thumb: #2e2e2e;
-  --segment-thumb-border: #404040;
+  --background: #050506;
+  --foreground: #eceef0;
+  /* Elevation by lightness, LinkedIn's dark model (2026-11-01, Serdar, after
+     Nudge acba72e3): the page is near-black and a card is a clearly lighter,
+     slightly cool slate, so a table reads as a sheet. #171717 on #0c0c0c was
+     eleven units and cards vanished into the page. Every grey leans blue a
+     touch so it sits with the accent and the charcoal frame. */
+  --card: #1b1d21;
+  --border: #34373d;
+  --muted-strong: #cdd0d5;
+  --muted: #a1a5ac;
+  --muted-bg: #1b1d21;
+  /* The track goes DOWN toward the page and the thumb comes UP past the
+     card, so both read on a card or a menu. */
+  --segment-track: #111215;
+  --segment-thumb: #2f3237;
+  --segment-thumb-border: #44474e;
   --segment-thumb-shadow: 0 0 0 1px var(--segment-thumb-border), 0 1px 2px rgb(0 0 0 / 0.5),
     inset 0 1px 0 rgb(255 255 255 / 0.05);
-  --raised: #242424;
-  --raised-hover: #2c2c2c;
+  --raised: #272a2f;
+  --raised-hover: #2f3238;
   --raised-shadow: 0 0 0 1px rgb(255 255 255 / 0.09), inset 0 1px 0 rgb(255 255 255 / 0.05),
     0 1px 2px rgb(0 0 0 / 0.5);
   /* The blue sits a step darker on black and lightens to the accent on
@@ -247,17 +254,16 @@
   /* Same relationships inverted: header text brighter than the body, divider
      a touch above --border so the header rule reads without a fill behind it,
      hover one step off --card. The reference has no dark mode to copy. */
-  --table-header-fg: #ededed;
-  --table-divider: #2e2e2e;
-  --row-hover-bg: #202020;
-  --row-active-bg: #2a2a2a;
-  --inbox-row-hover: #222222;
+  --table-header-fg: #eceef0;
+  --table-divider: #34373d;
+  --row-hover-bg: #23262a;
+  --row-active-bg: #2c2f34;
+  --inbox-row-hover: #25282c;
   /* Flat here too. This was a hairline ring, because a drop shadow is
      invisible on near-black and the ring did the same job — but the job is
-     gone: --card #171717 on --pane #0c0c0c is eleven units, close enough to
-     the light theme's fourteen that the edge reads the same way. Leaving the
-     ring while light went flat would have made dark the only theme still
-     outlining its cards. */
+     gone: the fill step (--card on --pane, 2026-11-01) separates them now.
+     Leaving the ring while light went flat would have made dark the only
+     theme still outlining its cards. */
   --card-shadow: none;
   /* Lighter than the rail rather than white, same idea inverted. The rail
      is the #25272b charcoal of the joined frame (.app-pane), so the field
@@ -273,7 +279,7 @@
     var(--pane) 48%,
     color-mix(in srgb, var(--brand) 4%, var(--pane)) 100%
   );
-  --pane: #0c0c0c;
+  --pane: #050506;
   --accent: #3b82f6;
   --accent-fg: #ffffff;
   --brand-soft: color-mix(in srgb, var(--brand) 18%, var(--card));
@@ -289,12 +295,15 @@
   /* The dark table divider's value, at about the light line's contrast on
      its card (1.27 against 1.25). The old --border mix was the same colour as
      the closed-hours shading, so every rule vanished across closed time. */
-  --grid-line: #2e2e2e;
-  /* Lifted off the near-black card rather than sunk into it. */
-  --sheet-bg: #202124;
+  --grid-line: #2f3237;
+  /* Lifted off the card rather than sunk into it. */
+  --sheet-bg: #24272b;
+  /* A paler sky blue, LinkedIn's (2026-11-01): the saturated accent as text
+     was the loudest thing on a dark screen. Buttons keep the accent. */
+  --link: #71b2f7;
   --bubble-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.4);
   --bubble-tail-shadow: rgba(0, 0, 0, 0.4);
-  --thread-bg: #101010;
+  --thread-bg: #0e0f11;
   --scrollbar-thumb: rgba(255, 255, 255, 0.16);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
 }
@@ -376,8 +385,8 @@ thead {
    2026-10-21): the sidebar rail AND the 48px top bar wear this one flat
    fill, and the workspace (`main`) meets it with a 12px upper-left curve and
    a quiet edge (.workspace-boundary). Dark is a lighter charcoal than the
-   near-black workspace (--pane #0c0c0c) and the cards (#171717), so the frame
-   reads as its own plane; the old #141414 sat three units from the cards. */
+   near-black workspace (--pane) and the cards, so the frame reads as its
+   own plane; the old #141414 sat three units from the cards. */
 .app-pane {
   background: #f8f8f9;
 }
@@ -746,7 +755,7 @@ thead {
      Ported from the outlined secondary this app already had, on
      NumberRequestCard's upload button, rather than invented next to it. The
      one thing not carried over is its `hover:bg-[var(--muted-bg)]`: these sit
-     on a --card surface, and in dark --muted-bg and --card are both #171717,
+     on a --card surface, and in dark --muted-bg and --card are the same fill,
      so that hover is invisible on exactly the surface this class is for. A
      --foreground wash reads in both themes.
 

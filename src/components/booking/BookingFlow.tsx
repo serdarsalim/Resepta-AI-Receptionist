@@ -309,7 +309,7 @@ export function BookingFlow({
               // Framed, the manage page would refuse to load inside the
               // website (next.config.ts), so it opens on its own.
               {...(embed ? { target: "_blank", rel: "noopener" } : {})}
-              className="text-[var(--accent)] underline underline-offset-2"
+              className="text-[var(--link)] underline underline-offset-2"
             >
               {t(done.goods ? "booking.manageOrder" : "booking.manageThis")}
             </a>

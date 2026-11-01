@@ -6,7 +6,7 @@ import { useLanguage } from "@/lib/LanguageProvider";
 import { CONTACT_TOKEN, LEGAL_UI, PRIVACY, TERMS } from "@/lib/legal";
 
 const LINK =
-  "text-[var(--accent)] transition-opacity duration-[120ms] hover:opacity-80";
+  "text-[var(--link)] transition-opacity duration-[120ms] hover:opacity-80";
 
 // One renderer for both legal documents. They have identical shape and differ
 // only in content, so a second component would be a copy waiting to drift.
