@@ -1031,7 +1031,7 @@ export function UserMenu({
         {variant === "row" && !collapsed ? (
           <>
             <Avatar size="sm" name={name} email={email} image={image} />
-            {/* Name over address, both truncating: the rail is 13rem wide and
+            {/* Name over address, both truncating: the rail is 12.5rem wide and
                 an email is however long somebody's employer made it. The end
                 truncates, so the domain gives way before the name does. */}
             <span className="min-w-0 flex-1">
@@ -1667,7 +1667,7 @@ export function AppShell({
           aria-label={t("nav.primary")}
           className={`app-pane fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col overflow-hidden shadow-xl transition-[transform,visibility] duration-[120ms] ease-out motion-reduce:transition-none md:visible md:static md:translate-x-0 md:shadow-none md:transition-[width] ${
             mobileOpen ? "visible translate-x-0" : "invisible -translate-x-full"
-          } ${showCollapsed ? "md:w-14" : "md:w-52"}`}
+          } ${showCollapsed ? "md:w-14" : "md:w-50"}`}
         >
           {/* The title's line holds the fold arrow alone, at the rail's
             right end as Nudge has it, and the business switcher sits on a
