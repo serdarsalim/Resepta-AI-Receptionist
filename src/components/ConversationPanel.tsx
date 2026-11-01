@@ -845,9 +845,9 @@ export function ConversationPanel({
   // is cards, and a card separates from the paper by fill exactly the way a
   // bubble does — the ground is what makes the cards read as cards. The
   // doodles stay chat-only; they are set dressing for a conversation, and
-  // mail is not one. The other tabs take --conversation-paper: the card's
-  // white in light, the chat's near-black in dark, so in dark every tab of the
-  // conversation is one ground set into the joined card (P22).
+  // mail is not one. The other tabs take --conversation-paper, the same
+  // colour (--chat-paper points at it), so every tab of the conversation is
+  // one ground set into the joined card in both themes (P22).
   const surface =
     filter === "whatsapp"
       ? "chat-wallpaper"
@@ -2571,12 +2571,11 @@ function CallCards({
   // and the selected row its date and time, so the list is one run of rows.
   return (
     <div ref={listRef} className="@container/calls">
-      {items.map((c, idx) => (
+      {items.map((c) => (
         <CallRow
           key={c.id}
           c={c}
           contactName={contactName}
-          ruled={idx > 0}
           selected={c.id === selected.id}
           onSelect={() => select(c.id)}
           startOpen={initialFocus === c.id}
@@ -2676,15 +2675,12 @@ function CallFacts({ c, withStamp = false }: { c: CallCardItem; withStamp?: bool
 function CallRow({
   c,
   contactName,
-  ruled,
   selected,
   onSelect,
   startOpen,
 }: {
   c: CallCardItem;
   contactName?: string | null;
-  // A rule above: every row but the first.
-  ruled: boolean;
   selected: boolean;
   onSelect: () => void;
   startOpen: boolean;
@@ -2780,18 +2776,18 @@ function CallRow({
   return (
     <div
       data-call-id={c.id}
-      // A clear rule between rows, mixed from the ink, not --border, which
-      // nearly vanishes on the beige paper and in dark is the card colour.
-      // The selected row is the lit row's rounded neutral fill, as in the
-      // Inbox list; a resting row takes a hover wash and a click selects it.
-      className={`-mx-2 scroll-mt-2 ${ruled ? "border-t border-[color-mix(in_srgb,var(--foreground)_13%,transparent)]" : ""}`}
+      // Every call is a CARD, no rules between (2026-11-01, Serdar, Nudge
+      // 99521e9b, after the email tab): a resting one is a half-white card
+      // just off the paper, the open one full white with the card ring, and
+      // a hover moves a resting card toward white.
+      className="-mx-2 scroll-mt-2"
     >
       <div
         onClick={selected ? undefined : onSelect}
-        className={`my-1 rounded-lg px-5 py-3 text-sm transition-colors ${
+        className={`my-2 rounded-lg px-5 py-3 text-sm transition-colors ${
           selected
-            ? "bg-[var(--row-active-bg)]"
-            : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--foreground)_3%,transparent)]"
+            ? "bg-[var(--card)] shadow-[var(--card-shadow)]"
+            : "cursor-pointer bg-[color-mix(in_srgb,var(--card)_45%,transparent)] hover:bg-[color-mix(in_srgb,var(--card)_75%,transparent)]"
         }`}
       >
         {/* Who rang whom, and how long ago at the far right, across the
