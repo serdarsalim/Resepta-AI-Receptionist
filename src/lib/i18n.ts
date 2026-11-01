@@ -3114,9 +3114,9 @@ const dictionary = {
     en: "Transcript",
     de: "Transkript",
   },
-  // The call row's quiet actions (2026-11-01): open the player, open a note.
+  // The call row's quiet actions (2026-11-01): open the player. The review
+  // action reuses review.title, so the button and the line it opens agree.
   "calls.play": { tr: "Dinle", en: "Play", de: "Anhören" },
-  "calls.note": { tr: "Not", en: "Note", de: "Notiz" },
   "calls.recording": { tr: "Kayıt", en: "Recording", de: "Aufnahme" },
   "calls.summary": { tr: "Özet", en: "Summary", de: "Zusammenfassung" },
   "calls.unknown": {

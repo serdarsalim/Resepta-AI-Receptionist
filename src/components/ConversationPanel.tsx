@@ -2573,6 +2573,13 @@ function CallRow({
   const [transcriptOpen, setTranscriptOpen] = useState(startOpen);
   // The Note action opens the review's box and puts the caret in it.
   const [noteSignal, setNoteSignal] = useState(0);
+  // A call with a review (a note or a verdict) shows its Review line under
+  // the summary; one without shows nothing until the Review action opens it,
+  // and then UNDER the actions row, so the button pressed stays under the
+  // pointer (Serdar, 2026-11-01). Opened here, it stays there this mount.
+  const [reviewOpenedHere, setReviewOpenedHere] = useState(false);
+  const hasReview = !!c.note?.trim() || !!c.verdict;
+  const reviewAbove = hasReview && !reviewOpenedHere;
 
   // What the call set in motion. Nudge titles this "Automations"; here it is
   // what the agent did on the call, and each line names itself.
@@ -2786,10 +2793,7 @@ function CallRow({
           </div>
         </div>
       )}
-      {/* "Notes  Pass  Miss" on every row, always (Serdar, 2026-11-01):
-          the team's verdict never hides; the note's box opens from the
-          title or the Note action, and a saved note shows under it. */}
-      <div className="mt-3">{review}</div>
+      {reviewAbove && <div className="mt-3">{review}</div>}
       <div className="-ml-2 mt-2 flex items-center gap-0.5">
         {c.recordingUrl && (
           <button
@@ -2829,8 +2833,12 @@ function CallRow({
         )}
         <button
           type="button"
-          onClick={() => setNoteSignal((n) => n + 1)}
-          className={action(false)}
+          aria-expanded={reviewAbove || reviewOpenedHere}
+          onClick={() => {
+            if (!reviewAbove && !reviewOpenedHere) setReviewOpenedHere(true);
+            setNoteSignal((n) => n + 1);
+          }}
+          className={action(reviewOpenedHere)}
         >
           <svg
             viewBox="0 0 24 24"
@@ -2846,9 +2854,10 @@ function CallRow({
             <path d="M12 20h9" />
             <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
           </svg>
-          {t("calls.note")}
+          {t("review.title")}
         </button>
       </div>
+      {reviewOpenedHere && <div className="mt-3">{review}</div>}
       {/* Ours rather than the browser's player: it knows the length before a
           byte is fetched (CallRecording). Mounted by the press, so it plays. */}
       {playerOpen && c.recordingUrl && (
