@@ -565,15 +565,14 @@ thead {
    inset back, or they would sit closer to the edge than everything else. */
 @media (min-width: 64rem) {
   main:has([data-bleeds-right]) {
-    /* The LEFT edge takes the same 0.5rem (Serdar, 2026-08-31): the joined
-       card floats with one even breath, instead of a wide left margin
-       against a tight right one. */
+    /* The LEFT edge took the same 0.5rem from 2026-08-31 until 2026-11-01;
+       the sm rule below now sets it to Nudge's 24px. */
     padding-left: 0.5rem;
     padding-right: 0.5rem;
     scrollbar-gutter: auto;
   }
   main:has([data-bleeds-right]) > :not([data-bleeds-right]) {
-    margin-left: 0.5rem;
+    margin-left: 0;
     margin-right: 0.5rem;
   }
 
@@ -588,6 +587,18 @@ thead {
 @media (min-width: 40rem) {
   main:has([data-bleeds-right]) {
     padding-bottom: 0.5rem;
+    /* Nudge's frame for the two master-detail views (Serdar, 2026-11-01):
+       the card starts 24px into the pane, like Nudge's Inbox and contact
+       page, where the even 8px read as the card jammed against the rail.
+       Right stays 8px from lg, where the conversation pane runs nearly to
+       the window edge; between sm and lg both sides take 24px. */
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+@media (min-width: 64rem) {
+  main:has([data-bleeds-right]) {
+    padding-right: 0.5rem;
   }
 }
 
