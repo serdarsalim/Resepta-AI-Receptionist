@@ -1390,8 +1390,7 @@ their card, sat at the foot of a list or were shared between two cards.
 - **The row.** `min-h-8`, 8px over its card, lists a card gap (1rem) apart,
   so a title reads as the head of the card under it and not as the foot of
   the one above. A page-level list's row holds view controls left and the add
-  right (Customers' Columns; the Voice agents' Refresh and Try the WhatsApp
-  assistant; Automations' add alone, since the tab names the list); a titled
+  right (the Voice agents' Refresh and Try the WhatsApp assistant; Automations' add alone, since the tab names the list); a titled
   list's row holds the title and its (i) left. One row at every width. Every
   menu in it portals, so leaving the card clips nothing. A selection's verbs
   replace the whole row while it stands (Customers' bulk bar), never sit
@@ -1435,6 +1434,12 @@ their card, sat at the foot of a list or were shared between two cards.
   changes something carries `data-edit-only` and is gone. The page says
   "View only" once (`ViewOnlyPill`). A new row ×, add or remove control on a
   card a member can read carries `data-edit-only`.
+- **Customers wears Nudge's Contacts head** (2026-11-01): the views as
+  underlined tabs (All, Muted when anyone is, then the business's saved
+  views from `customerViews`, then +), Add customer at the strip's right end,
+  and under it the count left with Clear filters and Columns right. A view
+  saves the column filters and the sort, shared by the whole business; its
+  saver or an owner may save changes or delete it. Columns stay per person.
 - **Never park an add at the foot of a list.** It puts the primary action
   below however many rows the business happens to have, and it is the branch
   that loses the button in the EMPTY state — the state where you need it most.

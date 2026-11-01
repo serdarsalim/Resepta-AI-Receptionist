@@ -20,6 +20,8 @@ import { PhoneInput } from "./PhoneField";
 import { Sheet } from "./Sheet";
 import { BulkComposer, type BulkChannel } from "./BulkActions";
 import { HoverTip } from "./HoverTip";
+import { buttonClass, fieldClass, iconButtonClass } from "./Control";
+import { useConfirm } from "./ConfirmDialog";
 import { customerName, hasCustomerName } from "@/lib/customerName";
 
 // The list and what was done to it. Contact fields lived on this strip from
@@ -189,6 +191,14 @@ export function CustomersView({
   const contactFields = useQuery(api.contactFields.list, {});
   const setAttention = useMutation(api.messages.setAttention);
   const [adding, setAdding] = useState(false);
+  // The open tab: All, the built-in Muted, or a saved view's id (Nudge's
+  // Contacts strip). A view is a name over the column filters and the sort.
+  const [activeTab, setActiveTab] = useState<string>(ALL_TAB);
+  const [namingView, setNamingView] = useState(false);
+  const views = useQuery(api.customerViews.list, {});
+  const updateView = useMutation(api.customerViews.update);
+  const removeView = useMutation(api.customerViews.remove);
+  const [confirm, confirmDialog] = useConfirm();
   // Ticked rows, and the anchor a shift-click sweeps from. Both ported from
   // RevenueView, which is this app's only prior multi-select and already
   // settled the two decisions that matter: the anchor is an index into the
@@ -420,7 +430,11 @@ export function CustomersView({
   }, [syncColumns, columnSignature]);
 
   const rows = useMemo(() => {
-    const list = customers ?? [];
+    const all = customers ?? [];
+    // The Muted tab is everyone muted and nobody else; All keeps them, sunk
+    // below the rest.
+    const list =
+      activeTab === MUTED_TAB ? all.filter((customer) => customer.mutedAt !== undefined) : all;
     const matched = list.filter((customer) =>
       search.matches(
         fullName(customer),
@@ -457,7 +471,7 @@ export function CustomersView({
       );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customers, fieldByKey, search.active, search.matches, table.matchesFilters, table.sort]);
+  }, [customers, fieldByKey, search.active, search.matches, table.matchesFilters, table.sort, activeTab]);
 
   // The screen and the file disagree on purpose. A cell is read at a glance
   // and wants an age ("3g"); a spreadsheet is filtered, pivoted and kept, and
@@ -600,48 +614,174 @@ export function CustomersView({
 
   const addButton = (
     <button
-      className="ml-auto h-9 shrink-0 rounded-lg bg-[var(--accent)] px-3 text-sm font-medium text-[var(--accent-fg)]"
+      type="button"
+      className={`${buttonClass("primary", "sm")} shrink-0 gap-1.5`}
       onClick={() => setAdding(true)}
     >
+      <PlusGlyph />
       {t("customers.new")}
     </button>
   );
 
+  const mutedCount = (customers ?? []).filter((customer) => customer.mutedAt !== undefined).length;
+  const activeView = views?.find((view) => view._id === activeTab);
+  // Gone from under us (deleted by someone else, or a switch of business):
+  // back to All rather than a tab that names nothing.
+  useEffect(() => {
+    if (activeTab === ALL_TAB || activeTab === MUTED_TAB || views === undefined) return;
+    if (!views.some((view) => view._id === activeTab)) {
+      setActiveTab(ALL_TAB);
+      table.clearFilters();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [views, activeTab]);
+  const openTab = (key: string) => {
+    setActiveTab(key);
+    clearSelection();
+    const view = views?.find((entry) => entry._id === key);
+    table.applyView(
+      view
+        ? { filters: view.filters, sort: view.sort }
+        : { filters: {} },
+    );
+  };
+  // A view whose filters or sort were changed on its tab has something to
+  // save; the row offers Save and Reset, as Nudge's does.
+  const viewChanged =
+    activeView !== undefined &&
+    (sameFilters(activeView.filters, table.filters) === false ||
+      (activeView.sort?.key ?? "added") !== table.sort.key ||
+      (activeView.sort?.dir ?? "desc") !== table.sort.dir);
+
+  const tabs: { key: string; label: string }[] = [
+    { key: ALL_TAB, label: t("customers.tabAll") },
+    ...(mutedCount > 0 || activeTab === MUTED_TAB
+      ? [{ key: MUTED_TAB, label: t("customers.tabMuted") }]
+      : []),
+    ...(views ?? []).map((view) => ({ key: view._id as string, label: view.name })),
+  ];
+
   const list = (
     <>
-      {/* The list's toolbar sits ABOVE the card, outside it (P32, Nudge
-          e07ff7ae): view controls left, the creating action right, and the
-          card is the table and nothing else. One row at every width, shown
-          before the book loads so nothing moves when it lands. Columns is
-          desktop-only: below sm there is no table to pick columns for. Every
-          menu in the row portals, so leaving the card clips nothing.
+      {/* Nudge's Contacts head (Serdar, 2026-11-01): the views as underlined
+          tabs with + after them, Add customer at the strip's right end; then
+          the count left and the table's view controls right, above the card.
+          The verbs take that second row while a selection stands, so "Add
+          customer" is never one slip from "Call 20 people". */}
+      <div className="flex items-end gap-5 border-b border-[var(--border)]">
+        <div className="flex min-w-0 flex-1 flex-wrap items-end gap-5">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => openTab(tab.key)}
+              aria-current={activeTab === tab.key ? "page" : undefined}
+              className={`-mb-px max-w-[14rem] truncate border-b-2 px-0.5 py-2.5 text-sm transition-colors ${
+                activeTab === tab.key
+                  ? "border-[var(--foreground)] text-[var(--foreground)]"
+                  : "border-transparent text-[var(--muted-strong)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+          <HoverTip text={t("views.new")} className="mb-1.5 inline-flex shrink-0">
+            <button
+              type="button"
+              onClick={() => setNamingView(true)}
+              aria-label={t("views.new")}
+              className={iconButtonClass("quiet", "xs")}
+            >
+              <PlusGlyph />
+            </button>
+          </HoverTip>
+        </div>
+        <div className="mb-1.5 shrink-0">{addButton}</div>
+      </div>
 
-          The verbs take the whole row while a selection stands. Columns and
-          Add customer are both about the LIST, and neither is what anyone
-          reaches for with twenty rows ticked; leaving them there puts "Add
-          customer" one slip away from "Call 20 people". A selection is made
-          in the desktop table, so a phone keeps its Add button. Both kinds of
-          control are h-9, and min-h-9 holds the row while it swaps. */}
-      <div className="flex min-h-9 flex-wrap items-center gap-2">
+      <div className="flex min-h-8 flex-wrap items-center gap-2">
         {picked.length > 0 ? (
-          <>
-            <div className="hidden sm:contents">
-              <BulkBar
-                count={picked.length}
-                onCompose={setComposing}
-                onClear={clearSelection}
-              />
-            </div>
-            <div className="contents sm:hidden">{addButton}</div>
-          </>
+          <div className="hidden w-full sm:contents">
+            <BulkBar
+              count={picked.length}
+              onCompose={setComposing}
+              onClear={clearSelection}
+            />
+          </div>
         ) : (
           <>
-            <div className="hidden sm:contents">{columnPicker}</div>
-            {addButton}
+            <span className="text-sm tabular-nums text-[var(--muted)]">
+              {customers === undefined ? "" : t.plural("customers.count", rows.length)}
+            </span>
+            {activeView?.canEdit && viewChanged && (
+              <>
+                <button
+                  type="button"
+                  className={buttonClass("outline", "sm")}
+                  onClick={() =>
+                    void updateView({
+                      viewId: activeView._id,
+                      filters: { ...table.filters },
+                      sort: { key: table.sort.key, dir: table.sort.dir },
+                    })
+                  }
+                >
+                  {t("views.save")}
+                </button>
+                <button
+                  type="button"
+                  className={buttonClass("quiet", "sm")}
+                  onClick={() => openTab(activeView._id)}
+                >
+                  {t("views.reset")}
+                </button>
+              </>
+            )}
+            {activeView?.canEdit && !viewChanged && (
+              <button
+                type="button"
+                className={buttonClass("quiet", "sm")}
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: t("views.delete"),
+                    body: t("views.deleteConfirm"),
+                  });
+                  if (!ok) return;
+                  await removeView({ viewId: activeView._id });
+                  openTab(ALL_TAB);
+                }}
+              >
+                {t("views.delete")}
+              </button>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              {table.activeFilterCount > 0 && (
+                <button
+                  type="button"
+                  className={buttonClass("pill", "sm")}
+                  onClick={table.clearFilters}
+                >
+                  {t("table.clearFilters")} ({table.activeFilterCount})
+                </button>
+              )}
+              <div className="hidden sm:contents">{columnPicker}</div>
+            </div>
           </>
         )}
       </div>
 
+      {confirmDialog}
+      {namingView && (
+        <NewViewSheet
+          filters={table.filters}
+          sort={table.sort}
+          onClose={() => setNamingView(false)}
+          onCreated={(viewId) => {
+            setNamingView(false);
+            setActiveTab(viewId);
+          }}
+        />
+      )}
       {adding && <NewCustomerSheet onClose={() => setAdding(false)} />}
 
       {customers === undefined && (
@@ -1010,6 +1150,90 @@ function NewCustomerSheet({ onClose }: { onClose: () => void }) {
             className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] disabled:opacity-60"
           >
             {t("common.add")}
+          </button>
+        </div>
+      </form>
+    </Sheet>
+  );
+}
+
+const ALL_TAB = "all";
+const MUTED_TAB = "muted";
+
+function sameFilters(
+  a: Readonly<Record<string, string[]>>,
+  b: Readonly<Record<string, string[]>>,
+): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const key of keys) {
+    const left = [...(a[key] ?? [])].sort();
+    const right = [...(b[key] ?? [])].sort();
+    if (left.length !== right.length || left.some((value, i) => value !== right[i])) return false;
+  }
+  return true;
+}
+
+function PlusGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+// Names the current filters and sort as a view. The view opens as the active
+// tab, already matching what is on screen, so there is nothing to save.
+function NewViewSheet({
+  filters,
+  sort,
+  onClose,
+  onCreated,
+}: {
+  filters: Readonly<Record<string, string[]>>;
+  sort: { key: string; dir: "asc" | "desc" };
+  onClose: () => void;
+  onCreated: (viewId: string) => void;
+}) {
+  const t = useT();
+  const create = useMutation(api.customerViews.create);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <Sheet title={t("views.new")} hint={t("views.newHint")} dirty={name.length > 0} onClose={onClose}>
+      <form
+        className="space-y-4"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          if (!name.trim() || busy) return;
+          setBusy(true);
+          try {
+            const viewId = await create({
+              name,
+              filters: { ...filters },
+              sort: { key: sort.key, dir: sort.dir },
+            });
+            onCreated(viewId);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <label className="block space-y-1.5">
+          <span className="text-sm font-medium">{t("views.name")}</span>
+          <input
+            autoFocus
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={60}
+            className={`${fieldClass("sm")} w-full`}
+          />
+        </label>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className={buttonClass("quiet", "md")}>
+            {t("common.cancel")}
+          </button>
+          <button type="submit" disabled={!name.trim() || busy} className={buttonClass("primary", "md")}>
+            {t("views.create")}
           </button>
         </div>
       </form>

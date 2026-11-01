@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // Table behaviour that has nothing to do with what a table renders: sort,
 // per-column filters, column visibility, widths, order, and search. Ported
@@ -151,6 +151,8 @@ export type TableState<K extends string> = {
   filterFor: (column: string) => string[];
   toggleFilter: (column: string, value: string) => void;
   clearFilters: () => void;
+  // Replaces filters and sort at once: opening a saved view.
+  applyView: (view: { filters: Record<string, string[]>; sort?: SortState<K> }) => void;
   activeFilterCount: number;
   // OR inside one column, AND across columns.
   matchesFilters: (valueOf: (column: string) => string) => boolean;
@@ -178,6 +180,8 @@ export function useTableState<K extends string>(
   defaultVisible: readonly string[] = [],
 ): TableState<K> {
   const [sort, setSort] = useState<SortState<K>>(initial);
+  // The sort a view without one of its own falls back to.
+  const initialRef = useRef(initial);
   const toggleSort = useCallback((key: K) => {
     setSort((current) =>
       current.key === key
@@ -332,6 +336,13 @@ export function useTableState<K extends string>(
     });
   }, []);
   const clearFilters = useCallback(() => setFilters({}), []);
+  const applyView = useCallback(
+    (view: { filters: Record<string, string[]>; sort?: SortState<K> }) => {
+      setFilters({ ...view.filters });
+      setSort(view.sort ?? initialRef.current);
+    },
+    [],
+  );
   const filterFor = useCallback((column: string) => filters[column] ?? [], [filters]);
   const activeFilterCount = useMemo(
     () => Object.values(filters).reduce((n, values) => n + values.length, 0),
@@ -356,6 +367,7 @@ export function useTableState<K extends string>(
     filterFor,
     toggleFilter,
     clearFilters,
+    applyView,
     activeFilterCount,
     matchesFilters,
     widthFor,

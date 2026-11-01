@@ -1405,6 +1405,17 @@ export default defineSchema({
     .index("by_org_status", ["orgId", "status"])
     .index("by_org_received", ["orgId", "receivedAt"]),
 
+  // Saved views of the Customers list (Serdar, 2026-11-01, Nudge's
+  // leadViews simplified): a name, the column filters and the sort. Shared by
+  // the whole business; each is a tab after All. Columns stay per person.
+  customerViews: defineTable({
+    orgId: v.id("orgs"),
+    name: v.string(),
+    createdBy: v.id("users"),
+    filters: v.record(v.string(), v.array(v.string())),
+    sort: v.optional(v.object({ key: v.string(), dir: v.union(v.literal("asc"), v.literal("desc")) })),
+  }).index("by_org", ["orgId"]),
+
   customers: defineTable({
     orgId: v.id("orgs"),
     firstName: v.string(),

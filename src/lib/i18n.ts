@@ -1159,6 +1159,26 @@ const dictionary = {
   // The row indicator's tooltip. States the consequence, not the setting: the
   // icon already says "muted", what somebody hovering wants is why this row is
   // at the bottom and silent.
+  "customers.tabAll": { tr: "Tümü", en: "All", de: "Alle" },
+  "customers.tabMuted": { tr: "Sessizdekiler", en: "Muted", de: "Stummgeschaltet" },
+  "customers.count.one": { tr: "{n} müşteri", en: "{n} customer", de: "{n} Kunde" },
+  "customers.count.other": { tr: "{n} müşteri", en: "{n} customers", de: "{n} Kunden" },
+  "views.new": { tr: "Yeni görünüm", en: "New view", de: "Neue Ansicht" },
+  "views.newHint": {
+    tr: "Şu anki filtreleri ve sıralamayı işletmedeki herkes için bir sekme olarak kaydeder.",
+    en: "Saves the current filters and sort as a tab for everyone in the business.",
+    de: "Speichert die aktuellen Filter und die Sortierung als Tab für alle im Betrieb.",
+  },
+  "views.name": { tr: "Ad", en: "Name", de: "Name" },
+  "views.create": { tr: "Kaydet", en: "Save", de: "Speichern" },
+  "views.save": { tr: "Görünümü kaydet", en: "Save view", de: "Ansicht speichern" },
+  "views.reset": { tr: "Sıfırla", en: "Reset", de: "Zurücksetzen" },
+  "views.delete": { tr: "Görünümü sil", en: "Delete view", de: "Ansicht löschen" },
+  "views.deleteConfirm": {
+    tr: "Bu görünüm herkes için silinsin mi? Müşteriler silinmez.",
+    en: "Delete this view for everyone? No customers are deleted.",
+    de: "Diese Ansicht für alle löschen? Es werden keine Kunden gelöscht.",
+  },
   "customers.mutedMark": {
     tr: "Sessize alındı: gelen kutusunda görünmez, bildirim vermez",
     en: "Muted: no inbox row, no notifications",

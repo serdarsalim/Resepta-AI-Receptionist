@@ -2194,6 +2194,7 @@ type PurgeEntry = {
 // the typecheck, naming itself. Before that check, bulkRuns, bulkRunItems,
 // closures and demoProspects all outlived the businesses they belonged to.
 const ORG_TABLES = [
+  { table: "customerViews", rows: (ctx, orgId) => ctx.db.query("customerViews").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
   { table: "messages", rows: (ctx, orgId) => ctx.db.query("messages").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
   { table: "calls", rows: (ctx, orgId) => ctx.db.query("calls").withIndex("by_org", (q) => q.eq("orgId", orgId)) },
   { table: "emailSignatures", rows: (ctx, orgId) => ctx.db.query("emailSignatures").withIndex("by_org_user", (q) => q.eq("orgId", orgId)) },
