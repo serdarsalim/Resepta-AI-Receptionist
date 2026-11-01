@@ -33,6 +33,10 @@ import { ContextMenu, MenuIcon, useContextMenu, type ContextMenuItem } from "./C
 // this key; the .v1 suffix is the escape hatch if the shape ever changes.
 type InboxFilter = "all" | "unread" | "pinned";
 const VIEW_STORAGE_KEY = "randevu.inbox.view.v1";
+// The open conversation, per business, so switching tab or reloading lands
+// back on it rather than on the bare list. Suffixed with the org id: a
+// conversation from one business must never open under another.
+const OPEN_STORAGE_KEY = "randevu.inbox.open.v1";
 // How many conversations a page of the Inbox asks for (P13, Nudge's 50).
 const INBOX_PAGE = 50;
 // One Inbox row as the server sends it (messages.conversationRow).
@@ -279,6 +283,37 @@ export function InboxView({
   // Rows opened during this visit to Unread stay listed, without their dot
   // (lib/useUnreadVisit). Per business: kept rows never cross a switch.
   const orgId = useQuery(api.orgs.current, {})?.org._id;
+  // The open conversation outlives the view: the Inbox unmounts when another
+  // tab is picked and on every reload. Restored once per business, then kept
+  // in step; the flag stops the first write from erasing it before it is read.
+  const restoredFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!orgId || restoredFor.current === orgId) return;
+    restoredFor.current = orgId;
+    try {
+      const raw = window.localStorage.getItem(`${OPEN_STORAGE_KEY}:${orgId}`);
+      if (!raw) return;
+      const stored = JSON.parse(raw) as { id?: string; filter?: FeedFilter };
+      if (!stored.id) return;
+      setSelected(stored.id as Id<"customers">);
+      if (stored.filter) setFilter(stored.filter);
+    } catch {
+      // Unreadable storage only costs the restore.
+    }
+  }, [orgId]);
+  useEffect(() => {
+    if (!orgId || restoredFor.current !== orgId) return;
+    const key = `${OPEN_STORAGE_KEY}:${orgId}`;
+    try {
+      if (selected) {
+        window.localStorage.setItem(key, JSON.stringify({ id: selected, filter }));
+      } else {
+        window.localStorage.removeItem(key);
+      }
+    } catch {
+      // Private mode or blocked storage: the pane still works, it just forgets.
+    }
+  }, [orgId, selected, filter]);
   const unreadVisit = useUnreadVisit(
     conversations ?? [],
     view === "unread" && !search.active && orgId ? orgId : null,
