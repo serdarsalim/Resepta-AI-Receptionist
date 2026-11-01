@@ -2534,39 +2534,28 @@ function CallCards({
 }) {
   const [initialFocus] = useState(focusId);
   // One call is selected at a time, the newest until another is clicked
-  // (Serdar, 2026-11-01). Only it shows its actions and its full summary,
-  // and the column beside the list shows ITS outcome and answers, so the
-  // labels are on screen once instead of once per call.
+  // (Serdar, 2026-11-01). Only it shows its full summary and, in the right
+  // half of its lit box, ITS outcome and answers, so the labels are on screen
+  // once instead of once per call and always sit beside the call they belong
+  // to (a column fixed at the top of the list did not).
   const [selectedId, setSelectedId] = useState<string | null>(focusId ?? null);
   if (items.length === 0) return null;
   const selected = items.find((c) => c.id === selectedId) ?? items[0];
   // No day chips here since 2026-11-01: each row says how long ago (formatAgo)
-  // and the facts column the selected call's date and time, so the list is
-  // one run of rows.
-  // Wide, the selected call's facts sit in a column that stays in view while
-  // the list scrolls; narrow, they open under the selected row instead.
+  // and the selected row its date and time, so the list is one run of rows.
   return (
     <div className="@container/calls">
-      <div className="grid @2xl/calls:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] @2xl/calls:gap-x-8">
-        <div className="min-w-0">
-          {items.map((c, idx) => (
-            <CallRow
-              key={c.id}
-              c={c}
-              contactName={contactName}
-              ruled={idx > 0}
-              selected={c.id === selected.id}
-              onSelect={() => setSelectedId(c.id)}
-              startOpen={initialFocus === c.id}
-            />
-          ))}
-        </div>
-        <div className="hidden min-w-0 @2xl/calls:block">
-          <div className="sticky top-0 py-4">
-            <CallFacts c={selected} withStamp />
-          </div>
-        </div>
-      </div>
+      {items.map((c, idx) => (
+        <CallRow
+          key={c.id}
+          c={c}
+          contactName={contactName}
+          ruled={idx > 0}
+          selected={c.id === selected.id}
+          onSelect={() => setSelectedId(c.id)}
+          startOpen={initialFocus === c.id}
+        />
+      ))}
     </div>
   );
 }
@@ -2748,115 +2737,145 @@ function CallRow({
     >
       <div
         onClick={selected ? undefined : onSelect}
-        className={`my-1 rounded-lg px-3 py-3 text-sm transition-colors ${
+        // Two columns once wide, on every row so a summary never reflows when
+        // its row is selected: the call on the left, the selected call's
+        // facts on the right. Narrow, the facts drop under the call.
+        className={`my-1 grid gap-x-8 gap-y-3 rounded-lg px-3 py-3 text-sm transition-colors @2xl/calls:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] ${
           selected
             ? "bg-[var(--row-active-bg)]"
             : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--foreground)_3%,transparent)]"
         }`}
       >
-        <div className="flex items-baseline gap-3">
-          {/* One line that truncates rather than wraps; the hover holds all of
-              it, with the direction in words and the customer's number. The
-              line is the row's keyboard handle. */}
-          <button
-            type="button"
-            aria-pressed={selected}
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelect();
-            }}
-            className="flex min-w-0 flex-1 cursor-pointer items-baseline whitespace-nowrap rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
-          >
-            {missed && (
-              <CallVerdictMark
-                outcome={c.outcome}
-                disconnectionReason={c.disconnectionReason}
-                durationSec={c.durationSec}
-              />
-            )}
-            <span
-              className="min-w-0 truncate text-xs text-[var(--muted)]"
-              title={[
-                `${from} → ${to}`,
-                c.inbound ? t("calls.inbound") : t("calls.outbound"),
-                c.customerNumber,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-3">
+            {/* One line that truncates rather than wraps; the hover holds all of
+                it, with the direction in words and the customer's number. The
+                line is the row's keyboard handle. */}
+            <button
+              type="button"
+              aria-pressed={selected}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect();
+              }}
+              className="flex min-w-0 flex-1 cursor-pointer items-baseline whitespace-nowrap rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
             >
-              {/* The verdict's separator, so the line reads as one. */}
-              {verdict && missed && " · "}
-              {from}
-              {/* Drawn, not typed: a typed arrow arrives at whatever weight
-                  the font's own glyph has. */}
-              <svg
-                viewBox="0 0 24 24"
-                width="12"
-                height="12"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="mx-1 inline-block align-[-2px]"
-                aria-label={c.inbound ? t("calls.inbound") : t("calls.outbound")}
+              {missed && (
+                <CallVerdictMark
+                  outcome={c.outcome}
+                  disconnectionReason={c.disconnectionReason}
+                  durationSec={c.durationSec}
+                />
+              )}
+              <span
+                className="min-w-0 truncate text-xs text-[var(--muted)]"
+                title={[
+                  `${from} → ${to}`,
+                  c.inbound ? t("calls.inbound") : t("calls.outbound"),
+                  c.customerNumber,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               >
-                <path d="M5 12h14" />
-                <path d="m12 5 7 7-7 7" />
-              </svg>
-              {to}
-            </span>
-          </button>
-          <span
-            className="shrink-0 text-xs tabular-nums text-[var(--muted)]"
-            title={formatDateTime(c.at, language, tz)}
-          >
-            {formatAgo(c.at, language)}
-          </span>
-        </div>
-        <div className="max-w-[65ch]">
-          {showSummary && (
-            <p
-              className={`mt-1.5 whitespace-pre-wrap break-words leading-6 text-[var(--foreground)] ${
-                selected ? "" : "line-clamp-2"
-              }`}
-            >
-              {c.summary}
-            </p>
-          )}
-          {selected && setOff.length > 0 && (
-            <ul className="mt-1.5 space-y-0.5 text-xs leading-5 text-[var(--foreground)]">
-              {setOff.map((fact) => (
-                <li key={fact}>{fact}</li>
-              ))}
-            </ul>
-          )}
-          {/* The actions sit on every row, so a call plays without being
-              selected first (Serdar, 2026-11-01); a press selects it too. */}
-          <div className="-ml-2 mt-2 flex items-center gap-0.5">
-            {c.recordingUrl && (
-              <button
-                type="button"
-                aria-expanded={playerOpen}
-                onClick={() => setPlayerOpen((open) => !open)}
-                className={action(playerOpen)}
-              >
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden>
-                  <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" />
+                {/* The verdict's separator, so the line reads as one. */}
+                {verdict && missed && " · "}
+                {from}
+                {/* Drawn, not typed: a typed arrow arrives at whatever weight
+                    the font's own glyph has. */}
+                <svg
+                  viewBox="0 0 24 24"
+                  width="12"
+                  height="12"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="mx-1 inline-block align-[-2px]"
+                  aria-label={c.inbound ? t("calls.inbound") : t("calls.outbound")}
+                >
+                  <path d="M5 12h14" />
+                  <path d="m12 5 7 7-7 7" />
                 </svg>
-                {t("calls.play")}
-                {/* The length rides Play (Serdar, 2026-11-01), not a facts row. */}
-                {c.durationSec ? (
-                  <span className="tabular-nums text-[var(--muted)]">{formatDuration(c.durationSec)}</span>
-                ) : null}
-              </button>
+                {to}
+              </span>
+            </button>
+            <span
+              className="shrink-0 text-xs tabular-nums text-[var(--muted)]"
+              title={formatDateTime(c.at, language, tz)}
+            >
+              {formatAgo(c.at, language)}
+            </span>
+          </div>
+          <div className="max-w-[65ch]">
+            {showSummary && (
+              <p
+                className={`mt-1.5 whitespace-pre-wrap break-words leading-6 text-[var(--foreground)] ${
+                  selected ? "" : "line-clamp-2"
+                }`}
+              >
+                {c.summary}
+              </p>
             )}
-            {c.transcript && (
+            {selected && setOff.length > 0 && (
+              <ul className="mt-1.5 space-y-0.5 text-xs leading-5 text-[var(--foreground)]">
+                {setOff.map((fact) => (
+                  <li key={fact}>{fact}</li>
+                ))}
+              </ul>
+            )}
+            {/* The actions sit on every row, so a call plays without being
+                selected first (Serdar, 2026-11-01); a press selects it too. */}
+            <div className="-ml-2 mt-2 flex items-center gap-0.5">
+              {c.recordingUrl && (
+                <button
+                  type="button"
+                  aria-expanded={playerOpen}
+                  onClick={() => setPlayerOpen((open) => !open)}
+                  className={action(playerOpen)}
+                >
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden>
+                    <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" />
+                  </svg>
+                  {t("calls.play")}
+                  {/* The length rides Play (Serdar, 2026-11-01), not a facts row. */}
+                  {c.durationSec ? (
+                    <span className="tabular-nums text-[var(--muted)]">{formatDuration(c.durationSec)}</span>
+                  ) : null}
+                </button>
+              )}
+              {c.transcript && (
+                <button
+                  type="button"
+                  aria-expanded={transcriptOpen}
+                  onClick={() => setTranscriptOpen((open) => !open)}
+                  className={action(transcriptOpen)}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="12"
+                    height="12"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                  {t("calls.transcript")}
+                </button>
+              )}
               <button
                 type="button"
-                aria-expanded={transcriptOpen}
-                onClick={() => setTranscriptOpen((open) => !open)}
-                className={action(transcriptOpen)}
+                aria-expanded={reviewOpened}
+                onClick={() => {
+                  if (reviewOpened) return setReviewOpened(false);
+                  setReviewOpened(true);
+                  setNoteSignal((n) => n + 1);
+                }}
+                className={action(reviewOpened)}
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -2869,67 +2888,40 @@ function CallRow({
                   strokeLinejoin="round"
                   aria-hidden
                 >
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  <rect x="8" y="2" width="8" height="4" rx="1" />
+                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                  <path d="m9 14 2 2 4-4" />
                 </svg>
-                {t("calls.transcript")}
+                {t("review.title")}
+                {c.verdict ? (
+                  <VerdictMark verdict={c.verdict} />
+                ) : hasNote ? (
+                  <span aria-hidden className="size-1.5 rounded-full bg-[var(--muted-strong)]" />
+                ) : null}
               </button>
-            )}
-            <button
-              type="button"
-              aria-expanded={reviewOpened}
-              onClick={() => {
-                if (reviewOpened) return setReviewOpened(false);
-                setReviewOpened(true);
-                setNoteSignal((n) => n + 1);
-              }}
-              className={action(reviewOpened)}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="12"
-                height="12"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <rect x="8" y="2" width="8" height="4" rx="1" />
-                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-                <path d="m9 14 2 2 4-4" />
-              </svg>
-              {t("review.title")}
-              {c.verdict ? (
-                <VerdictMark verdict={c.verdict} />
-              ) : hasNote ? (
-                <span aria-hidden className="size-1.5 rounded-full bg-[var(--muted-strong)]" />
-              ) : null}
-            </button>
-          </div>
-          {reviewOpened && <div className="mt-2">{review}</div>}
-          {/* Ours rather than the browser's player: it knows the length before a
-              byte is fetched (CallRecording). Mounted by the press, so it plays. */}
-          {playerOpen && c.recordingUrl && (
-            <CallRecording
-              url={c.recordingUrl}
-              durationMs={c.durationSec !== undefined ? c.durationSec * 1000 : undefined}
-              autoPlay
-              className="mt-2"
-            />
-          )}
-          {/* The transcript straight on the paper, the bubbles' own surfaces
-              doing the work, as the WhatsApp thread beside it does. */}
-          {transcriptOpen && c.transcript && (
-            <div className="mt-3">
-              <CallTranscript flow transcript={c.transcript} contactName={contactName} />
             </div>
-          )}
+            {reviewOpened && <div className="mt-2">{review}</div>}
+            {/* Ours rather than the browser's player: it knows the length before a
+                byte is fetched (CallRecording). Mounted by the press, so it plays. */}
+            {playerOpen && c.recordingUrl && (
+              <CallRecording
+                url={c.recordingUrl}
+                durationMs={c.durationSec !== undefined ? c.durationSec * 1000 : undefined}
+                autoPlay
+                className="mt-2"
+              />
+            )}
+            {/* The transcript straight on the paper, the bubbles' own surfaces
+                doing the work, as the WhatsApp thread beside it does. */}
+            {transcriptOpen && c.transcript && (
+              <div className="mt-3">
+                <CallTranscript flow transcript={c.transcript} contactName={contactName} />
+              </div>
+            )}
+          </div>
         </div>
-        {/* Narrow, the facts column has no room beside the list: the selected
-            call's facts open under its actions. */}
         {selected && (
-          <div className="mt-3 @2xl/calls:hidden">
+          <div className="min-w-0">
             <CallFacts c={c} withStamp />
           </div>
         )}
