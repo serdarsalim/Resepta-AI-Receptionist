@@ -947,8 +947,11 @@ export function ConversationPanel({
           {tabAction && !actionsBelow && <div className="ml-auto flex shrink-0">{tabAction}</div>}
         </div>
       )}
+      {/* Its own row (the Inbox): on the feed column's inset, so Compose,
+          Place call and Add note end where the cards and rows under them end
+          (Serdar, 2026-11-01). */}
       {header && tabAction && actionsBelow && (
-        <div className="flex shrink-0 justify-end px-3 pt-3">{tabAction}</div>
+        <div className={`flex shrink-0 justify-end pt-3 ${FEED_COL_PAD}`}>{tabAction}</div>
       )}
       {details && (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--card)]">

@@ -941,7 +941,10 @@ row itself (`px-3`), so they end where the channel pills' row ends. Nudge's
 pane had them on the feed column's inset, about 50px in under nothing, and
 moved them out; Resepta already had them on the header row and keeps them
 there. A new tab's resting button goes on that row, never into a band of its
-own at `FEED_COL_PAD`.
+own at `FEED_COL_PAD`. The Inbox is the exception (2026-11-01, Serdar):
+its action already has a row of its own under the header (`actionsBelow`),
+and that row takes `FEED_COL_PAD`, so Compose ends where the cards under it
+end.
 
 Keep it as `calc(1rem + 9px)`, never a resolved pixel value. Nothing sets a root
 font-size, so `rem` tracks the browser's font preference and Serdar's Chrome runs
