@@ -5501,7 +5501,9 @@ const dictionary = {
   // a verdict. Pass, the agent handled the call; Miss, it got something
   // wrong. Both verdicts show while the note is being written, and at rest
   // only the one picked.
-  "review.title": { tr: "Notlar", en: "Notes", de: "Notizen" },
+  // The team's review of a call or test: the verdict and the note under it
+  // (Serdar, 2026-11-01: "instead of notes we say review").
+  "review.title": { tr: "Değerlendirme", en: "Review", de: "Bewertung" },
   "review.placeholder": {
     tr: "Not ekleyin…",
     en: "Add a note…",
