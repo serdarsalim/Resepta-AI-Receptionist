@@ -536,17 +536,18 @@ export function CollectedList({
   );
 }
 
-// Whether CollectedList would draw anything: the call row gives the answers
-// a column only when there are some, so an empty one never holds the summary
-// to a narrow measure.
-export function hasCollectedRows(
+// The answers as label/value pairs, as CollectedList draws them, for the
+// call row's facts column, which puts them in one grid with the call's own
+// facts so every value starts at one edge.
+export function collectedEntries(
   values: Record<string, unknown> | null | undefined,
   t: (key: TranslationKey) => string,
-): boolean {
-  return (
-    !!values &&
-    Object.values(values).some((value) => !isEmpty(value) && formatCollected(value, t) !== "")
-  );
+): Array<[string, string]> {
+  if (!values) return [];
+  return Object.entries(values)
+    .filter(([, value]) => !isEmpty(value))
+    .map(([key, value]) => [humanizeKey(key), formatCollected(value, t)] as [string, string])
+    .filter(([, text]) => text !== "");
 }
 
 // ── The call ─────────────────────────────────────────────────────────────────

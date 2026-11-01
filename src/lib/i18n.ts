@@ -3128,6 +3128,9 @@ const dictionary = {
   "calls.caller": { tr: "Arayan", en: "Caller", de: "Anrufer" },
   "calls.when": { tr: "Zaman", en: "When", de: "Zeit" },
   "calls.duration": { tr: "Süre", en: "Duration", de: "Dauer" },
+  // The call row's facts column (2026-11-01).
+  "calls.length": { tr: "Süre", en: "Length", de: "Dauer" },
+  "calls.ended": { tr: "Bitiş", en: "Ended", de: "Beendet" },
   "calls.outcome": { tr: "Sonuç", en: "Outcome", de: "Ergebnis" },
   // The per-call price line in the expanded detail. {amount} is pre-formatted
   // ("$0.42") — USD because the meter runs in USD, whatever the org currency.

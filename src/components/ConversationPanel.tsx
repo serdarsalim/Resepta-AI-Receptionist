@@ -26,8 +26,7 @@ import {
   CallTranscript,
   CallVerdictMark,
   callVerdict,
-  CollectedList,
-  hasCollectedRows,
+  collectedEntries,
   humanizeCallEnd,
 } from "./CallDetail";
 import { buttonClass } from "./Control";
@@ -2601,17 +2600,25 @@ function CallRow({
       : undefined;
   const wordSaysEnding =
     line === "no-answer" || line === "busy" || line === "voicemail" || line === "declined";
-  // Line 1's quiet half: who rang whom (Serdar, 2026-11-01: "Ahmet Ak →
-  // agent" reads faster than "Inbound call"), then length, how it ended and
-  // who or what placed it. The customer by the name on the record, or by the
-  // number while nobody has typed a name. A zero length shows nothing.
+  // Never reached a person: such a row with no summary stays one line.
+  const missed = line !== undefined && line !== "answered";
+  // Line 1's quiet half is who rang whom and nothing else (Serdar,
+  // 2026-11-01: "Ahmet Ak → agent" reads faster than "Inbound call"). The
+  // customer by the name on the record, or by the number while nobody has
+  // typed a name.
   const customerSide = contactName?.trim() || c.customerNumber || t("calls.unknown");
   const agentSide = c.agentName || t("calls.agent");
   const from = c.inbound ? customerSide : agentSide;
   const to = c.inbound ? agentSide : customerSide;
-  const meta = [
-    c.durationSec ? formatDuration(c.durationSec) : null,
-    wordSaysEnding ? null : humanizeCallEnd(c.disconnectionReason, t),
+  // The right column's top group, labelled like the answers under it: the
+  // length (a zero length shows nothing) and how it ended, then who or what
+  // placed the call, which says itself in a sentence.
+  const ended = wordSaysEnding ? null : humanizeCallEnd(c.disconnectionReason, t);
+  const facts: Array<[string, string]> = [
+    ...(c.durationSec ? [[t("calls.length"), formatDuration(c.durationSec)] as [string, string]] : []),
+    ...(ended ? [[t("calls.ended"), ended] as [string, string]] : []),
+  ];
+  const provenance = [
     c.placedBy ? t("calls.placedBy", { name: c.placedBy }) : null,
     c.bulkRun ? t("calls.bulkRun", { name: c.bulkRun }) : null,
     c.requestedCallback ? t("calls.requestedCallback") : null,
@@ -2630,7 +2637,8 @@ function CallRow({
       onSave={(patch) => setReview({ callId: c.id as Id<"calls">, ...patch })}
     />
   );
-  const hasCollected = hasCollectedRows(c.collected, t);
+  const answers = collectedEntries(c.collected, t);
+  const hasCollected = answers.length > 0;
   // The actions at the meta line's size and weight, so the summary stays the
   // loudest thing on the row (Serdar, 2026-11-01). Written out rather than a
   // Control variant, since stacking text-xs on one is a bet on Tailwind's
@@ -2667,7 +2675,6 @@ function CallRow({
               `${from} → ${to}`,
               c.inbound ? t("calls.inbound") : t("calls.outbound"),
               c.customerNumber,
-              ...meta,
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -2693,7 +2700,6 @@ function CallRow({
               <path d="m12 5 7 7-7 7" />
             </svg>
             {to}
-            {meta.length > 0 && ` · ${meta.join(" · ")}`}
           </span>
         </div>
         <span
@@ -2703,35 +2709,63 @@ function CallRow({
           {formatFeedStamp(c.at, language, t("common.yesterday"), tz)}
         </span>
       </div>
-      {/* The body in two columns once the row is wide (Serdar, 2026-11-01):
-          the summary at a reading measure on the left, everything the agent
-          collected on the right, one answer per line. With no answers the
-          summary takes the row; narrow, the answers drop under it. */}
-      {(c.summary || setOff.length > 0 || hasCollected) && (
-        <div
-          className={`mt-1.5 grid gap-x-8 gap-y-3 ${
-            hasCollected ? "@2xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : ""
-          }`}
-        >
-          {(c.summary || setOff.length > 0) && (
-            <div className="min-w-0 max-w-[65ch]">
-              {c.summary && (
-                <p className="whitespace-pre-wrap break-words leading-6 text-[var(--foreground)]">
-                  {c.summary}
-                </p>
-              )}
-              {setOff.length > 0 && (
-                <ul className="mt-1.5 space-y-0.5 text-xs leading-5 text-[var(--foreground)]">
-                  {setOff.map((fact) => (
-                    <li key={fact}>{fact}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-          {hasCollected && (
-            <CollectedList values={c.collected!} className="content-start @2xl:pt-0.5" />
-          )}
+      {/* The body in two columns once the row is wide (Serdar, 2026-11-01),
+          one layout for every call: the summary at a reading measure on the
+          left; on the right the call's facts, then under a hairline what the
+          agent collected, one per line. A call that never reached anyone and
+          has nothing to say stays one line. Narrow, the column drops under
+          the summary. */}
+      {(c.summary ||
+        setOff.length > 0 ||
+        hasCollected ||
+        (!missed && (facts.length > 0 || provenance.length > 0))) && (
+        <div className="mt-1.5 grid gap-x-8 gap-y-3 @2xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <div className="min-w-0 max-w-[65ch]">
+            {c.summary && (
+              <p className="whitespace-pre-wrap break-words leading-6 text-[var(--foreground)]">
+                {c.summary}
+              </p>
+            )}
+            {setOff.length > 0 && (
+              <ul className="mt-1.5 space-y-0.5 text-xs leading-5 text-[var(--foreground)]">
+                {setOff.map((fact) => (
+                  <li key={fact}>{fact}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="min-w-0 @2xl:pt-0.5">
+            {/* One grid for the call's facts and its answers, so every
+                value starts at one edge; a hairline between the two groups
+                only when both are there. */}
+            {(facts.length > 0 || hasCollected) && (
+              <dl className="grid grid-cols-[minmax(0,max-content)_1fr] gap-x-3 gap-y-1 text-xs">
+                {facts.map(([label, value]) => (
+                  <div key={`f-${label}`} className="contents">
+                    <dt className="text-[var(--muted-strong)]">{label}</dt>
+                    <dd className="min-w-0 break-words text-[var(--foreground)]">{value}</dd>
+                  </div>
+                ))}
+                {facts.length > 0 && hasCollected && (
+                  <div
+                    aria-hidden
+                    className="col-span-2 my-1 border-t border-[color-mix(in_srgb,var(--border)_50%,transparent)]"
+                  />
+                )}
+                {answers.map(([label, value]) => (
+                  <div key={`a-${label}`} className="contents">
+                    <dt className="text-[var(--muted-strong)]">{label}</dt>
+                    <dd className="min-w-0 break-words text-[var(--foreground)]">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+            {provenance.length > 0 && (
+              <p className={`text-xs text-[var(--muted)] ${facts.length > 0 || hasCollected ? "mt-2" : ""}`}>
+                {provenance.join(" · ")}
+              </p>
+            )}
+          </div>
         </div>
       )}
       {noteAbove && (
