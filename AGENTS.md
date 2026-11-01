@@ -1042,8 +1042,8 @@ and Serdar kept the hues, because they make a row findable without reading it.
 
 **No product mark inside the app; the rail's top row is the fold arrow**
 (Serdar, 2026-10-21). The rail's first row is `h-12`, level with the top bar,
-and holds only the fold toggle at its right end, Nudge's chevron (it points
-where the rail will go: left to fold, right to open). The business switcher
+and holds only the fold toggle at its right end, Nudge's panel glyph (a box
+with its sidebar ruled off; 2026-11-01, replacing a chevron). The business switcher
 is its own row under it. No Resepta logo or wordmark: the top-left belongs to
 the business, and the brand stays on sign-in, the onboarding wizard and the
 pages customers see. Folded, the rail shows the arrow and no mark, and

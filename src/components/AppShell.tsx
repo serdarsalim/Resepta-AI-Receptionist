@@ -428,26 +428,15 @@ const ChevronsUpDownIcon = makeIcon(
   </>,
 );
 
-// The fold toggle's glyphs, Nudge's (Serdar, 2026-10-21: "that's how I use
-// it in Nudge"): the arrow points where the rail will go, left to fold it,
-// right to open it again.
-function SidebarArrowIcon({ open }: { open: boolean }) {
-  return (
-    <svg
-      width={16}
-      height={16}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <polyline points={open ? "15 18 9 12 15 6" : "9 18 15 12 9 6"} />
-    </svg>
-  );
-}
+// The fold toggle's glyph: a panel with its sidebar ruled off, Nudge's
+// (Serdar, 2026-11-01). It replaced a chevron pointing where the rail would
+// go; the panel says what the button is for in both states.
+const SidebarToggleIcon = makeIcon(
+  <>
+    <rect x="3.5" y="3.5" width="17" height="17" rx="3.5" />
+    <line x1="10" y1="3.5" x2="10" y2="20.5" />
+  </>,
+);
 
 // The phone drawer's glyph. Not the fold arrows: they describe a sidebar
 // that stays put and gets narrower, which is what the desktop toggle does. On a phone the same tap opens a drawer over the page, and a hamburger
@@ -1711,7 +1700,7 @@ export function AppShell({
               aria-label={showCollapsed ? t("nav.expand") : t("nav.collapse")}
               className="shrink-0 rounded p-0.5 text-[var(--muted)] transition-colors hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
             >
-              <SidebarArrowIcon open={!showCollapsed} />
+              <SidebarToggleIcon />
             </button>
             </HoverTip>
           </div>
