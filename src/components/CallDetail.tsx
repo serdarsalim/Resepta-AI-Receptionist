@@ -541,33 +541,16 @@ export function CollectedList({
   );
 }
 
-// The timeline row's version (2026-11-01): the answers as one line of text
-// under the summary, "Gender Hanım · Room type Triple", the label muted and
-// the answer at full strength, wrapping where it must. Not chips: a pill
-// read as a tag or a button, not as something the caller said (Serdar).
-export function CollectedLine({
-  values,
-  className = "",
-}: {
-  values: Record<string, unknown>;
-  className?: string;
-}) {
-  const { t } = useLanguage();
-  const rows = Object.entries(values)
-    .filter(([, value]) => !isEmpty(value))
-    .map(([key, value]) => [key, formatCollected(value, t)] as const)
-    .filter(([, text]) => text !== "");
-  if (rows.length === 0) return null;
+// Whether CollectedList would draw anything: the call row gives the answers
+// a column only when there are some, so an empty one never holds the summary
+// to a narrow measure.
+export function hasCollectedRows(
+  values: Record<string, unknown> | null | undefined,
+  t: (key: TranslationKey) => string,
+): boolean {
   return (
-    <p className={`break-words text-xs leading-5 ${className}`}>
-      {rows.map(([key, text], i) => (
-        <span key={key}>
-          {i > 0 && <span className="text-[var(--muted)]"> · </span>}
-          <span className="text-[var(--muted)]">{humanizeKey(key)}</span>{" "}
-          <span className="text-[var(--foreground)]">{text}</span>
-        </span>
-      ))}
-    </p>
+    !!values &&
+    Object.values(values).some((value) => !isEmpty(value) && formatCollected(value, t) !== "")
   );
 }
 

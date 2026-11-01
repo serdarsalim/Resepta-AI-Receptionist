@@ -24,7 +24,8 @@ import {
 import {
   CallTranscript,
   CallVerdictMark,
-  CollectedLine,
+  CollectedList,
+  hasCollectedRows,
   humanizeCallEnd,
 } from "./CallDetail";
 import { buttonClass } from "./Control";
@@ -2626,14 +2627,16 @@ function CallRow({
       onSave={(patch) => setReview({ callId: c.id as Id<"calls">, ...patch })}
     />
   );
-  const hasCollected = !!c.collected && Object.keys(c.collected).length > 0;
-  // An open section's button takes the ink tier up and keeps the wash, so its
-  // label never has to change (and move the buttons after it) to say "open".
-  // Variants swap rather than stack a colour on one (Control.tsx).
+  const hasCollected = hasCollectedRows(c.collected, t);
+  // The actions at the meta line's size and weight, so the summary stays the
+  // loudest thing on the row (Serdar, 2026-11-01). Written out rather than a
+  // Control variant, since stacking text-xs on one is a bet on Tailwind's
+  // order. An open section's button takes the ink tier up and keeps the
+  // wash, so its label never has to change to say "open".
   const action = (open: boolean) =>
-    open
-      ? `${buttonClass("ghost", "xs")} gap-1.5 bg-[var(--control-hover)]`
-      : `${buttonClass("quiet", "xs")} gap-1.5`;
+    `inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs outline-none transition-colors hover:bg-[var(--control-hover)] hover:text-[var(--foreground)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40 ${
+      open ? "bg-[var(--control-hover)] text-[var(--foreground)]" : "text-[var(--muted)]"
+    }`;
 
   return (
     <div
@@ -2642,7 +2645,7 @@ function CallRow({
       // ran together (Serdar, 2026-11-01). The rule is mixed from the ink, not
       // --border, which nearly vanishes on the beige paper and in dark is the
       // card colour. The hover wash marks the row under the pointer.
-      className={`-mx-2 scroll-mt-2 px-3 py-4 text-sm transition-colors hover:bg-[color-mix(in_srgb,var(--foreground)_3%,transparent)] ${
+      className={`@container -mx-2 scroll-mt-2 px-3 py-4 text-sm transition-colors hover:bg-[color-mix(in_srgb,var(--foreground)_3%,transparent)] ${
         ruled ? "border-t border-[color-mix(in_srgb,var(--foreground)_13%,transparent)]" : ""
       }`}
     >
@@ -2669,19 +2672,37 @@ function CallRow({
           {formatTime(c.at, language)}
         </span>
       </div>
-      {c.summary && (
-        <p className="mt-1.5 whitespace-pre-wrap break-words leading-6 text-[var(--foreground)]">
-          {c.summary}
-        </p>
+      {/* The body in two columns once the row is wide (Serdar, 2026-11-01):
+          the summary at a reading measure on the left, everything the agent
+          collected on the right, one answer per line. With no answers the
+          summary takes the row; narrow, the answers drop under it. */}
+      {(c.summary || setOff.length > 0 || hasCollected) && (
+        <div
+          className={`mt-1.5 grid gap-x-8 gap-y-3 ${
+            hasCollected ? "@2xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : ""
+          }`}
+        >
+          {(c.summary || setOff.length > 0) && (
+            <div className="min-w-0 max-w-[65ch]">
+              {c.summary && (
+                <p className="whitespace-pre-wrap break-words leading-6 text-[var(--foreground)]">
+                  {c.summary}
+                </p>
+              )}
+              {setOff.length > 0 && (
+                <ul className="mt-1.5 space-y-0.5 text-xs leading-5 text-[var(--foreground)]">
+                  {setOff.map((fact) => (
+                    <li key={fact}>{fact}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          {hasCollected && (
+            <CollectedList values={c.collected!} className="content-start @2xl:pt-0.5" />
+          )}
+        </div>
       )}
-      {setOff.length > 0 && (
-        <ul className="mt-1.5 space-y-0.5 text-xs leading-5 text-[var(--foreground)]">
-          {setOff.map((fact) => (
-            <li key={fact}>{fact}</li>
-          ))}
-        </ul>
-      )}
-      {hasCollected && <CollectedLine values={c.collected!} className="mt-1.5" />}
       {noteAbove && (
         <div ref={noteRef} className="mt-3">
           {review}
@@ -2695,7 +2716,7 @@ function CallRow({
             onClick={() => setPlayerOpen((open) => !open)}
             className={action(playerOpen)}
           >
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden>
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden>
               <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" />
             </svg>
             {t("calls.play")}
@@ -2710,8 +2731,8 @@ function CallRow({
           >
             <svg
               viewBox="0 0 24 24"
-              width="13"
-              height="13"
+              width="12"
+              height="12"
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
@@ -2739,8 +2760,8 @@ function CallRow({
         >
           <svg
             viewBox="0 0 24 24"
-            width="13"
-            height="13"
+            width="12"
+            height="12"
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
