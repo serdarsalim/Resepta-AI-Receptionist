@@ -562,6 +562,115 @@ export const seedWhatsappThreads = internalMutation({
   },
 });
 
+// Dev only: WhatsApp and email AROUND the calls a business already has, so a
+// conversation's All tab shows the three channels interleaved and each tab
+// has something to draw. Picks the customers with the newest calls (up to
+// eight) and writes a short exchange before and after each one's newest
+// call. Idempotent on the wamid prefix; Turkish, for the dev salons.
+export const seedMixedThreads = internalMutation({
+  args: { orgId: v.id("orgs") },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const org = await ctx.db.get(args.orgId);
+    if (!org) throw new Error("no-such-org");
+    const MIN = 60_000;
+    const HOUR = 60 * MIN;
+    const business = org.name || "Bella";
+    const from = `merhaba@${org.publicSlug || "bella"}.example.com`;
+
+    const calls = await ctx.db
+      .query("calls")
+      .withIndex("by_org_started", (q) => q.eq("orgId", args.orgId))
+      .order("desc")
+      .take(200);
+    const newestCall = new Map<Id<"customers">, number>();
+    for (const call of calls) {
+      if (call.customerId && !newestCall.has(call.customerId)) {
+        newestCall.set(call.customerId, call.startedAt);
+      }
+    }
+
+    let inserted = 0;
+    let n = 0;
+    for (const [customerId, callAt] of newestCall) {
+      if (n >= 8) break;
+      const customer = await ctx.db.get(customerId);
+      if (!customer || customer.deletingAt) continue;
+      const existing = await ctx.db
+        .query("messages")
+        .withIndex("by_customer", (q) => q.eq("customerId", customerId))
+        .take(100);
+      if (existing.some((m) => m.wamid?.startsWith("wamid.mix-seed"))) continue;
+      n++;
+      const name = customer.firstName || "Merhaba";
+      const email =
+        customer.email ??
+        `${(customer.firstName || "musteri").toLowerCase()}@example.com`;
+      const tag = `${customerId}`;
+
+      type Row = {
+        dir: "in" | "out";
+        kind: string;
+        body: string;
+        at: number;
+        status: "sent" | "delivered" | "read" | "received" | "failed";
+        subject?: string;
+        templateName?: string;
+        error?: string;
+      };
+      const rows: Row[] = [
+        { dir: "in", kind: "reply", body: `Merhaba, bu hafta için randevu almak istiyorum. Hangi günler müsaitsiniz?`, at: callAt - 26 * HOUR, status: "received" },
+        { dir: "out", kind: "session", body: `Merhaba ${name}! Perşembe 15:00 ve Cuma 11:30 boş. Hangisi uyar?`, at: callAt - 26 * HOUR + 4 * MIN, status: "read" },
+        { dir: "in", kind: "reply", body: "Telefonla arayıp konuşayım, daha kolay olur 🙂", at: callAt - 25 * HOUR, status: "received" },
+        { dir: "out", kind: "email_confirmation", subject: "Randevunuz onaylandı", body: `Merhaba ${name},\n\n${business} randevunuz oluşturuldu: Cuma 11:30.\n\nDeğiştirmek isterseniz bu e-postayı yanıtlamanız yeterli.\n\nGörüşmek üzere.`, at: callAt + 12 * MIN, status: "read" },
+        { dir: "out", kind: "confirmation", templateName: "appointment_confirmation", body: `Merhaba ${name}! ${business} randevunuz: Cuma 11:30. Gelemeyecekseniz bu mesajı yanıtlamanız yeterli.`, at: callAt + 13 * MIN, status: "delivered" },
+        { dir: "in", kind: "email_reply", subject: "Re: Randevunuz onaylandı", body: "Teşekkürler! Bir de manikür ekleyebilir miyiz? Süre yeterli olur mu?", at: callAt + 3 * HOUR, status: "received" },
+        { dir: "out", kind: "email_reply", subject: "Re: Randevunuz onaylandı", body: `Merhaba ${name},\n\nEkledim, toplam 90 dakika olacak. Cuma 11:30'da bekliyoruz.\n\n${business}`, at: callAt + 3 * HOUR + 20 * MIN, status: "delivered" },
+        { dir: "out", kind: "reminder_24h", templateName: "appointment_reminder", body: `Merhaba ${name}! Yarın 11:30 randevunuzu hatırlatırız.`, at: callAt + 22 * HOUR, status: "read" },
+        { dir: "in", kind: "reply", body: "Onayla", at: callAt + 22 * HOUR + 7 * MIN, status: "received" },
+      ];
+      if (n % 3 === 0) {
+        rows.push({ dir: "out", kind: "email_reminder_24h", subject: "Yarın görüşüyoruz", body: `Merhaba ${name}, yarınki randevunuzu hatırlatırız.`, at: callAt + 22 * HOUR + 2 * MIN, status: "failed", error: "smtp-bounce" });
+      }
+
+      let lastInboundAt = customer.lastInboundAt ?? 0;
+      for (const [i, r] of rows.entries()) {
+        const isEmail = r.kind.startsWith("email_");
+        await ctx.db.insert("messages", {
+          orgId: args.orgId,
+          customerId,
+          direction: r.dir,
+          kind: r.kind,
+          body: r.body,
+          occurredAt: r.at,
+          status: r.status,
+          ...(r.templateName ? { templateName: r.templateName } : {}),
+          ...(r.error ? { error: r.error } : {}),
+          ...(isEmail
+            ? {
+                emailSubject: r.subject,
+                emailFrom: r.dir === "in" ? email : from,
+                emailId: `mix-seed-${tag}-${i}`,
+              }
+            : { wamid: `wamid.mix-seed.${tag}.${i}`, lane: "cloud" as const }),
+        });
+        inserted++;
+        if (r.dir === "in" && !isEmail) lastInboundAt = Math.max(lastInboundAt, r.at);
+      }
+      // Keeps the WhatsApp composer live on the seeded thread, and gives the
+      // email tab an address to reply to.
+      await ctx.db.patch(customerId, {
+        lastInboundAt,
+        lastInboundLane: "cloud",
+        ...(customer.email ? {} : { email }),
+      });
+      await syncCustomerSearch(ctx, customerId);
+      await recomputeThread(ctx, customerId);
+    }
+    return inserted;
+  },
+});
+
 // Dev housekeeping. wa.ts used to write a failed row for EVERY send while
 // WhatsApp was unconfigured, so a deployment that has been running unconnected
 // accumulates one red line per reminder per customer — a conversation history
