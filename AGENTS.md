@@ -1094,10 +1094,9 @@ inside the same card, and the phone still runs edge to edge.
 
 **The rail's two menu controls look alike**: the business switcher at the top
 and the account row at the foot wear `--pane-field` at rest with the up/down
-chevron, so each reads as a button rather than a caption (Nudge's account row
-took a 4% ink tint for this; ink on this pane read as a pressed row here). In
-dark `--pane-field` steps UP from the charcoal rail (`#303237`, hover
-`#393b41`); the old `#232323` sat below it and read as a hole. The
+chevron, so each reads as a button rather than a caption. `--pane-field` is
+Nudge's ink tint, 4% at rest and 8% on hover or open, in both themes
+(Serdar, 2026-11-01; it was white, which read too faint beside Nudge). The
 account row is always titled name · address, and shows the person's Google
 photo with the initials as the fallback.
 

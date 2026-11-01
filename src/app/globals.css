@@ -120,8 +120,11 @@
      At rest it is LIGHTER than the pane and on hover DARKER than it. That flip
      is deliberate: on a surface already at white there is no lighter left to
      go, so the hover has to press in rather than lift. */
-  --pane-field: #ffffff;
-  --pane-field-hover: #f2f2f4;
+  /* Superseded 2026-11-01: Serdar asked for Nudge's look, a tint of the ink
+     (4% at rest, 8% on hover and open), one step off the rail in both
+     themes. The white above read too faint beside Nudge's. */
+  --pane-field: color-mix(in srgb, var(--foreground) 4%, transparent);
+  --pane-field-hover: color-mix(in srgb, var(--foreground) 8%, transparent);
   /* The plane the view's cards float on. The reference washes its page from a
      cool tint into a warm one, corner to corner, so the white cards read as
      paper on something rather than white on white. Theirs runs lavender to
@@ -260,8 +263,8 @@
      is the #25272b charcoal of the joined frame (.app-pane), so the field
      steps up from it; the old #232323 sat BELOW that rail and read as a
      hole cut into it. */
-  --pane-field: #303237;
-  --pane-field-hover: #393b41;
+  --pane-field: color-mix(in srgb, var(--foreground) 4%, transparent);
+  --pane-field-hover: color-mix(in srgb, var(--foreground) 8%, transparent);
   /* Halved: the same mix that reads as a tint on white reads as a colour cast
      on near-black. */
   --content-bg: linear-gradient(
