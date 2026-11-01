@@ -2573,9 +2573,10 @@ function CallRow({
   const [transcriptOpen, setTranscriptOpen] = useState(startOpen);
   // The Note action opens the review's box and puts the caret in it.
   const [noteSignal, setNoteSignal] = useState(0);
-  // A call with a review (a note or a verdict) shows its Review line under
-  // the summary; one without shows nothing until the Review action opens it
-  // in that same place, above the actions (Serdar, 2026-11-01).
+  // A call with a review (a note or a verdict) shows it under
+  // the actions, under the Review button that names it, so it carries no
+  // heading of its own; one without shows nothing until that button opens it
+  // (Serdar, 2026-11-01).
   const [reviewOpened, setReviewOpened] = useState(false);
   const hasReview = !!c.note?.trim() || !!c.verdict;
   const showReview = hasReview || reviewOpened;
@@ -2650,6 +2651,7 @@ function CallRow({
       verdictOnFocus
       collapsible
       openSignal={noteSignal}
+      hideTitle
       signature={signature}
       signatureTitle={c.noteAt !== undefined ? formatDateTime(c.noteAt, language, tz) : undefined}
       onSave={(patch) => setReview({ callId: c.id as Id<"calls">, ...patch })}
@@ -2792,7 +2794,6 @@ function CallRow({
           </div>
         </div>
       )}
-      {showReview && <div className="mt-3">{review}</div>}
       <div className="-ml-2 mt-2 flex items-center gap-0.5">
         {c.recordingUrl && (
           <button
@@ -2858,6 +2859,7 @@ function CallRow({
           {t("review.title")}
         </button>
       </div>
+      {showReview && <div className="mt-2">{review}</div>}
       {/* Ours rather than the browser's player: it knows the length before a
           byte is fetched (CallRecording). Mounted by the press, so it plays. */}
       {playerOpen && c.recordingUrl && (

@@ -54,6 +54,7 @@ export function ReviewNotes({
   verdictOnFocus = false,
   collapsible = false,
   openSignal = 0,
+  hideTitle = false,
 }: {
   note: string;
   verdict: Verdict | null;
@@ -77,6 +78,8 @@ export function ReviewNotes({
   collapsible?: boolean;
   // Bumped by the row's Note action: open the box and put the caret in it.
   openSignal?: number;
+  // The call row's own Review button names the section, so no heading.
+  hideTitle?: boolean;
 }) {
   const { t } = useLanguage();
   const sectionRef = useRef<HTMLElement>(null);
@@ -187,7 +190,7 @@ export function ReviewNotes({
           holds the chips' height (h-6) even while they are hidden, so
           clicking into the note moves nothing. */}
       <div className={`flex items-center gap-2 ${showBox ? "mb-2" : ""} ${verdictOnFocus ? "h-6" : ""}`}>
-        {collapsible && !showBox ? (
+        {hideTitle ? null : collapsible && !showBox ? (
           <button
             type="button"
             onClick={openAndFocus}
