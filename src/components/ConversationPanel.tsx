@@ -1165,9 +1165,9 @@ export function ConversationPanel({
         )}
         {/* Call timeline: one flat ROW per call, newest first, straight on
             the paper (2026-11-01; cards with a grey inset since 2026-09-01).
-            The row carries the verdict, the summary and the answers at rest;
-            the recording, the transcript and a new note open under its
-            actions row (CallRow). */}
+            One call is selected at a time; only it shows its actions, and
+            its outcome and answers sit in a column beside the list
+            (CallCards). */}
         {filter === "call" && queuedCallback && (
           <QueuedCallbackCard callback={queuedCallback} />
         )}
@@ -2527,47 +2527,138 @@ function CallCards({
   items: CallCardItem[];
   contactName?: string | null;
   // Row the parent is about to scroll to (deep link / All-index routing).
-  // Read once at mount: a routed row starts with its transcript OPEN, since
-  // the person came for that call's words, not for its existence.
+  // Read once at mount: a routed row starts selected with its transcript
+  // OPEN, since the person came for that call's words, not for its existence.
   focusId?: string | null;
 }) {
   const [initialFocus] = useState(focusId);
+  // One call is selected at a time, the newest until another is clicked
+  // (Serdar, 2026-11-01). Only it shows its actions and its full summary,
+  // and the column beside the list shows ITS outcome and answers, so the
+  // labels are on screen once instead of once per call.
+  const [selectedId, setSelectedId] = useState<string | null>(focusId ?? null);
   if (items.length === 0) return null;
+  const selected = items.find((c) => c.id === selectedId) ?? items[0];
   // No day chips here since 2026-11-01: each row carries its own date and
   // time on the right (formatFeedStamp), so the list is one run of rows.
+  // Wide, the selected call's facts sit in a column that stays in view while
+  // the list scrolls; narrow, they open under the selected row instead.
   return (
-    <div>
-      {items.map((c, idx) => (
-        <CallRow
-          key={c.id}
-          c={c}
-          contactName={contactName}
-          ruled={idx > 0}
-          startOpen={initialFocus === c.id}
-        />
-      ))}
+    <div className="@container/calls">
+      <div className="grid @2xl/calls:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] @2xl/calls:gap-x-8">
+        <div className="min-w-0">
+          {items.map((c, idx) => (
+            <CallRow
+              key={c.id}
+              c={c}
+              contactName={contactName}
+              ruled={idx > 0}
+              selected={c.id === selected.id}
+              onSelect={() => setSelectedId(c.id)}
+              startOpen={initialFocus === c.id}
+            />
+          ))}
+        </div>
+        <div className="hidden min-w-0 @2xl/calls:block">
+          <div className="sticky top-0 py-4">
+            <CallFacts c={selected} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// What a call row and the facts column both read off a call.
+function callShape(c: CallCardItem) {
+  // The line's word, only when no free-text outcome says it already.
+  const line =
+    !c.outcome || c.outcome === "true" || c.outcome === "false"
+      ? callOutcome(c.disconnectionReason, c.durationSec)
+      : undefined;
+  // Never reached a person (no answer, busy, voicemail, declined, refused).
+  const missed = line !== undefined && line !== "answered";
+  return { line, missed };
+}
+
+// The selected call's facts: how it ended, then what the agent collected,
+// then who or what placed it. No sentence for a call that collected nothing:
+// its outcome word is the whole story (Serdar, 2026-11-01).
+function CallFacts({ c }: { c: CallCardItem }) {
+  const { t } = useLanguage();
+  const { line, missed } = callShape(c);
+  const wordSaysEnding =
+    line === "no-answer" || line === "busy" || line === "voicemail" || line === "declined";
+  const verdict = callVerdict(c.outcome, c.disconnectionReason, c.durationSec, t);
+  // A missed call's outcome is its word (Voicemail); a call that ran says how
+  // it ended (who hung up). The agent's own success verdict stays off: it was
+  // confusing and often wrong (Serdar, 2026-11-01).
+  const ended = missed
+    ? verdict?.label ?? null
+    : wordSaysEnding
+      ? null
+      : humanizeCallEnd(c.disconnectionReason, t);
+  const answers = collectedEntries(c.collected, t);
+  const provenance = [
+    c.placedBy ? t("calls.placedBy", { name: c.placedBy }) : null,
+    c.bulkRun ? t("calls.bulkRun", { name: c.bulkRun }) : null,
+    c.requestedCallback ? t("calls.requestedCallback") : null,
+  ].filter((fact): fact is string => !!fact);
+  if (!ended && answers.length === 0 && provenance.length === 0) return null;
+  return (
+    <div className="text-xs">
+      {(ended || answers.length > 0) && (
+        <dl className="grid grid-cols-[minmax(0,max-content)_1fr] gap-x-3 gap-y-1">
+          {ended && (
+            <div className="contents">
+              <dt className="text-[var(--muted-strong)]">{t("calls.callOutcome")}</dt>
+              <dd className="min-w-0 break-words text-[var(--foreground)]">{ended}</dd>
+            </div>
+          )}
+          {ended && answers.length > 0 && (
+            // No rule over one line of facts (Serdar, 2026-11-01): a spacer
+            // row, 4px plus the grid's own gap, sets the answers apart.
+            <div aria-hidden className="col-span-2 h-1" />
+          )}
+          {answers.map(([label, value]) => (
+            <div key={`a-${label}`} className="contents">
+              <dt className="text-[var(--muted-strong)]">{label}</dt>
+              <dd className="min-w-0 break-words text-[var(--foreground)]">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {provenance.length > 0 && (
+        <p className={`text-[var(--muted)] ${ended || answers.length > 0 ? "mt-2" : ""}`}>
+          {provenance.join(" · ")}
+        </p>
+      )}
     </div>
   );
 }
 
 // One call as a row in a timeline (2026-11-01, Serdar's mock: Linear and
-// Attio's feed rather than a card holding a grey box). The verdict leads,
-// the summary runs the full width at body size, the answers are chips, and
-// everything that is not read at a glance (the recording, the transcript, a
-// new note) waits behind one quiet row of actions and opens UNDER it, so the
-// button pressed stays under the pointer. Rows part by a hairline at half
-// --border, straight on the paper; about five fit a laptop pane where two
-// cards did.
+// Attio's feed rather than a card holding a grey box). A row at rest is its
+// who-and-when line and two lines of summary; a call that never reached
+// anyone is the line alone, led by its word (Voicemail). Clicking selects it:
+// the full summary, what the call set in motion and the actions (Play,
+// Transcript, Review), whose panels open UNDER them so the button pressed
+// stays under the pointer. Its outcome and answers live in CallFacts, beside
+// the list when wide and under the actions when narrow.
 function CallRow({
   c,
   contactName,
   ruled,
+  selected,
+  onSelect,
   startOpen,
 }: {
   c: CallCardItem;
   contactName?: string | null;
   // A rule above: every row but the first.
   ruled: boolean;
+  selected: boolean;
+  onSelect: () => void;
   startOpen: boolean;
 }) {
   const { t, language } = useLanguage();
@@ -2596,18 +2687,7 @@ function CallRow({
       ? t("calls.callbackRequested", { when: formatDateTime(c.callbackRequestedFor, language, tz) })
       : null,
   ].filter((fact): fact is string => !!fact);
-  // The ending only where the verdict word does not already say it: a call
-  // that rang out, was busy, reached voicemail or was declined says so once.
-  // A hang-up says who ended a call that ran, and a refused or failed call
-  // keeps the line that says why.
-  const line =
-    !c.outcome || c.outcome === "true" || c.outcome === "false"
-      ? callOutcome(c.disconnectionReason, c.durationSec)
-      : undefined;
-  const wordSaysEnding =
-    line === "no-answer" || line === "busy" || line === "voicemail" || line === "declined";
-  // Never reached a person: such a row with no summary stays one line.
-  const missed = line !== undefined && line !== "answered";
+  const { missed } = callShape(c);
   // Line 1's quiet half is who rang whom and nothing else (Serdar,
   // 2026-11-01: "Ahmet Ak → agent" reads faster than "Inbound call"). The
   // customer by the name on the record, or by the number while nobody has
@@ -2616,23 +2696,11 @@ function CallRow({
   const agentSide = c.agentName || t("calls.agent");
   const from = c.inbound ? customerSide : agentSide;
   const to = c.inbound ? agentSide : customerSide;
-  // The right column's top group, labelled like the answers under it: the
-  // length (a zero length shows nothing) and how it ended, then who or what
-  // placed the call, which says itself in a sentence.
-  const ended = wordSaysEnding ? null : humanizeCallEnd(c.disconnectionReason, t);
   // The verdict word leads a missed row's top line (CallVerdictMark).
   const verdict = callVerdict(c.outcome, c.disconnectionReason, c.durationSec, t);
-  // How the call ended leads the column; its length rides Play. No Result line:
-  // the agent's own success verdict was confusing and often wrong (Serdar,
-  // 2026-11-01).
-  const facts: Array<[string, string, string?]> = [
-    ...(ended ? [[t("calls.callOutcome"), ended] as [string, string]] : []),
-  ];
-  const provenance = [
-    c.placedBy ? t("calls.placedBy", { name: c.placedBy }) : null,
-    c.bulkRun ? t("calls.bulkRun", { name: c.bulkRun }) : null,
-    c.requestedCallback ? t("calls.requestedCallback") : null,
-  ].filter((fact): fact is string => !!fact);
+  // A missed call's summary says what its word already said, so it shows
+  // only once the row is selected.
+  const showSummary = !!c.summary && (selected || !missed);
   const signature =
     [c.noteBy, c.noteEditedBy ? t("review.editedBy", { name: c.noteEditedBy }) : null]
       .filter((part): part is string => !!part)
@@ -2650,10 +2718,6 @@ function CallRow({
       onSave={(patch) => setReview({ callId: c.id as Id<"calls">, ...patch })}
     />
   );
-  const answers = collectedEntries(c.collected, t);
-  const hasCollected = answers.length > 0;
-  const showFacts =
-    hasCollected || (!missed && (facts.length > 0 || provenance.length > 0));
   // The actions at the meta line's size and weight, so the summary stays the
   // loudest thing on the row (Serdar, 2026-11-01). Written out rather than a
   // Control variant, since stacking text-xs on one is a bet on Tailwind's
@@ -2667,140 +2731,123 @@ function CallRow({
   return (
     <div
       data-call-id={c.id}
-      // A clear rule and 16px either side: at half --border and 14px the rows
-      // ran together (Serdar, 2026-11-01). The rule is mixed from the ink, not
-      // --border, which nearly vanishes on the beige paper and in dark is the
-      // card colour. The hover wash marks the row under the pointer.
-      className={`@container -mx-2 scroll-mt-2 px-3 py-4 text-sm transition-colors hover:bg-[color-mix(in_srgb,var(--foreground)_3%,transparent)] ${
-        ruled ? "border-t border-[color-mix(in_srgb,var(--foreground)_13%,transparent)]" : ""
-      }`}
+      // A clear rule between rows, mixed from the ink, not --border, which
+      // nearly vanishes on the beige paper and in dark is the card colour.
+      // The selected row is the lit row's rounded neutral fill, as in the
+      // Inbox list; a resting row takes a hover wash and a click selects it.
+      className={`-mx-2 scroll-mt-2 ${ruled ? "border-t border-[color-mix(in_srgb,var(--foreground)_13%,transparent)]" : ""}`}
     >
-      <div className="flex items-baseline gap-3">
-        {/* One line that truncates rather than wraps; the hover holds all of
-            it, with the direction in words and the customer's number. */}
-        <div className="flex min-w-0 flex-1 items-baseline whitespace-nowrap">
-          {/* Only a call that never reached anyone leads with its word
-              (No answer…); a call that ran says its Result in the column. */}
-          {missed && (
-            <CallVerdictMark
-              outcome={c.outcome}
-              disconnectionReason={c.disconnectionReason}
-              durationSec={c.durationSec}
-            />
-          )}
-          <span
-            className="min-w-0 truncate text-xs text-[var(--muted)]"
-            title={[
-              `${from} → ${to}`,
-              c.inbound ? t("calls.inbound") : t("calls.outbound"),
-              c.customerNumber,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
+      <div
+        onClick={selected ? undefined : onSelect}
+        className={`my-1 rounded-lg px-3 py-3 text-sm transition-colors ${
+          selected
+            ? "bg-[var(--row-active-bg)]"
+            : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--foreground)_3%,transparent)]"
+        }`}
+      >
+        <div className="flex items-baseline gap-3">
+          {/* One line that truncates rather than wraps; the hover holds all of
+              it, with the direction in words and the customer's number. The
+              line is the row's keyboard handle. */}
+          <button
+            type="button"
+            aria-pressed={selected}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect();
+            }}
+            className="flex min-w-0 flex-1 cursor-pointer items-baseline whitespace-nowrap rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
           >
-            {/* The verdict's separator, so the line reads as one. */}
-            {verdict && missed && "\u00a0·\u00a0"}
-            {from}
-            {/* Drawn, not typed: a typed arrow arrives at whatever weight
-                the font's own glyph has. */}
-            <svg
-              viewBox="0 0 24 24"
-              width="12"
-              height="12"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="mx-1 inline-block align-[-2px]"
-              aria-label={c.inbound ? t("calls.inbound") : t("calls.outbound")}
+            {missed && (
+              <CallVerdictMark
+                outcome={c.outcome}
+                disconnectionReason={c.disconnectionReason}
+                durationSec={c.durationSec}
+              />
+            )}
+            <span
+              className="min-w-0 truncate text-xs text-[var(--muted)]"
+              title={[
+                `${from} → ${to}`,
+                c.inbound ? t("calls.inbound") : t("calls.outbound"),
+                c.customerNumber,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             >
-              <path d="M5 12h14" />
-              <path d="m12 5 7 7-7 7" />
-            </svg>
-            {to}
+              {/* The verdict's separator, so the line reads as one. */}
+              {verdict && missed && " · "}
+              {from}
+              {/* Drawn, not typed: a typed arrow arrives at whatever weight
+                  the font's own glyph has. */}
+              <svg
+                viewBox="0 0 24 24"
+                width="12"
+                height="12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="mx-1 inline-block align-[-2px]"
+                aria-label={c.inbound ? t("calls.inbound") : t("calls.outbound")}
+              >
+                <path d="M5 12h14" />
+                <path d="m12 5 7 7-7 7" />
+              </svg>
+              {to}
+            </span>
+          </button>
+          <span
+            className="shrink-0 text-xs tabular-nums text-[var(--muted)]"
+            title={formatDateTime(c.at, language, tz)}
+          >
+            {formatFeedStamp(c.at, language, t("common.yesterday"), tz)}
           </span>
         </div>
-        <span
-          className="shrink-0 text-xs tabular-nums text-[var(--muted)]"
-          title={formatDateTime(c.at, language, tz)}
-        >
-          {formatFeedStamp(c.at, language, t("common.yesterday"), tz)}
-        </span>
-      </div>
-      {/* The body in two columns once the row is wide (Serdar, 2026-11-01),
-          one layout for every call: the summary at a reading measure on the
-          left; on the right the call's facts, then under a hairline what the
-          agent collected, one per line. A call that never reached anyone and
-          has nothing to say stays one line. Narrow, the column drops under
-          the summary. */}
-      {/* The actions and what they open live in the summary's column, under
-          it, at its width (Serdar, 2026-11-01); the right column never pushes
-          them down. Narrow: summary, actions, the opened panel, the answers. */}
-      <div className="mt-1.5 grid gap-x-8 gap-y-3 @2xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-          <div className="min-w-0 max-w-[65ch]">
-            {c.summary && (
-              <p className="whitespace-pre-wrap break-words leading-6 text-[var(--foreground)]">
-                {c.summary}
-              </p>
-            )}
-            {setOff.length > 0 && (
-              <ul className="mt-1.5 space-y-0.5 text-xs leading-5 text-[var(--foreground)]">
-                {setOff.map((fact) => (
-                  <li key={fact}>{fact}</li>
-                ))}
-              </ul>
-            )}
-            <div className={`-ml-2 flex items-center gap-0.5 ${c.summary || setOff.length > 0 ? "mt-3" : ""}`}>
-              {c.recordingUrl && (
-                <button
-                  type="button"
-                  aria-expanded={playerOpen}
-                  onClick={() => setPlayerOpen((open) => !open)}
-                  className={action(playerOpen)}
-                >
-                  <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden>
-                    <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" />
-                  </svg>
-                  {t("calls.play")}
-                  {/* The length rides Play (Serdar, 2026-11-01), not a facts row. */}
-                  {c.durationSec ? (
-                    <span className="tabular-nums text-[var(--muted)]">{formatDuration(c.durationSec)}</span>
-                  ) : null}
-                </button>
-              )}
-              {c.transcript && (
-                <button
-                  type="button"
-                  aria-expanded={transcriptOpen}
-                  onClick={() => setTranscriptOpen((open) => !open)}
-                  className={action(transcriptOpen)}
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="12"
-                    height="12"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                  </svg>
-                  {t("calls.transcript")}
-                </button>
-              )}
+        <div className="max-w-[65ch]">
+          {showSummary && (
+            <p
+              className={`mt-1.5 whitespace-pre-wrap break-words leading-6 text-[var(--foreground)] ${
+                selected ? "" : "line-clamp-2"
+              }`}
+            >
+              {c.summary}
+            </p>
+          )}
+          {selected && setOff.length > 0 && (
+            <ul className="mt-1.5 space-y-0.5 text-xs leading-5 text-[var(--foreground)]">
+              {setOff.map((fact) => (
+                <li key={fact}>{fact}</li>
+              ))}
+            </ul>
+          )}
+          {/* The actions sit on every row, so a call plays without being
+              selected first (Serdar, 2026-11-01); a press selects it too. */}
+          <div className="-ml-2 mt-2 flex items-center gap-0.5">
+            {c.recordingUrl && (
               <button
                 type="button"
-                aria-expanded={reviewOpened}
-                onClick={() => {
-                  if (reviewOpened) return setReviewOpened(false);
-                  setReviewOpened(true);
-                  setNoteSignal((n) => n + 1);
-                }}
-                className={action(reviewOpened)}
+                aria-expanded={playerOpen}
+                onClick={() => setPlayerOpen((open) => !open)}
+                className={action(playerOpen)}
+              >
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden>
+                  <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" />
+                </svg>
+                {t("calls.play")}
+                {/* The length rides Play (Serdar, 2026-11-01), not a facts row. */}
+                {c.durationSec ? (
+                  <span className="tabular-nums text-[var(--muted)]">{formatDuration(c.durationSec)}</span>
+                ) : null}
+              </button>
+            )}
+            {c.transcript && (
+              <button
+                type="button"
+                aria-expanded={transcriptOpen}
+                onClick={() => setTranscriptOpen((open) => !open)}
+                className={action(transcriptOpen)}
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -2813,72 +2860,70 @@ function CallRow({
                   strokeLinejoin="round"
                   aria-hidden
                 >
-                  <rect x="8" y="2" width="8" height="4" rx="1" />
-                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-                  <path d="m9 14 2 2 4-4" />
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
-                {t("review.title")}
-                {c.verdict ? (
-                  <VerdictMark verdict={c.verdict} />
-                ) : hasNote ? (
-                  <span aria-hidden className="size-1.5 rounded-full bg-[var(--muted-strong)]" />
-                ) : null}
+                {t("calls.transcript")}
               </button>
-            </div>
-            {reviewOpened && <div className="mt-2">{review}</div>}
-            {/* Ours rather than the browser's player: it knows the length before a
-                byte is fetched (CallRecording). Mounted by the press, so it plays. */}
-            {playerOpen && c.recordingUrl && (
-              <CallRecording
-                url={c.recordingUrl}
-                durationMs={c.durationSec !== undefined ? c.durationSec * 1000 : undefined}
-                autoPlay
-                className="mt-2"
-              />
             )}
-            {/* The transcript straight on the paper, the bubbles' own surfaces
-                doing the work, as the WhatsApp thread beside it does. */}
-            {transcriptOpen && c.transcript && (
-              <div className="mt-3">
-                <CallTranscript flow transcript={c.transcript} contactName={contactName} />
-              </div>
-            )}
+            <button
+              type="button"
+              aria-expanded={reviewOpened}
+              onClick={() => {
+                if (reviewOpened) return setReviewOpened(false);
+                setReviewOpened(true);
+                setNoteSignal((n) => n + 1);
+              }}
+              className={action(reviewOpened)}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="12"
+                height="12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <rect x="8" y="2" width="8" height="4" rx="1" />
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                <path d="m9 14 2 2 4-4" />
+              </svg>
+              {t("review.title")}
+              {c.verdict ? (
+                <VerdictMark verdict={c.verdict} />
+              ) : hasNote ? (
+                <span aria-hidden className="size-1.5 rounded-full bg-[var(--muted-strong)]" />
+              ) : null}
+            </button>
           </div>
-          {showFacts && (
-          <div className="min-w-0 @2xl:pt-0.5">
-            {/* One grid for the call's facts and its answers, so every
-                value starts at one edge; a hairline between the two groups
-                only when both are there. */}
-            {(facts.length > 0 || hasCollected) && (
-              <dl className="grid grid-cols-[minmax(0,max-content)_1fr] gap-x-3 gap-y-1 text-xs">
-                {facts.map(([label, value, tone]) => (
-                  <div key={`f-${label}`} className="contents">
-                    <dt className="text-[var(--muted-strong)]">{label}</dt>
-                    <dd className={`min-w-0 break-words ${tone ?? "text-[var(--foreground)]"}`}>
-                      {value}
-                    </dd>
-                  </div>
-                ))}
-                {facts.length > 0 && hasCollected && (
-                  // No rule over one line of facts (Serdar, 2026-11-01): a
-                  // spacer row, 4px plus the grid's own gap, sets the answers apart.
-                  <div aria-hidden className="col-span-2 h-1" />
-                )}
-                {answers.map(([label, value]) => (
-                  <div key={`a-${label}`} className="contents">
-                    <dt className="text-[var(--muted-strong)]">{label}</dt>
-                    <dd className="min-w-0 break-words text-[var(--foreground)]">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-            )}
-            {provenance.length > 0 && (
-              <p className={`text-xs text-[var(--muted)] ${facts.length > 0 || hasCollected ? "mt-2" : ""}`}>
-                {provenance.join(" · ")}
-              </p>
-            )}
-          </div>
+          {reviewOpened && <div className="mt-2">{review}</div>}
+          {/* Ours rather than the browser's player: it knows the length before a
+              byte is fetched (CallRecording). Mounted by the press, so it plays. */}
+          {playerOpen && c.recordingUrl && (
+            <CallRecording
+              url={c.recordingUrl}
+              durationMs={c.durationSec !== undefined ? c.durationSec * 1000 : undefined}
+              autoPlay
+              className="mt-2"
+            />
           )}
+          {/* The transcript straight on the paper, the bubbles' own surfaces
+              doing the work, as the WhatsApp thread beside it does. */}
+          {transcriptOpen && c.transcript && (
+            <div className="mt-3">
+              <CallTranscript flow transcript={c.transcript} contactName={contactName} />
+            </div>
+          )}
+        </div>
+        {/* Narrow, the facts column has no room beside the list: the selected
+            call's facts open under its actions. */}
+        {selected && (
+          <div className="mt-3 @2xl/calls:hidden">
+            <CallFacts c={c} />
+          </div>
+        )}
       </div>
     </div>
   );
