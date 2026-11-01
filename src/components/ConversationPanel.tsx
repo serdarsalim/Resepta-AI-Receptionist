@@ -2637,12 +2637,13 @@ function CallFacts({ c, withStamp = false }: { c: CallCardItem; withStamp?: bool
 
 // One call as a row in a timeline (2026-11-01, Serdar's mock: Linear and
 // Attio's feed rather than a card holding a grey box). A row at rest is its
-// who-and-when line and two lines of summary; a call that never reached
-// anyone is the line alone, led by its word (Voicemail). Clicking selects it:
-// the full summary, what the call set in motion and the actions (Play,
+// who-and-how-long-ago line, one line of summary and its actions (Play,
 // Transcript, Review), whose panels open UNDER them so the button pressed
-// stays under the pointer. Its outcome and answers live in CallFacts, beside
-// the list when wide and under the actions when narrow.
+// stays under the pointer; a call that never reached anyone has no summary
+// line, led by its word (Voicemail). Clicking selects it: the full summary,
+// what the call set in motion, and in the right half of its lit box its
+// date, outcome and answers (CallFacts), which drop under the call when
+// narrow.
 function CallRow({
   c,
   contactName,
@@ -2811,7 +2812,7 @@ function CallRow({
             {showSummary && (
               <p
                 className={`mt-1.5 whitespace-pre-wrap break-words leading-6 text-[var(--foreground)] ${
-                  selected ? "" : "line-clamp-2"
+                  selected ? "" : "line-clamp-1"
                 }`}
               >
                 {c.summary}
