@@ -2632,11 +2632,7 @@ function CallFacts({ c, withStamp = false }: { c: CallCardItem; withStamp?: bool
               <dd className="min-w-0 break-words text-[var(--foreground)]">{ended}</dd>
             </div>
           )}
-          {(withStamp || ended) && answers.length > 0 && (
-            // No rule over one line of facts (Serdar, 2026-11-01): a spacer
-            // row, 4px plus the grid's own gap, sets the answers apart.
-            <div aria-hidden className="col-span-2 h-1" />
-          )}
+          {/* One even run, no gap before the answers (Serdar, 2026-11-01). */}
           {answers.map(([label, value]) => (
             <div key={`a-${label}`} className="contents">
               <dt className="text-[var(--muted-strong)]">{label}</dt>
