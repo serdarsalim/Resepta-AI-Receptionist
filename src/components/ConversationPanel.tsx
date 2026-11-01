@@ -95,6 +95,13 @@ const BUBBLE_MENU_REACT_H = 4 * 36 + 8 + 8 + 44;
 
 // 95 seconds reads as 1:35, not "95s". Shared by the call list and the call
 // detail so the same call never wears two different lengths.
+// Every date in the pane reads on the BUSINESS's clock, as the messages it
+// sends do (2026-11-01): the browser's clock put the same call at 17:36 in
+// one tab and 12:36 in another. orgs.current is one shared subscription.
+function usePaneTimezone(): string | undefined {
+  return useQuery(api.orgs.current, {})?.org.timezone;
+}
+
 function formatDuration(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
@@ -299,6 +306,7 @@ export function ConversationPanel({
   className?: string;
 }) {
   const { t, language } = useLanguage();
+  const tz = usePaneTimezone();
   const feed = useQuery(api.messages.feedForCustomer, { customerId });
   // The takeover chip's two facts: whether this org runs a live agent at all
   // (operator-set), and whether THIS conversation is currently a human's.
@@ -1121,7 +1129,6 @@ export function ConversationPanel({
             mail to a customer); the UI just stopped borrowing it. */}
         {filter === "email" && (
           <EmailCards
-            timezone={settings?.org.timezone}
             items={visible
               .filter((item) => item.channel === "email")
               .map((item) => ({
@@ -1160,7 +1167,6 @@ export function ConversationPanel({
         )}
         {filter === "call" && (
           <CallCards
-            timezone={settings?.org.timezone}
             items={visible
               .filter((item) => item.channel === "call")
               .map((item) => ({
@@ -1224,7 +1230,7 @@ export function ConversationPanel({
                 {queuedCallback.status === "dialing"
                   ? t("callback.dialing")
                   : t("callback.allRow", {
-                      when: formatDateTime(queuedCallback.dueAt, language),
+                      when: formatDateTime(queuedCallback.dueAt, language, tz),
                     })}
               </span>
               <span aria-hidden className="shrink-0 text-xs text-[var(--muted)]">
@@ -1237,6 +1243,7 @@ export function ConversationPanel({
           thread.map((item, index) => {
             const monthOf = (ms: number) =>
               new Date(ms).toLocaleDateString(localeFor(language), {
+                timeZone: tz,
                 month: "long",
                 year: "numeric",
               });
@@ -1316,7 +1323,7 @@ export function ConversationPanel({
                       </span>
                     )}
                     <span className="shrink-0 text-xs text-[var(--muted)]">
-                      {formatDateTime(item.at, language)}
+                      {formatDateTime(item.at, language, tz)}
                     </span>
                     {routes && (
                       <span aria-hidden className="shrink-0 text-xs text-[var(--muted)]">
@@ -1361,14 +1368,14 @@ export function ConversationPanel({
           const daySeparator =
             chatOrder &&
             (index === 0 ||
-              formatDayHeading(thread[index - 1].at, language) !==
-                formatDayHeading(item.at, language)) ? (
+              formatDayHeading(thread[index - 1].at, language, tz) !==
+                formatDayHeading(item.at, language, tz)) ? (
               <li key={`day-${item.id}`} className="flex list-none justify-center py-1.5">
                 {/* WhatsApp's date pill: a lifted chip with the bubble's own
                     shadow, not a grey wash — the wash disappeared into the
                     wallpaper. */}
                 <span className="rounded-lg bg-[var(--chat-field)] px-3 py-1 text-xs font-medium text-[var(--chat-stamp)] shadow-[var(--bubble-shadow)]">
-                  {formatDayHeading(item.at, language)}
+                  {formatDayHeading(item.at, language, tz)}
                 </span>
               </li>
             ) : null;
@@ -1631,8 +1638,8 @@ export function ConversationPanel({
               >
                 {/* Time only — the day band above already said the date. Full
                     stamp on hover for anyone who needs to be sure. */}
-                <span title={formatDateTime(item.at, language)}>
-                  {chatOrder ? formatTime(item.at, language) : formatDateTime(item.at, language)}
+                <span title={formatDateTime(item.at, language, tz)}>
+                  {chatOrder ? formatTime(item.at, language, tz) : formatDateTime(item.at, language, tz)}
                 </span>
                 {/* Ticks replace the status word on our own messages; a
                     reply has no delivery state of ours to report. */}
@@ -1645,7 +1652,7 @@ export function ConversationPanel({
                     still matters. Once it has gone the row loses both. */}
                 {item.scheduledFor !== undefined && (
                   <>
-                    <span>· {formatDateTime(item.scheduledFor, language)}</span>
+                    <span>· {formatDateTime(item.scheduledFor, language, tz)}</span>
                     <button
                       type="button"
                       onClick={() =>
@@ -2448,13 +2455,14 @@ type QueuedCallback = NonNullable<FunctionReturnType<typeof api.callbacks.forCus
 // which is never the risky direction, and any member may.
 function QueuedCallbackCard({ callback }: { callback: QueuedCallback }) {
   const { t, language } = useLanguage();
+  const tz = usePaneTimezone();
   const cancel = useMutation(api.callbacks.cancel);
   const [cancelling, setCancelling] = useState(false);
   const dialing = callback.status === "dialing";
   const facts = [
-    t("callback.askedOn", { when: formatDateTime(callback.requestedAt, language) }),
+    t("callback.askedOn", { when: formatDateTime(callback.requestedAt, language, tz) }),
     callback.moved
-      ? t("callback.moved", { when: formatDateTime(callback.askedFor, language) })
+      ? t("callback.moved", { when: formatDateTime(callback.askedFor, language, tz) })
       : null,
     callback.waiting === "busy" ? t("callback.waitingBusy") : null,
   ].filter((fact): fact is string => !!fact);
@@ -2480,7 +2488,7 @@ function QueuedCallbackCard({ callback }: { callback: QueuedCallback }) {
         <span className="font-medium text-[var(--foreground)]">
           {dialing
             ? t("callback.dialing")
-            : t("callback.nextCall", { when: formatDateTime(callback.dueAt, language) })}
+            : t("callback.nextCall", { when: formatDateTime(callback.dueAt, language, tz) })}
           {callback.agentName ? ` · ${callback.agentName}` : ""}
         </span>
         <span className="min-w-0 text-xs text-[var(--muted)]">{facts.join(" · ")}</span>
@@ -2508,13 +2516,10 @@ function CallCards({
   items,
   contactName,
   focusId,
-  timezone,
 }: {
   // Newest-first (feed order), call rows only.
   items: CallCardItem[];
   contactName?: string | null;
-  // The business's, for the rows' dates.
-  timezone?: string;
   // Row the parent is about to scroll to (deep link / All-index routing).
   // Read once at mount: a routed row starts with its transcript OPEN, since
   // the person came for that call's words, not for its existence.
@@ -2531,7 +2536,6 @@ function CallCards({
           key={c.id}
           c={c}
           contactName={contactName}
-          timezone={timezone}
           ruled={idx > 0}
           startOpen={initialFocus === c.id}
         />
@@ -2551,18 +2555,17 @@ function CallCards({
 function CallRow({
   c,
   contactName,
-  timezone,
   ruled,
   startOpen,
 }: {
   c: CallCardItem;
   contactName?: string | null;
-  timezone?: string;
   // A rule above: every row but the first.
   ruled: boolean;
   startOpen: boolean;
 }) {
   const { t, language } = useLanguage();
+  const tz = usePaneTimezone();
   const setReview = useMutation(api.calls.setReview);
   const [playerOpen, setPlayerOpen] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(startOpen);
@@ -2580,12 +2583,12 @@ function CallRow({
   // what the agent did on the call, and each line names itself.
   const setOff = [
     c.booked
-      ? `${t("calls.booked", { when: formatDateTime(c.booked.at, language) })}${
+      ? `${t("calls.booked", { when: formatDateTime(c.booked.at, language, tz) })}${
           c.booked.services.length > 0 ? ` · ${c.booked.services.join(", ")}` : ""
         }${c.booked.cancelled ? ` (${t("calls.bookedCancelled")})` : ""}`
       : null,
     c.callbackRequestedFor !== undefined
-      ? t("calls.callbackRequested", { when: formatDateTime(c.callbackRequestedFor, language) })
+      ? t("calls.callbackRequested", { when: formatDateTime(c.callbackRequestedFor, language, tz) })
       : null,
   ].filter((fact): fact is string => !!fact);
   // The ending only where the verdict word does not already say it: a call
@@ -2623,7 +2626,7 @@ function CallRow({
       verdict={c.verdict ?? null}
       verdictOnFocus
       signature={signature}
-      signatureTitle={c.noteAt !== undefined ? formatDateTime(c.noteAt, language) : undefined}
+      signatureTitle={c.noteAt !== undefined ? formatDateTime(c.noteAt, language, tz) : undefined}
       onSave={(patch) => setReview({ callId: c.id as Id<"calls">, ...patch })}
     />
   );
@@ -2695,9 +2698,9 @@ function CallRow({
         </div>
         <span
           className="shrink-0 text-xs tabular-nums text-[var(--muted)]"
-          title={formatDateTime(c.at, language, timezone)}
+          title={formatDateTime(c.at, language, tz)}
         >
-          {formatFeedStamp(c.at, language, t("common.yesterday"), timezone)}
+          {formatFeedStamp(c.at, language, t("common.yesterday"), tz)}
         </span>
       </div>
       {/* The body in two columns once the row is wide (Serdar, 2026-11-01):
@@ -2863,13 +2866,10 @@ function EmailCards({
   focusId,
   onReply,
   onCancel,
-  timezone,
 }: {
   // Newest-first (feed order), email rows only.
   items: EmailCardItem[];
   contactName?: string | null;
-  // The business's, for the cards' dates.
-  timezone?: string;
   // Card the parent is about to scroll to (deep link / All-index routing).
   // Read once at mount so the first slab reaches it — scrollIntoView on a
   // card outside the slab is a silent no-op.
@@ -2878,6 +2878,7 @@ function EmailCards({
   onCancel: (id: string) => void;
 }) {
   const { t, language } = useLanguage();
+  const tz = usePaneTimezone();
   const [shown, setShown] = useState(() => {
     const focusIdx = focusId ? items.findIndex((x) => x.id === focusId) : -1;
     return Math.max(EMAIL_PAGE, focusIdx + EMAIL_PAGE);
@@ -2957,9 +2958,9 @@ function EmailCards({
                 </div>
                 <span
                   className="shrink-0 text-xs tabular-nums text-[var(--muted)]"
-                  title={formatDateTime(m.at, language, timezone)}
+                  title={formatDateTime(m.at, language, tz)}
                 >
-                  {formatFeedStamp(m.at, language, t("common.yesterday"), timezone)}
+                  {formatFeedStamp(m.at, language, t("common.yesterday"), tz)}
                 </span>
               </div>
               <div className="pt-2">
@@ -2975,7 +2976,7 @@ function EmailCards({
                     {m.scheduledFor !== undefined && (
                       <>
                         <span className="text-[var(--muted)]">
-                          {formatDateTime(m.scheduledFor, language)}
+                          {formatDateTime(m.scheduledFor, language, tz)}
                         </span>
                         <button
                           type="button"
@@ -3205,6 +3206,7 @@ function NoteEntry({
   };
 }) {
   const { t, language } = useLanguage();
+  const tz = usePaneTimezone();
   const updateNote = useMutation(api.notes.update);
   const removeNote = useMutation(api.notes.remove);
   const [editing, setEditing] = useState(false);
@@ -3273,9 +3275,9 @@ function NoteEntry({
           </button>
           <span
             className="shrink-0 tabular-nums text-[var(--muted)]"
-            title={formatDateTime(item.at, language)}
+            title={formatDateTime(item.at, language, tz)}
           >
-            {formatDateTime(item.at, language)}
+            {formatDateTime(item.at, language, tz)}
           </span>
         </div>
         {editing ? (
