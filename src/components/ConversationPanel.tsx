@@ -2573,13 +2573,12 @@ function CallRow({
   const [transcriptOpen, setTranscriptOpen] = useState(startOpen);
   // The Note action opens the review's box and puts the caret in it.
   const [noteSignal, setNoteSignal] = useState(0);
-  // A call with a review (a note or a verdict) shows it under
-  // the actions, under the Review button that names it, so it carries no
-  // heading of its own; one without shows nothing until that button opens it
+  // The review is a toggle like Play and Transcript, shut by default, opening
+  // under the actions with no heading of its own (the button names it). A
+  // reviewed call says so on the button: its verdict, else a dot for a note
   // (Serdar, 2026-11-01).
   const [reviewOpened, setReviewOpened] = useState(false);
-  const hasReview = !!c.note?.trim() || !!c.verdict;
-  const showReview = hasReview || reviewOpened;
+  const hasNote = !!c.note?.trim();
 
   // What the call set in motion. Nudge titles this "Automations"; here it is
   // what the agent did on the call, and each line names itself.
@@ -2833,14 +2832,13 @@ function CallRow({
         )}
         <button
           type="button"
-          aria-expanded={showReview}
+          aria-expanded={reviewOpened}
           onClick={() => {
-            // Nothing saved yet: the button toggles the empty review away.
-            if (reviewOpened && !hasReview) return setReviewOpened(false);
+            if (reviewOpened) return setReviewOpened(false);
             setReviewOpened(true);
             setNoteSignal((n) => n + 1);
           }}
-          className={action(reviewOpened && !hasReview)}
+          className={action(reviewOpened)}
         >
           <svg
             viewBox="0 0 24 24"
@@ -2858,9 +2856,14 @@ function CallRow({
             <path d="m9 14 2 2 4-4" />
           </svg>
           {t("review.title")}
+          {c.verdict ? (
+            <VerdictMark verdict={c.verdict} />
+          ) : hasNote ? (
+            <span aria-hidden className="size-1.5 rounded-full bg-[var(--muted-strong)]" />
+          ) : null}
         </button>
       </div>
-      {showReview && <div className="mt-2">{review}</div>}
+      {reviewOpened && <div className="mt-2">{review}</div>}
       {/* Ours rather than the browser's player: it knows the length before a
           byte is fetched (CallRecording). Mounted by the press, so it plays. */}
       {playerOpen && c.recordingUrl && (
