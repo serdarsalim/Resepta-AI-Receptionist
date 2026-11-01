@@ -24,6 +24,7 @@ import {
 import {
   CallTranscript,
   CallVerdictMark,
+  callVerdict,
   CollectedList,
   hasCollectedRows,
   humanizeCallEnd,
@@ -2656,7 +2657,7 @@ function CallRow({
       <div className="flex items-baseline gap-3">
         {/* One line that truncates rather than wraps; the hover holds all of
             it, with the direction in words and the customer's number. */}
-        <div className="flex min-w-0 flex-1 items-baseline gap-2 whitespace-nowrap">
+        <div className="flex min-w-0 flex-1 items-baseline whitespace-nowrap">
           <CallVerdictMark
             outcome={c.outcome}
             disconnectionReason={c.disconnectionReason}
@@ -2673,6 +2674,8 @@ function CallRow({
               .filter(Boolean)
               .join(" · ")}
           >
+            {/* The verdict's separator, so the line reads as one. */}
+            {callVerdict(c.outcome, c.disconnectionReason, c.durationSec, t) && "\u00a0·\u00a0"}
             {from}
             {/* Drawn, not typed: a typed arrow arrives at whatever weight
                 the font's own glyph has. */}
