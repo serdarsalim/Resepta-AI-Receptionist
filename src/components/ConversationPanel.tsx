@@ -17,6 +17,7 @@ import {
   formatDateTime,
   formatDateTimeWithWeekday,
   formatDayHeading,
+  formatAgo,
   formatFeedStamp,
   formatTime,
   fromDatetimeLocalValue,
@@ -2539,8 +2540,9 @@ function CallCards({
   const [selectedId, setSelectedId] = useState<string | null>(focusId ?? null);
   if (items.length === 0) return null;
   const selected = items.find((c) => c.id === selectedId) ?? items[0];
-  // No day chips here since 2026-11-01: each row carries its own date and
-  // time on the right (formatFeedStamp), so the list is one run of rows.
+  // No day chips here since 2026-11-01: each row says how long ago (formatAgo)
+  // and the facts column the selected call's date and time, so the list is
+  // one run of rows.
   // Wide, the selected call's facts sit in a column that stays in view while
   // the list scrolls; narrow, they open under the selected row instead.
   return (
@@ -2561,7 +2563,7 @@ function CallCards({
         </div>
         <div className="hidden min-w-0 @2xl/calls:block">
           <div className="sticky top-0 py-4">
-            <CallFacts c={selected} />
+            <CallFacts c={selected} withStamp />
           </div>
         </div>
       </div>
@@ -2584,8 +2586,9 @@ function callShape(c: CallCardItem) {
 // The selected call's facts: how it ended, then what the agent collected,
 // then who or what placed it. No sentence for a call that collected nothing:
 // its outcome word is the whole story (Serdar, 2026-11-01).
-function CallFacts({ c }: { c: CallCardItem }) {
-  const { t } = useLanguage();
+function CallFacts({ c, withStamp = false }: { c: CallCardItem; withStamp?: boolean }) {
+  const { t, language } = useLanguage();
+  const tz = usePaneTimezone();
   const { line, missed } = callShape(c);
   const wordSaysEnding =
     line === "no-answer" || line === "busy" || line === "voicemail" || line === "declined";
@@ -2604,9 +2607,15 @@ function CallFacts({ c }: { c: CallCardItem }) {
     c.bulkRun ? t("calls.bulkRun", { name: c.bulkRun }) : null,
     c.requestedCallback ? t("calls.requestedCallback") : null,
   ].filter((fact): fact is string => !!fact);
-  if (!ended && answers.length === 0 && provenance.length === 0) return null;
+  if (!withStamp && !ended && answers.length === 0 && provenance.length === 0) return null;
   return (
     <div className="text-xs">
+      {/* The exact date and time, where the row says only how long ago. */}
+      {withStamp && (
+        <p className="mb-2 tabular-nums text-[var(--muted)]">
+          {formatFeedStamp(c.at, language, t("common.yesterday"), tz)}
+        </p>
+      )}
       {(ended || answers.length > 0) && (
         <dl className="grid grid-cols-[minmax(0,max-content)_1fr] gap-x-3 gap-y-1">
           {ended && (
@@ -2802,7 +2811,7 @@ function CallRow({
             className="shrink-0 text-xs tabular-nums text-[var(--muted)]"
             title={formatDateTime(c.at, language, tz)}
           >
-            {formatFeedStamp(c.at, language, t("common.yesterday"), tz)}
+            {formatAgo(c.at, language)}
           </span>
         </div>
         <div className="max-w-[65ch]">
@@ -2921,7 +2930,7 @@ function CallRow({
             call's facts open under its actions. */}
         {selected && (
           <div className="mt-3 @2xl/calls:hidden">
-            <CallFacts c={c} />
+            <CallFacts c={c} withStamp />
           </div>
         )}
       </div>
