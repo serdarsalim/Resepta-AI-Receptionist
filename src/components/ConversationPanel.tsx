@@ -2602,12 +2602,16 @@ function CallRow({
       : undefined;
   const wordSaysEnding =
     line === "no-answer" || line === "busy" || line === "voicemail" || line === "declined";
-  // Line 1's quiet half: direction · length · agent · how it ended, then who
-  // or what placed it. A zero length is not a result and shows nothing.
+  // Line 1's quiet half: who rang whom (Serdar, 2026-11-01: "Ahmet Ak →
+  // agent" reads faster than "Inbound call"), then length, how it ended and
+  // who or what placed it. The customer by the name on the record, or by the
+  // number while nobody has typed a name. A zero length shows nothing.
+  const customerSide = contactName?.trim() || c.customerNumber || t("calls.unknown");
+  const agentSide = c.agentName || t("calls.agent");
+  const from = c.inbound ? customerSide : agentSide;
+  const to = c.inbound ? agentSide : customerSide;
   const meta = [
-    c.inbound ? t("calls.inbound") : t("calls.outbound"),
     c.durationSec ? formatDuration(c.durationSec) : null,
-    c.agentName || null,
     wordSaysEnding ? null : humanizeCallEnd(c.disconnectionReason, t),
     c.placedBy ? t("calls.placedBy", { name: c.placedBy }) : null,
     c.bulkRun ? t("calls.bulkRun", { name: c.bulkRun }) : null,
@@ -2650,20 +2654,46 @@ function CallRow({
       }`}
     >
       <div className="flex items-baseline gap-3">
-        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        {/* One line that truncates rather than wraps; the hover holds all of
+            it, with the direction in words and the customer's number. */}
+        <div className="flex min-w-0 flex-1 items-baseline gap-2 whitespace-nowrap">
           <CallVerdictMark
             outcome={c.outcome}
             disconnectionReason={c.disconnectionReason}
             durationSec={c.durationSec}
           />
-          {meta.length > 0 && (
-            <span
-              className="min-w-0 break-words text-xs text-[var(--muted)]"
-              title={c.customerNumber}
+          <span
+            className="min-w-0 truncate text-xs text-[var(--muted)]"
+            title={[
+              `${from} → ${to}`,
+              c.inbound ? t("calls.inbound") : t("calls.outbound"),
+              c.customerNumber,
+              ...meta,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          >
+            {from}
+            {/* Drawn, not typed: a typed arrow arrives at whatever weight
+                the font's own glyph has. */}
+            <svg
+              viewBox="0 0 24 24"
+              width="12"
+              height="12"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="mx-1 inline-block align-[-2px]"
+              aria-label={c.inbound ? t("calls.inbound") : t("calls.outbound")}
             >
-              {meta.join(" · ")}
-            </span>
-          )}
+              <path d="M5 12h14" />
+              <path d="m12 5 7 7-7 7" />
+            </svg>
+            {to}
+            {meta.length > 0 && ` · ${meta.join(" · ")}`}
+          </span>
         </div>
         <span
           className="shrink-0 text-xs tabular-nums text-[var(--muted)]"
