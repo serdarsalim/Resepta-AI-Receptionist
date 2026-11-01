@@ -827,6 +827,12 @@ export function InboxView({
                           >
                             <MenuIcon name="chevron" />
                           </button>
+                          {/* Holds the age column open on this line too, so
+                              the preview stops where the age starts and the
+                              age reads as its own column (Serdar, 2026-11-01;
+                              Nudge cb345c55). ml-1 makes up the 2.5 gap line
+                              one uses. */}
+                          <span aria-hidden className="ml-1 w-8 shrink-0" />
                         </div>
                         </div>
                       </div>
