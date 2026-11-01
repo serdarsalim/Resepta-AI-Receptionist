@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLanguage } from "@/lib/LanguageProvider";
 import { buttonClass, iconButtonClass } from "./Control";
 
@@ -32,12 +32,16 @@ export function CallRecording({
   url,
   durationMs,
   className = "",
+  autoPlay = false,
 }: {
   url: string;
   // What the call row recorded. Absent on a row that predates it; the
   // readout then waits for the file, as the native control did.
   durationMs?: number;
   className?: string;
+  // Start on mount: the call row mounts the player only when Play is
+  // pressed, so that press is the play.
+  autoPlay?: boolean;
 }) {
   const { t } = useLanguage();
   const ref = useRef<HTMLAudioElement>(null);
@@ -46,6 +50,11 @@ export function CallRecording({
   const [loadedMs, setLoadedMs] = useState<number | null>(null);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
   const totalMs = loadedMs ?? durationMs ?? 0;
+  useEffect(() => {
+    if (autoPlay) void ref.current?.play().catch(() => undefined);
+    // Mount only: a later prop change is not a press.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const pct = totalMs > 0 ? Math.min(100, (current / totalMs) * 100) : 0;
 
   const toggle = () => {

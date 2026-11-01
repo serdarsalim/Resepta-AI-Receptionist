@@ -3114,6 +3114,9 @@ const dictionary = {
     en: "Transcript",
     de: "Transkript",
   },
+  // The call row's quiet actions (2026-11-01): open the player, open a note.
+  "calls.play": { tr: "Dinle", en: "Play", de: "Anhören" },
+  "calls.note": { tr: "Not", en: "Note", de: "Notiz" },
   "calls.recording": { tr: "Kayıt", en: "Recording", de: "Aufnahme" },
   "calls.summary": { tr: "Özet", en: "Summary", de: "Zusammenfassung" },
   "calls.unknown": {
@@ -5514,25 +5517,16 @@ const dictionary = {
     en: "Not saved",
     de: "Nicht gespeichert",
   },
-  "callback.queued": {
-    tr: "Sırada",
-    en: "Queued",
-    de: "Geplant",
-  },
   "callback.dialing": {
     tr: "Şimdi aranıyor",
     en: "Calling now",
     de: "Wird gerade angerufen",
   },
-  "callback.callsAt": {
-    tr: "Geri arama: {when}",
-    en: "Calls back {when}",
-    de: "Rückruf {when}",
-  },
-  "callback.agent": {
-    tr: "Arayacak asistan: {name}",
-    en: "Calls with {name}",
-    de: "Ruft an mit {name}",
+  // The scheduled call's one-line band in the Calls tab (2026-11-01).
+  "callback.nextCall": {
+    tr: "Sonraki arama {when}",
+    en: "Next call {when}",
+    de: "Nächster Anruf {when}",
   },
   "callback.askedOn": {
     tr: "{when} tarihli aramada istendi",

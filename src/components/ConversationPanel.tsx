@@ -22,12 +22,12 @@ import {
   localeFor,
 } from "@/lib/datetime";
 import {
-  CallOutcomePill,
-  CallPartiesLine,
   CallTranscript,
-  CollectedList,
+  CallVerdictMark,
+  CollectedChips,
   humanizeCallEnd,
 } from "./CallDetail";
+import { buttonClass } from "./Control";
 import { CallRecording } from "./CallRecording";
 import { ReviewNotes, VerdictMark, type Verdict } from "./ReviewNotes";
 import { callOutcome } from "../../convex/lib/callOutcome";
@@ -1146,14 +1146,11 @@ export function ConversationPanel({
             }
           />
         )}
-        {/* Call timeline: one CARD per call, newest first, on the plain
-            paper — the same exercise the email tab went through, ported from
-            Nudge the same day (2026-09-01, Serdar: "apply the call cards to
-            randevu too"). The flush rows and the open-call detail are both
-            gone: a card carries the direction, the player and the summary at
-            rest, and Details unfolds the collected values + transcript IN the
-            card. The "no outcome pill" decision (2026-08-25) stands — the
-            summary is the outcome. */}
+        {/* Call timeline: one flat ROW per call, newest first, straight on
+            the paper (2026-11-01; cards with a grey inset since 2026-09-01).
+            The row carries the verdict, the summary and the answers at rest;
+            the recording, the transcript and a new note open under its
+            actions row (CallRow). */}
         {filter === "call" && queuedCallback && (
           <QueuedCallbackCard callback={queuedCallback} />
         )}
@@ -2437,32 +2434,19 @@ type CallCardItem = {
   noteAt?: number;
 };
 
-// The panel inside a call card: Nudge's `.card-inset`, written out as classes
-// because that class lives in Nudge's globals.css and not in ours. Fenced off
-// differently per theme, which is Serdar's call in Nudge and not drift. In
-// light a wash of the page ground (55% of --pane over the white card) does
-// the work and the border stays transparent, so the box is the same size in
-// both. In dark a fill has nowhere to go (darker reads as a hole punched in
-// the card, lighter competes with it), so the fill drops and a hairline does
-// the work. That hairline is mixed from the foreground, not --border: dark
-// --border (#262626) is the card's own colour here (--chat-field, #242424)
-// and would not show at all.
-const CALL_INSET =
-  "border border-transparent bg-[color-mix(in_srgb,var(--pane)_55%,transparent)] dark:border-[color-mix(in_srgb,var(--foreground)_12%,transparent)] dark:bg-transparent";
-
 type QueuedCallback = NonNullable<FunctionReturnType<typeof api.callbacks.forCustomer>>;
 
-// The callback a customer asked for, waiting (P36). Nudge's queued call card:
-// what will happen and when on the first line, who rings and where the
-// request came from under it, and Cancel. Cancel needs no confirm: it stops
-// a call, which is never the risky direction, and any member may.
+// The callback a customer asked for, waiting (P36). One slim band over the
+// timeline since 2026-11-01: a clock, "Next call tomorrow 20:46 · agent",
+// where the request came from in quiet text after it, and Cancel as a quiet
+// text button. Cancel needs no confirm and is not red: it stops a call,
+// which is never the risky direction, and any member may.
 function QueuedCallbackCard({ callback }: { callback: QueuedCallback }) {
   const { t, language } = useLanguage();
   const cancel = useMutation(api.callbacks.cancel);
   const [cancelling, setCancelling] = useState(false);
   const dialing = callback.status === "dialing";
   const facts = [
-    callback.agentName ? t("callback.agent", { name: callback.agentName }) : null,
     t("callback.askedOn", { when: formatDateTime(callback.requestedAt, language) }),
     callback.moved
       ? t("callback.moved", { when: formatDateTime(callback.askedFor, language) })
@@ -2470,45 +2454,47 @@ function QueuedCallbackCard({ callback }: { callback: QueuedCallback }) {
     callback.waiting === "busy" ? t("callback.waitingBusy") : null,
   ].filter((fact): fact is string => !!fact);
   return (
-    <div className="mb-2 rounded-lg bg-[var(--chat-field)] px-3.5 py-3 text-sm shadow-[var(--bubble-shadow)]">
-      <div className="flex items-center gap-2 text-xs">
-        <FeedIcon type="call" size={13} />
-        {/* The call pill's neutral look while waiting (--muted-bg is the
-            card colour in dark and would vanish here); emerald while it
-            rings, the product's "on". */}
-        <span
-          className={`shrink-0 rounded-full px-2 py-0.5 font-medium ${
-            dialing
-              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-              : "border border-[var(--border)] text-[var(--muted-strong)]"
-          }`}
-        >
-          {dialing ? t("callback.dialing") : t("callback.queued")}
+    <div className="mb-2 flex items-center gap-2.5 rounded-lg bg-[var(--chat-field)] py-2 pl-3 pr-1.5 text-sm shadow-[var(--bubble-shadow)]">
+      {/* A clock while it waits; emerald, the product's "on", while it rings. */}
+      <svg
+        viewBox="0 0 24 24"
+        width="15"
+        height="15"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={`shrink-0 ${dialing ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--muted)]"}`}
+        aria-hidden
+      >
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </svg>
+      <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="font-medium text-[var(--foreground)]">
+          {dialing
+            ? t("callback.dialing")
+            : t("callback.nextCall", { when: formatDateTime(callback.dueAt, language) })}
+          {callback.agentName ? ` · ${callback.agentName}` : ""}
         </span>
-        <InfoTip text={t("callback.explain")} />
-        {!dialing && (
-          <button
-            type="button"
-            disabled={cancelling}
-            aria-label={t("callback.cancelLabel")}
-            onClick={() => {
-              setCancelling(true);
-              void cancel({ callbackId: callback.id }).finally(() => setCancelling(false));
-            }}
-            className="ml-auto shrink-0 rounded-md px-2 py-1 font-medium text-[var(--now-line)] transition-colors hover:bg-[var(--control-hover)] disabled:opacity-50"
-          >
-            {t("callback.cancel")}
-          </button>
-        )}
+        <span className="min-w-0 text-xs text-[var(--muted)]">{facts.join(" · ")}</span>
       </div>
-      <p className="mt-2 font-medium">
-        {t("callback.callsAt", { when: formatDateTime(callback.dueAt, language) })}
-      </p>
-      <ul className="mt-1 space-y-1 text-xs text-[var(--muted-strong)]">
-        {facts.map((fact) => (
-          <li key={fact}>{fact}</li>
-        ))}
-      </ul>
+      <InfoTip text={t("callback.explain")} />
+      {!dialing && (
+        <button
+          type="button"
+          disabled={cancelling}
+          aria-label={t("callback.cancelLabel")}
+          onClick={() => {
+            setCancelling(true);
+            void cancel({ callbackId: callback.id }).finally(() => setCancelling(false));
+          }}
+          className={`${buttonClass("quiet", "xs")} shrink-0 text-[var(--muted-strong)]`}
+        >
+          {t("callback.cancel")}
+        </button>
+      )}
     </div>
   );
 }
@@ -2521,206 +2507,270 @@ function CallCards({
   // Newest-first (feed order), call rows only.
   items: CallCardItem[];
   contactName?: string | null;
-  // Card the parent is about to scroll to (deep link / All-index routing).
-  // Read once at mount: a routed card starts with its transcript OPEN, since
+  // Row the parent is about to scroll to (deep link / All-index routing).
+  // Read once at mount: a routed row starts with its transcript OPEN, since
   // the person came for that call's words, not for its existence.
   focusId?: string | null;
 }) {
-  const { t, language } = useLanguage();
-  const setReview = useMutation(api.calls.setReview);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(
-    () => new Set(focusId ? [focusId] : []),
-  );
+  const { language } = useLanguage();
+  const [initialFocus] = useState(focusId);
   if (items.length === 0) return null;
   return (
-    <div className="space-y-2">
+    <div>
       {items.map((c, idx) => {
         // Day separators as the chat's own date pill (same as the email
-        // cards); cards then carry only a time.
-        const sep =
+        // cards); rows then carry only a time.
+        const newDay =
           idx === 0 ||
-          formatDayHeading(items[idx - 1].at, language) !==
-            formatDayHeading(c.at, language) ? (
-            <div className="flex justify-center py-1.5">
-              <span className="rounded-lg bg-[var(--chat-field)] px-3 py-1 text-xs font-medium text-[var(--chat-stamp)] shadow-[var(--bubble-shadow)]">
-                {formatDayHeading(c.at, language)}
-              </span>
-            </div>
-          ) : null;
-        const expanded = expandedIds.has(c.id);
-        const hasCollected = !!c.collected && Object.keys(c.collected).length > 0;
-        // Who was on the line: the customer by the name on the record, or by
-        // the number the call carried while nobody has typed a name; our side
-        // by the agent's name. Whoever rang goes first.
-        const customerSide = contactName?.trim() || c.customerNumber || t("calls.unknown");
-        const agentSide = c.agentName || t("calls.agent");
-        // What the call set in motion. Nudge titles this "Automations"; here
-        // it is what the agent did on the call, and each line names itself.
-        const setOff = [
-          c.booked
-            ? `${t("calls.booked", { when: formatDateTime(c.booked.at, language) })}${
-                c.booked.services.length > 0 ? ` · ${c.booked.services.join(", ")}` : ""
-              }${c.booked.cancelled ? ` (${t("calls.bookedCancelled")})` : ""}`
-            : null,
-          c.callbackRequestedFor !== undefined
-            ? t("calls.callbackRequested", {
-                when: formatDateTime(c.callbackRequestedFor, language),
-              })
-            : null,
-        ].filter((fact): fact is string => !!fact);
-        // How it ended, then who or what placed it, as one quiet line under
-        // the parties. The ending only where the pill does not already say
-        // it: a call that rang out, was busy, reached voicemail or was
-        // declined says so once, in the pill. A hang-up says who ended a call
-        // that ran, and a refused or failed call keeps the line that says
-        // why. (A written outcome takes the pill's word, so the ending stays.)
-        const line =
-          !c.outcome || c.outcome === "true" || c.outcome === "false"
-            ? callOutcome(c.disconnectionReason, c.durationSec)
-            : undefined;
-        const pillSaysEnding =
-          line === "no-answer" || line === "busy" || line === "voicemail" || line === "declined";
-        const footnotes = [
-          pillSaysEnding ? null : humanizeCallEnd(c.disconnectionReason, t),
-          c.placedBy ? t("calls.placedBy", { name: c.placedBy }) : null,
-          c.bulkRun ? t("calls.bulkRun", { name: c.bulkRun }) : null,
-          c.requestedCallback ? t("calls.requestedCallback") : null,
-        ].filter((fact): fact is string => !!fact);
-        const signature =
-          [c.noteBy, c.noteEditedBy ? t("review.editedBy", { name: c.noteEditedBy }) : null]
-            .filter((part): part is string => !!part)
-            .join(" · ") || undefined;
+          formatDayHeading(items[idx - 1].at, language) !== formatDayHeading(c.at, language);
         return (
           <Fragment key={c.id}>
-            {sep}
-            <div
-              data-call-id={c.id}
-              className="@container scroll-mt-2 rounded-lg bg-[var(--chat-field)] px-3.5 py-3 text-sm shadow-[var(--bubble-shadow)]"
-            >
-              {/* What happened and when. The direction is not up here any
-                  more: the parties line below says who rang whom. The length
-                  only when there is no recording, whose player already says
-                  it; a zero length is not a result and shows nothing. */}
-              <div className="flex items-center gap-2">
-                <CallOutcomePill
-                  outcome={c.outcome}
-                  disconnectionReason={c.disconnectionReason}
-                  durationSec={c.durationSec}
-                />
-                {!c.recordingUrl && !!c.durationSec && (
-                  <span className="shrink-0 text-[11px] tabular-nums text-[var(--muted)]">
-                    {formatDuration(c.durationSec)}
-                  </span>
-                )}
-                <span
-                  className="ml-auto shrink-0 text-xs text-[var(--muted)]"
-                  title={formatDateTime(c.at, language)}
-                >
-                  {formatTime(c.at, language)}
+            {newDay && (
+              <div className="flex justify-center py-1.5">
+                <span className="rounded-lg bg-[var(--chat-field)] px-3 py-1 text-xs font-medium text-[var(--chat-stamp)] shadow-[var(--bubble-shadow)]">
+                  {formatDayHeading(c.at, language)}
                 </span>
               </div>
-              <div
-                className={`mt-2.5 grid gap-x-6 gap-y-4 rounded-md px-3 py-2.5 @xl:grid-cols-2 ${CALL_INSET}`}
-              >
-                {/* Right once wide, first when stacked: what was said, what
-                    it set in motion, and what the team makes of it. Titled,
-                    because two kinds of words share the column and the reader
-                    has to tell the agent's from a person's. The Notes always
-                    sit last, so an empty box is never wedged between two
-                    filled sections. */}
-                <div className="min-w-0 space-y-4 @xl:col-start-2 @xl:row-start-1">
-                  {c.summary && (
-                    <section>
-                      <h4 className="mb-1 text-xs font-medium text-[var(--foreground)]">
-                        {t("calls.summary")}
-                      </h4>
-                      <p className="whitespace-pre-wrap break-words text-xs leading-5">
-                        {c.summary}
-                      </p>
-                    </section>
-                  )}
-                  {setOff.length > 0 && (
-                    <ul className="space-y-1 text-xs leading-5 text-[var(--foreground)]">
-                      {setOff.map((fact) => (
-                        <li key={fact}>{fact}</li>
-                      ))}
-                    </ul>
-                  )}
-                  <ReviewNotes
-                    note={c.note ?? ""}
-                    verdict={c.verdict ?? null}
-                    verdictOnFocus
-                    signature={signature}
-                    signatureTitle={
-                      c.noteAt !== undefined ? formatDateTime(c.noteAt, language) : undefined
-                    }
-                    onSave={(patch) => setReview({ callId: c.id as Id<"calls">, ...patch })}
-                  />
-                </div>
-                {/* Left once wide: the facts. No rule across the panel and no
-                    heading over the answers; space does it. */}
-                <div className="min-w-0 @xl:col-start-1 @xl:row-start-1">
-                  <CallPartiesLine
-                    from={c.inbound ? customerSide : agentSide}
-                    to={c.inbound ? agentSide : customerSide}
-                    title={[c.inbound ? t("calls.inbound") : t("calls.outbound"), c.customerNumber]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  />
-                  {footnotes.length > 0 && (
-                    <p className="mt-1 text-[11px] text-[var(--muted)]">{footnotes.join(" · ")}</p>
-                  )}
-                  {hasCollected && <CollectedList values={c.collected!} className="mt-2.5" />}
-                </div>
-              </div>
-              {/* The call itself, under the panel. The player is ours rather
-                  than the browser's: it knows the length before a byte is
-                  fetched (CallRecording). */}
-              {c.recordingUrl && (
-                <CallRecording
-                  url={c.recordingUrl}
-                  durationMs={c.durationSec !== undefined ? c.durationSec * 1000 : undefined}
-                  className="mt-2.5"
-                />
-              )}
-              {/* The link sits ABOVE what it opens, so opening a long
-                  transcript leaves "Hide transcript" under the pointer that
-                  clicked it. Only where there is a transcript to open. */}
-              {c.transcript && (
-                <div className="mt-2 text-xs">
-                  <button
-                    type="button"
-                    aria-expanded={expanded}
-                    onClick={() =>
-                      setExpandedIds((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(c.id)) next.delete(c.id);
-                        else next.add(c.id);
-                        return next;
-                      })
-                    }
-                    className="font-medium text-[var(--accent)] hover:underline"
-                  >
-                    {expanded ? t("calls.hideTranscript") : t("calls.transcript")}
-                  </button>
-                </div>
-              )}
-              {/* The transcript straight on the card, with the CALLER bubble
-                  retinted grey: it is --chat-field, invisible on this
-                  --chat-field card. A paper inset was tried first in Nudge and
-                  rejected: it matched the page ground exactly and read as a
-                  hole punched through the card. Grey-other-party-on-white is
-                  what every messenger does outside its own wallpaper; the var
-                  override keeps CallTranscript untouched for Voice → Calls. */}
-              {expanded && c.transcript && (
-                <div className="mt-3 [--chat-field:#f0f0f0] dark:[--chat-field:#3a3a3a]">
-                  <CallTranscript flow transcript={c.transcript} contactName={contactName} />
-                </div>
-              )}
-            </div>
+            )}
+            <CallRow
+              c={c}
+              contactName={contactName}
+              ruled={!newDay}
+              startOpen={initialFocus === c.id}
+            />
           </Fragment>
         );
       })}
+    </div>
+  );
+}
+
+// One call as a row in a timeline (2026-11-01, Serdar's mock: Linear and
+// Attio's feed rather than a card holding a grey box). The verdict leads,
+// the summary runs the full width at body size, the answers are chips, and
+// everything that is not read at a glance (the recording, the transcript, a
+// new note) waits behind one quiet row of actions and opens UNDER it, so the
+// button pressed stays under the pointer. Rows part by a hairline at half
+// --border, straight on the paper; about five fit a laptop pane where two
+// cards did.
+function CallRow({
+  c,
+  contactName,
+  ruled,
+  startOpen,
+}: {
+  c: CallCardItem;
+  contactName?: string | null;
+  // A hairline above: every row but the first of its day.
+  ruled: boolean;
+  startOpen: boolean;
+}) {
+  const { t, language } = useLanguage();
+  const setReview = useMutation(api.calls.setReview);
+  const [playerOpen, setPlayerOpen] = useState(false);
+  const [transcriptOpen, setTranscriptOpen] = useState(startOpen);
+  // A note opened from the actions row opens below it and stays there for
+  // this mount, so its first save does not move it above the row.
+  const [noteOpenedHere, setNoteOpenedHere] = useState(false);
+  const noteRef = useRef<HTMLDivElement>(null);
+  const hasReview = !!c.note?.trim() || !!c.verdict;
+  const noteAbove = hasReview && !noteOpenedHere;
+  useEffect(() => {
+    if (noteOpenedHere) noteRef.current?.querySelector("textarea")?.focus();
+  }, [noteOpenedHere]);
+
+  // What the call set in motion. Nudge titles this "Automations"; here it is
+  // what the agent did on the call, and each line names itself.
+  const setOff = [
+    c.booked
+      ? `${t("calls.booked", { when: formatDateTime(c.booked.at, language) })}${
+          c.booked.services.length > 0 ? ` · ${c.booked.services.join(", ")}` : ""
+        }${c.booked.cancelled ? ` (${t("calls.bookedCancelled")})` : ""}`
+      : null,
+    c.callbackRequestedFor !== undefined
+      ? t("calls.callbackRequested", { when: formatDateTime(c.callbackRequestedFor, language) })
+      : null,
+  ].filter((fact): fact is string => !!fact);
+  // The ending only where the verdict word does not already say it: a call
+  // that rang out, was busy, reached voicemail or was declined says so once.
+  // A hang-up says who ended a call that ran, and a refused or failed call
+  // keeps the line that says why.
+  const line =
+    !c.outcome || c.outcome === "true" || c.outcome === "false"
+      ? callOutcome(c.disconnectionReason, c.durationSec)
+      : undefined;
+  const wordSaysEnding =
+    line === "no-answer" || line === "busy" || line === "voicemail" || line === "declined";
+  // Line 1's quiet half: direction · length · agent · how it ended, then who
+  // or what placed it. A zero length is not a result and shows nothing.
+  const meta = [
+    c.inbound ? t("calls.inbound") : t("calls.outbound"),
+    c.durationSec ? formatDuration(c.durationSec) : null,
+    c.agentName || null,
+    wordSaysEnding ? null : humanizeCallEnd(c.disconnectionReason, t),
+    c.placedBy ? t("calls.placedBy", { name: c.placedBy }) : null,
+    c.bulkRun ? t("calls.bulkRun", { name: c.bulkRun }) : null,
+    c.requestedCallback ? t("calls.requestedCallback") : null,
+  ].filter((fact): fact is string => !!fact);
+  const signature =
+    [c.noteBy, c.noteEditedBy ? t("review.editedBy", { name: c.noteEditedBy }) : null]
+      .filter((part): part is string => !!part)
+      .join(" · ") || undefined;
+  const review = (
+    <ReviewNotes
+      note={c.note ?? ""}
+      verdict={c.verdict ?? null}
+      verdictOnFocus
+      signature={signature}
+      signatureTitle={c.noteAt !== undefined ? formatDateTime(c.noteAt, language) : undefined}
+      onSave={(patch) => setReview({ callId: c.id as Id<"calls">, ...patch })}
+    />
+  );
+  const hasCollected = !!c.collected && Object.keys(c.collected).length > 0;
+  // The active look for an open section's button, so its label never has to
+  // change (and move the buttons after it) to say "open".
+  const action = (open: boolean) =>
+    `${buttonClass("quiet", "xs")} gap-1.5 ${
+      open ? "bg-[var(--control-hover)] text-[var(--foreground)]" : "text-[var(--muted-strong)]"
+    }`;
+
+  return (
+    <div
+      data-call-id={c.id}
+      className={`scroll-mt-2 px-1 py-3.5 text-sm ${
+        ruled ? "border-t border-[color-mix(in_srgb,var(--border)_50%,transparent)]" : ""
+      }`}
+    >
+      <div className="flex items-baseline gap-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <CallVerdictMark
+            outcome={c.outcome}
+            disconnectionReason={c.disconnectionReason}
+            durationSec={c.durationSec}
+          />
+          {meta.length > 0 && (
+            <span
+              className="min-w-0 break-words text-xs text-[var(--muted)]"
+              title={c.customerNumber}
+            >
+              {meta.join(" · ")}
+            </span>
+          )}
+        </div>
+        <span
+          className="shrink-0 text-xs tabular-nums text-[var(--muted)]"
+          title={formatDateTime(c.at, language)}
+        >
+          {formatTime(c.at, language)}
+        </span>
+      </div>
+      {c.summary && (
+        <p className="mt-1.5 whitespace-pre-wrap break-words leading-6 text-[var(--foreground)]">
+          {c.summary}
+        </p>
+      )}
+      {setOff.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5 text-xs leading-5 text-[var(--foreground)]">
+          {setOff.map((fact) => (
+            <li key={fact}>{fact}</li>
+          ))}
+        </ul>
+      )}
+      {hasCollected && <CollectedChips values={c.collected!} className="mt-2.5" />}
+      {noteAbove && (
+        <div ref={noteRef} className="mt-3">
+          {review}
+        </div>
+      )}
+      <div className="-ml-2 mt-2 flex items-center gap-0.5">
+        {c.recordingUrl && (
+          <button
+            type="button"
+            aria-expanded={playerOpen}
+            onClick={() => setPlayerOpen((open) => !open)}
+            className={action(playerOpen)}
+          >
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden>
+              <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" />
+            </svg>
+            {t("calls.play")}
+          </button>
+        )}
+        {c.transcript && (
+          <button
+            type="button"
+            aria-expanded={transcriptOpen}
+            onClick={() => setTranscriptOpen((open) => !open)}
+            className={action(transcriptOpen)}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="13"
+              height="13"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            {t("calls.transcript")}
+          </button>
+        )}
+        <button
+          type="button"
+          aria-expanded={noteAbove || noteOpenedHere}
+          onClick={() => {
+            // A note already on the row opens where it is.
+            if (noteAbove) {
+              noteRef.current?.querySelector("textarea")?.focus();
+              return;
+            }
+            setNoteOpenedHere((open) => !open);
+          }}
+          className={action(noteOpenedHere)}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="13"
+            height="13"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+          {t("calls.note")}
+        </button>
+      </div>
+      {/* Ours rather than the browser's player: it knows the length before a
+          byte is fetched (CallRecording). Mounted by the press, so it plays. */}
+      {playerOpen && c.recordingUrl && (
+        <CallRecording
+          url={c.recordingUrl}
+          durationMs={c.durationSec !== undefined ? c.durationSec * 1000 : undefined}
+          autoPlay
+          className="mt-2"
+        />
+      )}
+      {noteOpenedHere && (
+        <div ref={noteRef} className="mt-3">
+          {review}
+        </div>
+      )}
+      {/* The transcript straight on the paper, the bubbles' own surfaces
+          doing the work, as the WhatsApp thread beside it does. */}
+      {transcriptOpen && c.transcript && (
+        <div className="mt-3">
+          <CallTranscript flow transcript={c.transcript} contactName={contactName} />
+        </div>
+      )}
     </div>
   );
 }

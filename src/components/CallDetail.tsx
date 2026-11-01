@@ -76,26 +76,28 @@ const LINE_OUTCOME_KEYS: Record<CallOutcome, TranslationKey> = {
   failed: "bulk.itemFailed",
 };
 
-// The call's status pill. Two questions, Nudge's split between them: the
-// WORD says what happened on the line (No answer, Voicemail…) when the call
-// never reached anyone, and the verdict when it did, and the COLOUR
-// says whether the agent got what it called for. Retell reports that as
-// `call_successful`, stored as the strings "true" and "false". Green when it
-// did, amber when it didn't or the call never reached a person; amber rather
-// than red because an unsuccessful call is a normal outcome, not a fault.
-// Neutral while there is no verdict on a call that ran. Without the line
-// facts (Voice → Calls passes only the verdict) the word is the verdict's.
-// A free-text outcome, logged by a person or an import, says itself.
-export function CallOutcomePill({
-  outcome,
-  disconnectionReason,
-  durationSec,
-}: {
-  outcome: string | null | undefined;
-  disconnectionReason?: string | null;
-  durationSec?: number | null;
-}) {
-  const { t } = useLanguage();
+// What a call came to, in one place for the pill and the timeline row. Two
+// questions, Nudge's split between them: the WORD says what happened on the
+// line (No answer, Voicemail…) when the call never reached anyone, and the
+// verdict when it did, and the TONE says whether the agent got what it
+// called for. Retell reports that as `call_successful`, stored as the strings
+// "true" and "false". Neutral while there is no verdict on a call that ran.
+// Without the line facts (Voice → Calls passes only the verdict) the word is
+// the verdict's. A free-text outcome, logged by a person or an import, says
+// itself.
+export function callVerdict(
+  outcome: string | null | undefined,
+  disconnectionReason: string | null | undefined,
+  durationSec: number | null | undefined,
+  t: (key: TranslationKey) => string,
+): {
+  label: string;
+  tone: "good" | "bad" | "neutral";
+  // The call never reached a person: the word is the line's.
+  missed: boolean;
+  // The agent's verdict in words, when the word shown is the line's.
+  verdictTitle?: string;
+} | null {
   const successful = outcome === "true" ? true : outcome === "false" ? false : null;
   const written = outcome && successful === null ? outcome : null;
   const line = written ? undefined : callOutcome(disconnectionReason, durationSec);
@@ -114,21 +116,40 @@ export function CallOutcomePill({
           ? t("calls.unsuccessful")
           : null);
   if (!label) return null;
-  const tone =
-    successful === true
-      ? "good"
-      : successful === false || (line !== undefined && line !== "answered")
-        ? "bad"
-        : "neutral";
+  const missed = line !== undefined && line !== "answered";
+  return {
+    label,
+    tone:
+      successful === true ? "good" : successful === false || missed ? "bad" : "neutral",
+    missed,
+    verdictTitle:
+      line && !verdictWord && successful !== null
+        ? t(successful ? "calls.successful" : "calls.unsuccessful")
+        : undefined,
+  };
+}
+
+// The call's status pill (Voice → Calls). Amber rather than red for a call
+// that did not get what it called for, because an unsuccessful call is a
+// normal outcome, not a fault.
+export function CallOutcomePill({
+  outcome,
+  disconnectionReason,
+  durationSec,
+}: {
+  outcome: string | null | undefined;
+  disconnectionReason?: string | null;
+  durationSec?: number | null;
+}) {
+  const { t } = useLanguage();
+  const verdict = callVerdict(outcome, disconnectionReason, durationSec, t);
+  if (!verdict) return null;
+  const { label, tone } = verdict;
   return (
     <span
       // When the word is the line's, the agent's own verdict is the colour;
       // the hover says it in words.
-      title={
-        line && !verdictWord && successful !== null
-          ? t(successful ? "calls.successful" : "calls.unsuccessful")
-          : undefined
-      }
+      title={verdict.verdictTitle}
       // The border is on every tone, transparent on the filled ones, so a
       // pill is one size whatever it says.
       className={`inline-block shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium ${
@@ -139,6 +160,72 @@ export function CallOutcomePill({
             : "border-[var(--border)] text-[var(--muted)]"
       }`}
     >
+      {label}
+    </span>
+  );
+}
+
+// The conversation pane's call row leads with the same verdict as a dot and a
+// word rather than a pill (2026-11-01): a row in a timeline, not a tag on a
+// card. Successful is emerald, Unsuccessful a soft red, since on a row of
+// plain text amber reads as "unsaved" here. A call that never reached anyone
+// keeps its line's word beside a muted phone glyph struck through, because
+// "nobody picked up" is not a verdict on the agent.
+export function CallVerdictMark({
+  outcome,
+  disconnectionReason,
+  durationSec,
+}: {
+  outcome: string | null | undefined;
+  disconnectionReason?: string | null;
+  durationSec?: number | null;
+}) {
+  const { t } = useLanguage();
+  const verdict = callVerdict(outcome, disconnectionReason, durationSec, t);
+  if (!verdict) return null;
+  const { label, tone, missed } = verdict;
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1.5 text-sm font-medium ${
+        missed
+          ? "text-[var(--muted-strong)]"
+          : tone === "good"
+            ? "text-emerald-700 dark:text-emerald-400"
+            : tone === "bad"
+              ? "text-red-600/90 dark:text-red-400"
+              : "text-[var(--foreground)]"
+      }`}
+      title={verdict.verdictTitle}
+    >
+      {missed ? (
+        <svg
+          viewBox="0 0 24 24"
+          width="14"
+          height="14"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="shrink-0 text-[var(--muted)]"
+          aria-hidden
+        >
+          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91" />
+          <path d="M14.5 2.5 21.5 9.5" />
+          <path d="M21.5 2.5 14.5 9.5" />
+        </svg>
+      ) : (
+        <span
+          aria-hidden
+          className={`h-2 w-2 shrink-0 rounded-full ${
+            tone === "good"
+              ? "bg-emerald-500"
+              : tone === "bad"
+                ? "bg-red-400"
+                : "bg-[var(--muted)]"
+          }`}
+        />
+      )}
       {label}
     </span>
   );
@@ -451,6 +538,39 @@ export function CollectedList({
         </div>
       ))}
     </dl>
+  );
+}
+
+// The timeline row's version (2026-11-01): one round chip per answer, the
+// label muted and the answer at full strength, wrapping as a row of tags
+// rather than a two-column list, so eight answers cost two lines, not eight.
+// The chip is the raised chat surface (--chat-field), so its muted label
+// sits on white in light, never grey on grey.
+export function CollectedChips({
+  values,
+  className = "",
+}: {
+  values: Record<string, unknown>;
+  className?: string;
+}) {
+  const { t } = useLanguage();
+  const rows = Object.entries(values)
+    .filter(([, value]) => !isEmpty(value))
+    .map(([key, value]) => [key, formatCollected(value, t)] as const)
+    .filter(([, text]) => text !== "");
+  if (rows.length === 0) return null;
+  return (
+    <ul className={`flex flex-wrap gap-1.5 ${className}`}>
+      {rows.map(([key, text]) => (
+        <li
+          key={key}
+          className="min-w-0 max-w-full break-words rounded-full bg-[var(--chat-field)] px-2.5 py-0.5 text-xs leading-5 shadow-[var(--bubble-shadow)]"
+        >
+          <span className="text-[var(--muted)]">{humanizeKey(key)}</span>{" "}
+          <span className="text-[var(--foreground)]">{text}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
