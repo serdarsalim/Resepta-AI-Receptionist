@@ -2571,15 +2571,8 @@ function CallRow({
   const setReview = useMutation(api.calls.setReview);
   const [playerOpen, setPlayerOpen] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(startOpen);
-  // A note opened from the actions row opens below it and stays there for
-  // this mount, so its first save does not move it above the row.
-  const [noteOpenedHere, setNoteOpenedHere] = useState(false);
-  const noteRef = useRef<HTMLDivElement>(null);
-  const hasReview = !!c.note?.trim() || !!c.verdict;
-  const noteAbove = hasReview && !noteOpenedHere;
-  useEffect(() => {
-    if (noteOpenedHere) noteRef.current?.querySelector("textarea")?.focus();
-  }, [noteOpenedHere]);
+  // The Note action opens the review's box and puts the caret in it.
+  const [noteSignal, setNoteSignal] = useState(0);
 
   // What the call set in motion. Nudge titles this "Automations"; here it is
   // what the agent did on the call, and each line names itself.
@@ -2649,6 +2642,8 @@ function CallRow({
       note={c.note ?? ""}
       verdict={c.verdict ?? null}
       verdictOnFocus
+      collapsible
+      openSignal={noteSignal}
       signature={signature}
       signatureTitle={c.noteAt !== undefined ? formatDateTime(c.noteAt, language, tz) : undefined}
       onSave={(patch) => setReview({ callId: c.id as Id<"calls">, ...patch })}
@@ -2791,11 +2786,10 @@ function CallRow({
           </div>
         </div>
       )}
-      {noteAbove && (
-        <div ref={noteRef} className="mt-3">
-          {review}
-        </div>
-      )}
+      {/* "Notes  Pass  Miss" on every row, always (Serdar, 2026-11-01):
+          the team's verdict never hides; the note's box opens from the
+          title or the Note action, and a saved note shows under it. */}
+      <div className="mt-3">{review}</div>
       <div className="-ml-2 mt-2 flex items-center gap-0.5">
         {c.recordingUrl && (
           <button
@@ -2835,16 +2829,8 @@ function CallRow({
         )}
         <button
           type="button"
-          aria-expanded={noteAbove || noteOpenedHere}
-          onClick={() => {
-            // A note already on the row opens where it is.
-            if (noteAbove) {
-              noteRef.current?.querySelector("textarea")?.focus();
-              return;
-            }
-            setNoteOpenedHere((open) => !open);
-          }}
-          className={action(noteOpenedHere)}
+          onClick={() => setNoteSignal((n) => n + 1)}
+          className={action(false)}
         >
           <svg
             viewBox="0 0 24 24"
@@ -2872,11 +2858,6 @@ function CallRow({
           autoPlay
           className="mt-2"
         />
-      )}
-      {noteOpenedHere && (
-        <div ref={noteRef} className="mt-3">
-          {review}
-        </div>
       )}
       {/* The transcript straight on the paper, the bubbles' own surfaces
           doing the work, as the WhatsApp thread beside it does. */}

@@ -52,6 +52,8 @@ export function ReviewNotes({
   signatureTitle,
   className = "",
   verdictOnFocus = false,
+  collapsible = false,
+  openSignal = 0,
 }: {
   note: string;
   verdict: Verdict | null;
@@ -64,12 +66,17 @@ export function ReviewNotes({
   // The same slot's hover: when it last changed.
   signatureTitle?: string;
   className?: string;
-  // A real call: both verdicts only while the note is open, just the one
-  // picked otherwise, and optional (Nudge, 2026-10-08). Most calls are never
-  // reviewed, and a Pass/Miss pair on every card read as if each one owed a
-  // verdict; a note with neither picked is a plain comment, which is the
-  // third answer without a third button.
+  // A real call: the pair sits beside the title and the box starts at two
+  // lines. Both verdicts show at all times since 2026-11-01 (Serdar: a pair
+  // that showed only while the note was open read as if it had vanished).
+  // Optional all the same: a note with neither picked is a plain comment,
+  // the third answer without a third button.
   verdictOnFocus?: boolean;
+  // The call row: the title and the pair always show, the box only once it
+  // holds a note or is opened (the title, or the row's Note action).
+  collapsible?: boolean;
+  // Bumped by the row's Note action: open the box and put the caret in it.
+  openSignal?: number;
 }) {
   const { t } = useLanguage();
   const sectionRef = useRef<HTMLElement>(null);
@@ -77,9 +84,15 @@ export function ReviewNotes({
   const [saved, setSaved] = useState(note);
   const [chosen, setChosen] = useState<Verdict | null>(verdict);
   const [state, setState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
-  // Focus anywhere in the box (the field or a verdict). On a call the pair
-  // shows only while you are in here; at rest, just the verdict picked.
-  const [editing, setEditing] = useState(false);
+  const [open, setOpen] = useState(false);
+  const openAndFocus = () => {
+    setOpen(true);
+    // After the box mounts.
+    window.setTimeout(() => sectionRef.current?.querySelector("textarea")?.focus(), 0);
+  };
+  useEffect(() => {
+    if (openSignal > 0) openAndFocus();
+  }, [openSignal]);
   // A note that CHANGES on the server after mount (a teammate saved one, or
   // the server trimmed ours) wins over an untouched box, never over one being
   // typed in. It has to be a change of the prop, not a difference from what
@@ -116,9 +129,8 @@ export function ReviewNotes({
     }
   };
 
-  const shownVerdicts = (["pass", "miss"] as const).filter(
-    (v) => !verdictOnFocus || editing || chosen === v,
-  );
+  const shownVerdicts = ["pass", "miss"] as const;
+  const showBox = !collapsible || open || text !== "";
   const verdictButtons = shownVerdicts.length > 0 && (
     <div className="flex items-center gap-1" role="group" aria-label={t("review.verdict")}>
       {shownVerdicts.map((v) => {
@@ -128,17 +140,9 @@ export function ReviewNotes({
             key={v}
             type="button"
             aria-pressed={on}
-            // Keep focus in the field: a blur would hide the pair on a call
-            // before the click landed.
+            // Keep focus where it is: a note being typed stays in its field.
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => {
-              // At rest a call shows only the verdict picked. A click on it
-              // opens the review, with both verdicts, rather than taking the
-              // verdict back without a word.
-              if (verdictOnFocus && !editing) {
-                sectionRef.current?.querySelector("textarea")?.focus();
-                return;
-              }
               const next = on ? null : v;
               setChosen(next);
               void persist({ verdict: next });
@@ -176,18 +180,24 @@ export function ReviewNotes({
     <section
       ref={sectionRef}
       className={className}
-      onFocus={() => setEditing(true)}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setEditing(false);
-      }}
     >
       {/* On a call the pair sits on this row, after the title, and the row
           holds the chips' height (h-6) even while they are hidden, so
           clicking into the note moves nothing. */}
-      <div className={`mb-2 flex items-center gap-2 ${verdictOnFocus ? "h-6" : ""}`}>
-        <h4 className="shrink-0 text-xs font-medium text-[var(--foreground)]">
-          {t("review.title")}
-        </h4>
+      <div className={`flex items-center gap-2 ${showBox ? "mb-2" : ""} ${verdictOnFocus ? "h-6" : ""}`}>
+        {collapsible && !showBox ? (
+          <button
+            type="button"
+            onClick={openAndFocus}
+            className="shrink-0 cursor-pointer text-xs font-medium text-[var(--foreground)] hover:underline"
+          >
+            {t("review.title")}
+          </button>
+        ) : (
+          <h4 className="shrink-0 text-xs font-medium text-[var(--foreground)]">
+            {t("review.title")}
+          </h4>
+        )}
         {verdictOnFocus && verdictButtons}
         <div className="ml-auto flex min-w-0 items-center gap-3">
           {status}
@@ -198,20 +208,22 @@ export function ReviewNotes({
           (a field in a card in a card read as "a tiny input field"), the text
           at rest on the panel's own surface, room for a sentence before it
           grows. */}
-      <AutoGrowTextarea
-        value={text}
-        // Two lines on a call: most notes are a sentence, and the card stays
-        // short; it grows as you type. A test keeps four, where the note is
-        // the main thing written.
-        rows={verdictOnFocus ? 2 : 4}
-        placeholder={placeholder ?? t("review.placeholder")}
-        aria-label={t("review.title")}
-        onChange={(event) => setText(event.target.value)}
-        onBlur={() => {
-          if (text !== saved) void persist({ note: text });
-        }}
-        className="block w-full rounded-none border-0 bg-transparent p-0 text-xs leading-5 text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none"
-      />
+      {showBox && (
+        <AutoGrowTextarea
+          value={text}
+          // Two lines on a call: most notes are a sentence, and the card stays
+          // short; it grows as you type. A test keeps four, where the note is
+          // the main thing written.
+          rows={verdictOnFocus ? 2 : 4}
+          placeholder={placeholder ?? t("review.placeholder")}
+          aria-label={t("review.title")}
+          onChange={(event) => setText(event.target.value)}
+          onBlur={() => {
+            if (text !== saved) void persist({ note: text });
+          }}
+          className="block w-full rounded-none border-0 bg-transparent p-0 text-xs leading-5 text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none"
+        />
+      )}
     </section>
   );
 }
