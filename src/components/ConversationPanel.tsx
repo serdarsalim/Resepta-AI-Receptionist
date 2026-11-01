@@ -2490,7 +2490,7 @@ function QueuedCallbackCard({ callback }: { callback: QueuedCallback }) {
             setCancelling(true);
             void cancel({ callbackId: callback.id }).finally(() => setCancelling(false));
           }}
-          className={`${buttonClass("quiet", "xs")} shrink-0 text-[var(--muted-strong)]`}
+          className={buttonClass("quiet", "xs")}
         >
           {t("callback.cancel")}
         </button>
@@ -2627,12 +2627,13 @@ function CallRow({
     />
   );
   const hasCollected = !!c.collected && Object.keys(c.collected).length > 0;
-  // The active look for an open section's button, so its label never has to
-  // change (and move the buttons after it) to say "open".
+  // An open section's button takes the ink tier up and keeps the wash, so its
+  // label never has to change (and move the buttons after it) to say "open".
+  // Variants swap rather than stack a colour on one (Control.tsx).
   const action = (open: boolean) =>
-    `${buttonClass("quiet", "xs")} gap-1.5 ${
-      open ? "bg-[var(--control-hover)] text-[var(--foreground)]" : "text-[var(--muted-strong)]"
-    }`;
+    open
+      ? `${buttonClass("ghost", "xs")} gap-1.5 bg-[var(--control-hover)]`
+      : `${buttonClass("quiet", "xs")} gap-1.5`;
 
   return (
     <div
