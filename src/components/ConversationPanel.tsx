@@ -31,7 +31,7 @@ import {
 } from "./CallDetail";
 import { buttonClass } from "./Control";
 import { CallRecording } from "./CallRecording";
-import { ReviewNotes, VerdictMark, type Verdict } from "./ReviewNotes";
+import { ReviewNotes, VerdictMark, VerdictPicker, type Verdict } from "./ReviewNotes";
 import { callOutcome } from "../../convex/lib/callOutcome";
 import { Avatar } from "./Avatar";
 import { MessageMedia } from "./MessageMedia";
@@ -2575,7 +2575,9 @@ function CallRow({
   // this mount, so its first save does not move it above the row.
   const [noteOpenedHere, setNoteOpenedHere] = useState(false);
   const noteRef = useRef<HTMLDivElement>(null);
-  const hasReview = !!c.note?.trim() || !!c.verdict;
+  // The note alone decides whether the box shows; the verdict has its own
+  // always-visible picker on the actions row.
+  const hasReview = !!c.note?.trim();
   const noteAbove = hasReview && !noteOpenedHere;
   useEffect(() => {
     if (noteOpenedHere) noteRef.current?.querySelector("textarea")?.focus();
@@ -2649,6 +2651,7 @@ function CallRow({
       note={c.note ?? ""}
       verdict={c.verdict ?? null}
       verdictOnFocus
+      hideVerdict
       signature={signature}
       signatureTitle={c.noteAt !== undefined ? formatDateTime(c.noteAt, language, tz) : undefined}
       onSave={(patch) => setReview({ callId: c.id as Id<"calls">, ...patch })}
@@ -2862,6 +2865,12 @@ function CallRow({
           </svg>
           {t("calls.note")}
         </button>
+        <div className="ml-auto">
+          <VerdictPicker
+            verdict={c.verdict ?? null}
+            onSave={(verdict) => setReview({ callId: c.id as Id<"calls">, verdict })}
+          />
+        </div>
       </div>
       {/* Ours rather than the browser's player: it knows the length before a
           byte is fetched (CallRecording). Mounted by the press, so it plays. */}
