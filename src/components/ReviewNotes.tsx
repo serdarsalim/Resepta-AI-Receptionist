@@ -150,10 +150,9 @@ export function ReviewNotes({
             className={`${VERDICT_CHIP} cursor-pointer transition-colors ${
               on
                 ? VERDICT_TONE[v]
-                // Unpicked reads as a button, not a stray word (Serdar,
-                // 2026-11-01: people missed them): Control.tsx's raised
-                // outline, a ring and a soft drop, which adds no size.
-                : "bg-[var(--raised)] text-[var(--foreground)] shadow-[var(--raised-shadow)] hover:bg-[var(--raised-hover)]"
+                // Unpicked is a word on a hover wash: a raised chip read too
+                // bold beside the note (Serdar, 2026-11-01).
+                : "text-[var(--muted-strong)] hover:bg-[var(--control-hover)] hover:text-[var(--foreground)]"
             }`}
           >
             {v === "pass" ? t("review.pass") : t("review.miss")}
