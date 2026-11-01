@@ -2834,6 +2834,8 @@ function CallRow({
           type="button"
           aria-expanded={showReview}
           onClick={() => {
+            // Nothing saved yet: the button toggles the empty review away.
+            if (reviewOpened && !hasReview) return setReviewOpened(false);
             setReviewOpened(true);
             setNoteSignal((n) => n + 1);
           }}
