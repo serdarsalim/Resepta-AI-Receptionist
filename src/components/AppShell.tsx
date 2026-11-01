@@ -52,12 +52,12 @@ const SIDEBAR_COLLAPSED_KEY = "randevu.sidebar-collapsed";
 
 type IconProps = React.SVGProps<SVGSVGElement>;
 
-// 16px at stroke 1.5, the size and weight every icon set in this class ships
-// (Nudge 451ab041). It was 18 at stroke 2, about a quarter more ink per
-// glyph, which is what made the nav read chunky beside 14px labels: the ink
-// was the problem, not the hues. A glyph borrowed from elsewhere is
-// normalised to this at its call site rather than drawn heavier than the rows
-// around it. The phone tab bar draws the same glyphs at 18px.
+// 16px at stroke 2, Nudge's current weight (Serdar, 2026-11-01: the symbols
+// read too thin beside Nudge's). It was stroke 1.5 from Nudge 451ab041, back
+// when the 18px glyph at stroke 2 read chunky; at 16px the heavier stroke
+// sits right with the font-medium labels. A glyph borrowed from elsewhere is
+// normalised to this at its call site rather than drawn lighter or heavier
+// than the rows around it. The phone tab bar draws the same glyphs at 18px.
 function makeIcon(paths: React.ReactNode) {
   function Icon(props: IconProps) {
     return (
@@ -67,7 +67,7 @@ function makeIcon(paths: React.ReactNode) {
         height="16"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.5"
+        strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
         aria-hidden

@@ -1032,7 +1032,7 @@ document's reserved scrollbar track (globals.css): the shell never scrolls the
 document, and with classic scrollbars the track was a 15px strip of
 `--background` at the right edge.
 
-**Sidebar glyphs are 16px at stroke 1.5** (`makeIcon`, Nudge 451ab041);
+**Sidebar glyphs are 16px at stroke 2** (`makeIcon`, Nudge's current weight, 2026-11-01);
 normalise a borrowed glyph at its call site rather than draw it heavier than
 the rows around it. The phone tab bar draws the same glyphs at 18px. **Row
 weight never changes between states**, in the sidebar and in the phone bar:
