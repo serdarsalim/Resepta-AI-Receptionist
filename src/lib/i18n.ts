@@ -6738,6 +6738,7 @@ const dictionary = {
     de: "Wird gespeichert…",
   },
   "common.saved": { tr: "Kaydedildi", en: "Saved", de: "Gespeichert" },
+  "common.yesterday": { tr: "Dün", en: "Yesterday", de: "Gestern" },
   "common.add": { tr: "Ekle", en: "Add", de: "Hinzufügen" },
   "common.error": {
     tr: "Bir şeyler ters gitti. Tekrar deneyin.",

@@ -17,6 +17,7 @@ import {
   formatDateTime,
   formatDateTimeWithWeekday,
   formatDayHeading,
+  formatFeedStamp,
   formatTime,
   fromDatetimeLocalValue,
   localeFor,
@@ -1120,6 +1121,7 @@ export function ConversationPanel({
             mail to a customer); the UI just stopped borrowing it. */}
         {filter === "email" && (
           <EmailCards
+            timezone={settings?.org.timezone}
             items={visible
               .filter((item) => item.channel === "email")
               .map((item) => ({
@@ -1158,6 +1160,7 @@ export function ConversationPanel({
         )}
         {filter === "call" && (
           <CallCards
+            timezone={settings?.org.timezone}
             items={visible
               .filter((item) => item.channel === "call")
               .map((item) => ({
@@ -2505,44 +2508,34 @@ function CallCards({
   items,
   contactName,
   focusId,
+  timezone,
 }: {
   // Newest-first (feed order), call rows only.
   items: CallCardItem[];
   contactName?: string | null;
+  // The business's, for the rows' dates.
+  timezone?: string;
   // Row the parent is about to scroll to (deep link / All-index routing).
   // Read once at mount: a routed row starts with its transcript OPEN, since
   // the person came for that call's words, not for its existence.
   focusId?: string | null;
 }) {
-  const { language } = useLanguage();
   const [initialFocus] = useState(focusId);
   if (items.length === 0) return null;
+  // No day chips here since 2026-11-01: each row carries its own date and
+  // time on the right (formatFeedStamp), so the list is one run of rows.
   return (
     <div>
-      {items.map((c, idx) => {
-        // Day separators as the chat's own date pill (same as the email
-        // cards); rows then carry only a time.
-        const newDay =
-          idx === 0 ||
-          formatDayHeading(items[idx - 1].at, language) !== formatDayHeading(c.at, language);
-        return (
-          <Fragment key={c.id}>
-            {newDay && (
-              <div className="flex justify-center py-1.5">
-                <span className="rounded-lg bg-[var(--chat-field)] px-3 py-1 text-xs font-medium text-[var(--chat-stamp)] shadow-[var(--bubble-shadow)]">
-                  {formatDayHeading(c.at, language)}
-                </span>
-              </div>
-            )}
-            <CallRow
-              c={c}
-              contactName={contactName}
-              ruled={!newDay}
-              startOpen={initialFocus === c.id}
-            />
-          </Fragment>
-        );
-      })}
+      {items.map((c, idx) => (
+        <CallRow
+          key={c.id}
+          c={c}
+          contactName={contactName}
+          timezone={timezone}
+          ruled={idx > 0}
+          startOpen={initialFocus === c.id}
+        />
+      ))}
     </div>
   );
 }
@@ -2558,12 +2551,14 @@ function CallCards({
 function CallRow({
   c,
   contactName,
+  timezone,
   ruled,
   startOpen,
 }: {
   c: CallCardItem;
   contactName?: string | null;
-  // A hairline above: every row but the first of its day.
+  timezone?: string;
+  // A rule above: every row but the first.
   ruled: boolean;
   startOpen: boolean;
 }) {
@@ -2700,9 +2695,9 @@ function CallRow({
         </div>
         <span
           className="shrink-0 text-xs tabular-nums text-[var(--muted)]"
-          title={formatDateTime(c.at, language)}
+          title={formatDateTime(c.at, language, timezone)}
         >
-          {formatTime(c.at, language)}
+          {formatFeedStamp(c.at, language, t("common.yesterday"), timezone)}
         </span>
       </div>
       {/* The body in two columns once the row is wide (Serdar, 2026-11-01):
@@ -2868,10 +2863,13 @@ function EmailCards({
   focusId,
   onReply,
   onCancel,
+  timezone,
 }: {
   // Newest-first (feed order), email rows only.
   items: EmailCardItem[];
   contactName?: string | null;
+  // The business's, for the cards' dates.
+  timezone?: string;
   // Card the parent is about to scroll to (deep link / All-index routing).
   // Read once at mount so the first slab reaches it — scrollIntoView on a
   // card outside the slab is a silent no-op.
@@ -2904,18 +2902,8 @@ function EmailCards({
   return (
     <div className="space-y-2">
       {slab.map((m, idx) => {
-        // Day separators as WhatsApp's own date pill — a flat text label
-        // disappeared into the paper. Cards then carry only a time.
-        const sep =
-          idx === 0 ||
-          formatDayHeading(slab[idx - 1].at, language) !==
-            formatDayHeading(m.at, language) ? (
-            <div className="flex justify-center py-1.5">
-              <span className="rounded-lg bg-[var(--chat-field)] px-3 py-1 text-xs font-medium text-[var(--chat-stamp)] shadow-[var(--bubble-shadow)]">
-                {formatDayHeading(m.at, language)}
-              </span>
-            </div>
-          ) : null;
+        // No day chips since 2026-11-01: each card carries its own date and
+        // time on the right (formatFeedStamp).
         const failed = m.status === "failed";
         const errorKey = errorKeyFor(m.error);
         // Reply only on mail that actually moved — answering a queued,
@@ -2925,7 +2913,6 @@ function EmailCards({
           (m.scheduledFor === undefined && !failed && m.status !== "queued");
         return (
           <Fragment key={m.id}>
-            {sep}
             <div
               data-email-id={m.id}
               className="scroll-mt-2 rounded-lg bg-[var(--chat-field)] px-3.5 py-3 shadow-[var(--bubble-shadow)]"
@@ -2969,10 +2956,10 @@ function EmailCards({
                   </p>
                 </div>
                 <span
-                  className="shrink-0 text-xs text-[var(--muted)]"
-                  title={formatDateTime(m.at, language)}
+                  className="shrink-0 text-xs tabular-nums text-[var(--muted)]"
+                  title={formatDateTime(m.at, language, timezone)}
                 >
-                  {formatTime(m.at, language)}
+                  {formatFeedStamp(m.at, language, t("common.yesterday"), timezone)}
                 </span>
               </div>
               <div className="pt-2">

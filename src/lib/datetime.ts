@@ -67,6 +67,38 @@ export function formatTime(ms: number, language: Language, timezone?: string): s
   }).format(new Date(ms));
 }
 
+// A feed row's stamp where the Calls and Email tabs dropped their day chips
+// (Serdar, 2026-11-01): today the time alone, then "Yesterday 22:36", then
+// "23 Aug · 22:36" this year and "23 Aug 2025 · 22:36" before it. Days are
+// compared in the given timezone, the business's.
+export function formatFeedStamp(
+  ms: number,
+  language: Language,
+  yesterday: string,
+  timezone?: string,
+  now: number = Date.now(),
+): string {
+  const time = formatTime(ms, language, timezone);
+  const dayKey = (at: number) =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(at));
+  const day = dayKey(ms);
+  if (day === dayKey(now)) return time;
+  if (day === dayKey(now - 86_400_000)) return `${yesterday} ${time}`;
+  const sameYear = day.slice(0, 4) === dayKey(now).slice(0, 4);
+  const date = new Intl.DateTimeFormat(LOCALE[language], {
+    timeZone: timezone,
+    day: "numeric",
+    month: "short",
+    year: sameYear ? undefined : "numeric",
+  }).format(new Date(ms));
+  return `${date} · ${time}`;
+}
+
 export function formatDayHeading(ms: number, language: Language, timezone?: string): string {
   return new Intl.DateTimeFormat(LOCALE[language], {
     timeZone: timezone,
