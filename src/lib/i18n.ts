@@ -5502,6 +5502,7 @@ const dictionary = {
   // wrong. Both verdicts show while the note is being written, and at rest
   // only the one picked.
   "review.title": { tr: "Notlar", en: "Notes", de: "Notizen" },
+  "review.rowLabel": { tr: "İnceleme", en: "Review", de: "Prüfung" },
   "review.placeholder": {
     tr: "Not ekleyin…",
     en: "Add a note…",
