@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { useLanguage } from "@/lib/LanguageProvider";
-import { HoverTip } from "./HoverTip";
 import type { TranslationKey } from "@/lib/i18n";
 import { callOutcome, type CallOutcome } from "../../convex/lib/callOutcome";
 
@@ -166,47 +165,24 @@ export function CallOutcomePill({
   );
 }
 
-// The conversation pane's call row leads with the same verdict as a dot and a
-// word rather than a pill (2026-11-01): a row in a timeline, not a tag on a
-// card. The dot is emerald for Successful and a soft red for Unsuccessful,
-// since on a row of plain text amber reads as "unsaved" here. A call that never reached anyone
-// keeps its line's word beside a muted phone glyph struck through, because
-// "nobody picked up" is not a verdict on the agent.
+// The verdict as a mark and a word rather than a pill (2026-11-01). The
+// conversation pane's call row uses it only for a call that never reached
+// anyone: its line's word beside a muted phone glyph struck through, because
+// "nobody picked up" is not a verdict on the agent. A call that ran says its
+// Result in the row's facts column instead.
 export function CallVerdictMark({
   outcome,
   disconnectionReason,
   durationSec,
-  dotOnly = false,
 }: {
   outcome: string | null | undefined;
   disconnectionReason?: string | null;
   durationSec?: number | null;
-  // The call row (2026-11-01): a call that ran shows only its dot, the word
-  // living in the facts column as Result; the hover names it. A call that
-  // never reached anyone keeps its word, which is the whole row then.
-  dotOnly?: boolean;
 }) {
   const { t } = useLanguage();
   const verdict = callVerdict(outcome, disconnectionReason, durationSec, t);
   if (!verdict) return null;
   const { label, tone, missed } = verdict;
-  if (dotOnly && !missed) {
-    return (
-      <HoverTip text={label} className="inline-flex shrink-0 self-center">
-        <span
-          role="img"
-          aria-label={label}
-          className={`h-2 w-2 rounded-full ${
-            tone === "good"
-              ? "bg-emerald-500/80"
-              : tone === "bad"
-                ? "bg-red-400/80"
-                : "bg-[var(--muted)]"
-          }`}
-        />
-      </HoverTip>
-    );
-  }
   return (
     <span
       // The word wears the meta line's own style and the dot alone carries

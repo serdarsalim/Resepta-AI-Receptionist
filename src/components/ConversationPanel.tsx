@@ -2620,8 +2620,18 @@ function CallRow({
   // Result leads the column (Serdar, 2026-11-01): the verdict means
   // something read beside what the call was, not as the row's first word.
   const verdict = callVerdict(c.outcome, c.disconnectionReason, c.durationSec, t);
-  const facts: Array<[string, string]> = [
-    ...(verdict && !missed ? [[t("calls.result"), verdict.label] as [string, string]] : []),
+  // The Result's value carries the verdict's colour, softened, at regular
+  // weight (Serdar, 2026-11-01: a dot on the top line read as a puzzle).
+  const resultTone =
+    verdict?.tone === "good"
+      ? "text-emerald-700/90 dark:text-emerald-400/90"
+      : verdict?.tone === "bad"
+        ? "text-red-600/85 dark:text-red-400/90"
+        : "text-[var(--foreground)]";
+  const facts: Array<[string, string, string?]> = [
+    ...(verdict && !missed
+      ? [[t("calls.result"), verdict.label, resultTone] as [string, string, string]]
+      : []),
     ...(c.durationSec ? [[t("calls.length"), formatDuration(c.durationSec)] as [string, string]] : []),
     ...(ended ? [[t("calls.ended"), ended] as [string, string]] : []),
   ];
@@ -2671,12 +2681,15 @@ function CallRow({
         {/* One line that truncates rather than wraps; the hover holds all of
             it, with the direction in words and the customer's number. */}
         <div className="flex min-w-0 flex-1 items-baseline whitespace-nowrap">
-          <CallVerdictMark
-            outcome={c.outcome}
-            disconnectionReason={c.disconnectionReason}
-            durationSec={c.durationSec}
-            dotOnly
-          />
+          {/* Only a call that never reached anyone leads with its word
+              (No answer…); a call that ran says its Result in the column. */}
+          {missed && (
+            <CallVerdictMark
+              outcome={c.outcome}
+              disconnectionReason={c.disconnectionReason}
+              durationSec={c.durationSec}
+            />
+          )}
           <span
             className="min-w-0 truncate text-xs text-[var(--muted)]"
             title={[
@@ -2688,7 +2701,7 @@ function CallRow({
               .join(" · ")}
           >
             {/* The verdict's separator, so the line reads as one. */}
-            {verdict && (missed ? "\u00a0·\u00a0" : "\u00a0\u00a0")}
+            {verdict && missed && "\u00a0·\u00a0"}
             {from}
             {/* Drawn, not typed: a typed arrow arrives at whatever weight
                 the font's own glyph has. */}
@@ -2748,10 +2761,12 @@ function CallRow({
                 only when both are there. */}
             {(facts.length > 0 || hasCollected) && (
               <dl className="grid grid-cols-[minmax(0,max-content)_1fr] gap-x-3 gap-y-1 text-xs">
-                {facts.map(([label, value]) => (
+                {facts.map(([label, value, tone]) => (
                   <div key={`f-${label}`} className="contents">
                     <dt className="text-[var(--muted-strong)]">{label}</dt>
-                    <dd className="min-w-0 break-words text-[var(--foreground)]">{value}</dd>
+                    <dd className={`min-w-0 break-words ${tone ?? "text-[var(--foreground)]"}`}>
+                      {value}
+                    </dd>
                   </div>
                 ))}
                 {facts.length > 0 && hasCollected && (
