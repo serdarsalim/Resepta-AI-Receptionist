@@ -207,7 +207,7 @@ function AllFeed({
                       <button
                         type="button"
                         onClick={() => onOpenContact(row.entry.customerId!)}
-                        className="font-medium hover:underline"
+                        className="name-link"
                       >
                         {row.entry.customerName}
                       </button>

@@ -636,7 +636,7 @@ export function AppointmentModal({
                 <button
                   type="button"
                   onClick={() => onOpenCustomer(draft.customerId!)}
-                  className="min-w-0 truncate text-left underline-offset-2 transition-colors hover:text-[var(--link)] hover:underline"
+                  className="name-link min-w-0 truncate text-left"
                 >
                   {draft.customerName}
                 </button>

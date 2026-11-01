@@ -98,7 +98,7 @@
      This was a two-layer drop shadow, tuned across several passes: a tight
      layer seating the card and a wide halo softening the top and left corners
      where a downward drop puts nothing. The tuning was real and the result was
-     still a lift nobody asked for. --card is #ffffff against --pane #f1f1f3,
+     still a lift nobody asked for. --card is #ffffff against --pane (#f1f1f3 then),
      fourteen units apart, which draws the edge on its own.
 
      Kept as a token set to none rather than deleted, because every card in the
@@ -132,16 +132,15 @@
      because their lavender is blue-tinted and their mint is green — the two
      hues this app already owns. Percentages stay in single digits: past that
      it stops being a plane and starts being a poster. */
-  --content-bg: linear-gradient(
-    140deg,
-    color-mix(in srgb, var(--accent) 7%, var(--pane)) 0%,
-    var(--pane) 48%,
-    color-mix(in srgb, var(--brand) 8%, var(--pane)) 100%
-  );
+  /* Flat since 2026-11-01 (Serdar, after LinkedIn): the blue-to-green wash
+     read as haze behind the cards. Kept as an image token so the
+     bg-[image:…] users need no change. */
+  --content-bg: linear-gradient(var(--pane), var(--pane));
   /* The ground of the shell. The workspace's --content-bg wash is mixed
      from it, and the frame around it (.app-pane: the sidebar rail and the
-     top bar) sits one step lighter. */
-  --pane: #f1f1f3;
+     top bar) sits one step lighter. LinkedIn's own warm grey (2026-11-01,
+     Serdar): the cool #f1f1f3 blended into the white cards. */
+  --pane: #f4f2ee;
   /* Primary action accent — soft blue, white text in both modes */
   --accent: #3b82f6;
   --accent-fg: #ffffff;
@@ -271,14 +270,7 @@
      hole cut into it. */
   --pane-field: color-mix(in srgb, var(--foreground) 4%, transparent);
   --pane-field-hover: color-mix(in srgb, var(--foreground) 8%, transparent);
-  /* Halved: the same mix that reads as a tint on white reads as a colour cast
-     on near-black. */
-  --content-bg: linear-gradient(
-    140deg,
-    color-mix(in srgb, var(--accent) 4%, var(--pane)) 0%,
-    var(--pane) 48%,
-    color-mix(in srgb, var(--brand) 4%, var(--pane)) 100%
-  );
+  --content-bg: linear-gradient(var(--pane), var(--pane));
   --pane: #050506;
   --accent: #3b82f6;
   --accent-fg: #ffffff;
@@ -336,6 +328,19 @@ thead {
 
 .page-title {
   color: var(--page-title);
+}
+
+/* A record's NAME that opens it (2026-11-01, Serdar, after LinkedIn; Nudge's
+   class): the ink colour and semibold in both themes, underlined on hover.
+   Blue is for actions and real links (a website, an email); a name is
+   neither. */
+.name-link {
+  color: var(--foreground);
+  font-weight: 600;
+  text-underline-offset: 2px;
+}
+.name-link:hover {
+  text-decoration: underline;
 }
 
 /* The sidebar rail: FLAT, and a shade lighter than the --pane plane the

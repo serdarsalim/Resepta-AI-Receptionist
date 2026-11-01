@@ -258,7 +258,7 @@ export default function AdminPage() {
                     <Link
                       href={`/admin/${org.orgId}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="font-semibold hover:underline"
+                      className="name-link"
                     >
                       {org.name}
                     </Link>

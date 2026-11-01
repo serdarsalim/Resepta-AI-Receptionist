@@ -802,7 +802,7 @@ function CustomerAppointments({
           onClick={(event) =>
             onOpen(draftFor(a), event.currentTarget.getBoundingClientRect())
           }
-          className="min-w-0 flex-1 truncate rounded text-left text-sm font-medium transition-colors hover:text-[var(--link)]"
+          className="name-link min-w-0 flex-1 truncate rounded text-left text-sm"
         >
           {a.serviceName || t("appointments.title")}
         </button>

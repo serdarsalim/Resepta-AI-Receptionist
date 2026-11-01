@@ -912,6 +912,14 @@ the list only (`ListHead` in BusinessView, same markup in `KnowledgeCard`).
   `staff.setColor` and `staff.remove` freeze unset colours first. Never key a
   colour on a service.
 
+## A record's name is ink, not blue (2026-11-01)
+
+A name in a list or table that opens its record (customer, booking,
+business) wears `.name-link` (globals.css): `--foreground`, semibold,
+underlined on hover, both themes. Blue (`--link`, `--accent`) is for actions
+and real links (a website, an email, a file). A new name link takes the
+class, never a colour of its own.
+
 ## An inbox row says what was said (2026-08-21)
 
 Second line: channel glyph, `not sent` in `--now-line` for a failed send,

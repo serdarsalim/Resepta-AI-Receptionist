@@ -814,7 +814,7 @@ export function CustomersView({
             >
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5">
-                  <span className={`truncate font-medium ${hasCustomerName(customer) ? "" : "text-[var(--muted)]"}`}>{fullName(customer)}</span>
+                  <span className={`truncate ${hasCustomerName(customer) ? "name-link" : "font-medium text-[var(--muted)]"}`}>{fullName(customer)}</span>
                   {customer.needsAttention && (
                     <NewMark
                       onDismiss={() =>
@@ -968,7 +968,7 @@ export function CustomersView({
                     </td>
                     <td className="px-3 py-2.5 font-medium">
                       <span className="flex items-center gap-1.5">
-                        <span className={`truncate ${hasCustomerName(customer) ? "" : "text-[var(--muted)]"}`}>{fullName(customer)}</span>
+                        <span className={`truncate ${hasCustomerName(customer) ? "name-link" : "text-[var(--muted)]"}`}>{fullName(customer)}</span>
                         {customer.needsAttention && (
                           <NewMark
                             onDismiss={() =>
