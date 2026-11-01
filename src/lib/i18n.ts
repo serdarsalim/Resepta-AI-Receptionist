@@ -3130,6 +3130,7 @@ const dictionary = {
   "calls.duration": { tr: "Süre", en: "Duration", de: "Dauer" },
   // The call row's facts column (2026-11-01).
   "calls.callOutcome": { tr: "Görüşme sonucu", en: "Call outcome", de: "Gesprächsergebnis" },
+  "calls.callDate": { tr: "Arama tarihi", en: "Call date", de: "Anrufdatum" },
   "calls.outcome": { tr: "Sonuç", en: "Outcome", de: "Ergebnis" },
   // The per-call price line in the expanded detail. {amount} is pre-formatted
   // ("$0.42") — USD because the meter runs in USD, whatever the org currency.

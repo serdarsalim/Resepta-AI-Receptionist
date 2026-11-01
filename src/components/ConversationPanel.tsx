@@ -2539,12 +2539,26 @@ function CallCards({
   // once instead of once per call and always sit beside the call they belong
   // to (a column fixed at the top of the list did not).
   const [selectedId, setSelectedId] = useState<string | null>(focusId ?? null);
+  // Selecting another call closes the open one, and a call closing ABOVE the
+  // one clicked would pull it up from under the pointer. So the closed row
+  // keeps its height until the pointer leaves the list, the way a browser's
+  // tabs hold their width while you close them one after another (Serdar,
+  // 2026-11-01: the row did not open where it was clicked).
+  const listRef = useRef<HTMLDivElement>(null);
+  const [held, setHeld] = useState<{ id: string; height: number } | null>(null);
+  const select = (id: string) => {
+    const open = listRef.current?.querySelector<HTMLElement>(
+      `[data-call-id="${selectedId ?? items[0]?.id}"]`,
+    );
+    setHeld(open && open.dataset.callId !== id ? { id: open.dataset.callId!, height: open.offsetHeight } : null);
+    setSelectedId(id);
+  };
   if (items.length === 0) return null;
   const selected = items.find((c) => c.id === selectedId) ?? items[0];
   // No day chips here since 2026-11-01: each row says how long ago (formatAgo)
   // and the selected row its date and time, so the list is one run of rows.
   return (
-    <div className="@container/calls">
+    <div ref={listRef} className="@container/calls" onMouseLeave={() => setHeld(null)}>
       {items.map((c, idx) => (
         <CallRow
           key={c.id}
@@ -2552,7 +2566,8 @@ function CallCards({
           contactName={contactName}
           ruled={idx > 0}
           selected={c.id === selected.id}
-          onSelect={() => setSelectedId(c.id)}
+          onSelect={() => select(c.id)}
+          holdHeight={held?.id === c.id ? held.height : undefined}
           startOpen={initialFocus === c.id}
         />
       ))}
@@ -2599,21 +2614,25 @@ function CallFacts({ c, withStamp = false }: { c: CallCardItem; withStamp?: bool
   if (!withStamp && !ended && answers.length === 0 && provenance.length === 0) return null;
   return (
     <div className="text-xs">
-      {/* The exact date and time, where the row says only how long ago. */}
-      {withStamp && (
-        <p className="mb-2 tabular-nums text-[var(--muted)]">
-          {formatFeedStamp(c.at, language, t("common.yesterday"), tz)}
-        </p>
-      )}
-      {(ended || answers.length > 0) && (
+      {(withStamp || ended || answers.length > 0) && (
         <dl className="grid grid-cols-[minmax(0,max-content)_1fr] gap-x-3 gap-y-1">
+          {/* The exact date and time as the first fact, where the row says
+              only how long ago (Serdar, 2026-11-01). */}
+          {withStamp && (
+            <div className="contents">
+              <dt className="text-[var(--muted-strong)]">{t("calls.callDate")}</dt>
+              <dd className="min-w-0 tabular-nums text-[var(--foreground)]">
+                {formatFeedStamp(c.at, language, t("common.yesterday"), tz)}
+              </dd>
+            </div>
+          )}
           {ended && (
             <div className="contents">
               <dt className="text-[var(--muted-strong)]">{t("calls.callOutcome")}</dt>
               <dd className="min-w-0 break-words text-[var(--foreground)]">{ended}</dd>
             </div>
           )}
-          {ended && answers.length > 0 && (
+          {(withStamp || ended) && answers.length > 0 && (
             // No rule over one line of facts (Serdar, 2026-11-01): a spacer
             // row, 4px plus the grid's own gap, sets the answers apart.
             <div aria-hidden className="col-span-2 h-1" />
@@ -2627,7 +2646,7 @@ function CallFacts({ c, withStamp = false }: { c: CallCardItem; withStamp?: bool
         </dl>
       )}
       {provenance.length > 0 && (
-        <p className={`text-[var(--muted)] ${ended || answers.length > 0 ? "mt-2" : ""}`}>
+        <p className={`text-[var(--muted)] ${withStamp || ended || answers.length > 0 ? "mt-2" : ""}`}>
           {provenance.join(" · ")}
         </p>
       )}
@@ -2650,6 +2669,7 @@ function CallRow({
   ruled,
   selected,
   onSelect,
+  holdHeight,
   startOpen,
 }: {
   c: CallCardItem;
@@ -2658,6 +2678,9 @@ function CallRow({
   ruled: boolean;
   selected: boolean;
   onSelect: () => void;
+  // The height this row had while it was open, kept until the pointer leaves
+  // the list (CallCards).
+  holdHeight?: number;
   startOpen: boolean;
 }) {
   const { t, language } = useLanguage();
@@ -2730,6 +2753,7 @@ function CallRow({
   return (
     <div
       data-call-id={c.id}
+      style={holdHeight !== undefined ? { minHeight: holdHeight } : undefined}
       // A clear rule between rows, mixed from the ink, not --border, which
       // nearly vanishes on the beige paper and in dark is the card colour.
       // The selected row is the lit row's rounded neutral fill, as in the
@@ -2738,80 +2762,83 @@ function CallRow({
     >
       <div
         onClick={selected ? undefined : onSelect}
-        // Two columns once wide, on every row so a summary never reflows when
-        // its row is selected: the call on the left, the selected call's
-        // facts on the right. Narrow, the facts drop under the call.
-        className={`my-1 grid gap-x-8 gap-y-3 rounded-lg px-3 py-3 text-sm transition-colors @2xl/calls:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] ${
+        className={`my-1 rounded-lg px-3 py-3 text-sm transition-colors ${
           selected
             ? "bg-[var(--row-active-bg)]"
             : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--foreground)_3%,transparent)]"
         }`}
       >
-        <div className="min-w-0">
-          <div className="flex items-baseline gap-3">
-            {/* One line that truncates rather than wraps; the hover holds all of
-                it, with the direction in words and the customer's number. The
-                line is the row's keyboard handle. */}
-            <button
-              type="button"
-              aria-pressed={selected}
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelect();
-              }}
-              className="flex min-w-0 flex-1 cursor-pointer items-baseline whitespace-nowrap rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
-            >
-              {missed && (
-                <CallVerdictMark
-                  outcome={c.outcome}
-                  disconnectionReason={c.disconnectionReason}
-                  durationSec={c.durationSec}
-                />
-              )}
-              <span
-                className="min-w-0 truncate text-xs text-[var(--muted)]"
-                title={[
-                  `${from} → ${to}`,
-                  c.inbound ? t("calls.inbound") : t("calls.outbound"),
-                  c.customerNumber,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              >
-                {/* The verdict's separator, so the line reads as one. */}
-                {verdict && missed && " · "}
-                {from}
-                {/* Drawn, not typed: a typed arrow arrives at whatever weight
-                    the font's own glyph has. */}
-                <svg
-                  viewBox="0 0 24 24"
-                  width="12"
-                  height="12"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="mx-1 inline-block align-[-2px]"
-                  aria-label={c.inbound ? t("calls.inbound") : t("calls.outbound")}
-                >
-                  <path d="M5 12h14" />
-                  <path d="m12 5 7 7-7 7" />
-                </svg>
-                {to}
-              </span>
-            </button>
+        {/* Who rang whom, and how long ago at the far right, across the
+            whole row; the summary and the facts start together under it
+            (Serdar, 2026-11-01). */}
+        <div className="flex items-baseline gap-3">
+          {/* One line that truncates rather than wraps; the hover holds all of
+              it, with the direction in words and the customer's number. The
+              line is the row's keyboard handle. */}
+          <button
+            type="button"
+            aria-pressed={selected}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect();
+            }}
+            className="flex min-w-0 flex-1 cursor-pointer items-baseline whitespace-nowrap rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
+          >
+            {missed && (
+              <CallVerdictMark
+                outcome={c.outcome}
+                disconnectionReason={c.disconnectionReason}
+                durationSec={c.durationSec}
+              />
+            )}
             <span
-              className="shrink-0 text-xs tabular-nums text-[var(--muted)]"
-              title={formatDateTime(c.at, language, tz)}
+              className="min-w-0 truncate text-xs text-[var(--muted)]"
+              title={[
+                `${from} → ${to}`,
+                c.inbound ? t("calls.inbound") : t("calls.outbound"),
+                c.customerNumber,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             >
-              {formatAgo(c.at, language)}
+              {/* The verdict's separator, so the line reads as one. */}
+              {verdict && missed && " · "}
+              {from}
+              {/* Drawn, not typed: a typed arrow arrives at whatever weight
+                  the font's own glyph has. */}
+              <svg
+                viewBox="0 0 24 24"
+                width="12"
+                height="12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="mx-1 inline-block align-[-2px]"
+                aria-label={c.inbound ? t("calls.inbound") : t("calls.outbound")}
+              >
+                <path d="M5 12h14" />
+                <path d="m12 5 7 7-7 7" />
+              </svg>
+              {to}
             </span>
-          </div>
-          <div className="max-w-[65ch]">
+          </button>
+          <span
+            className="shrink-0 text-xs tabular-nums text-[var(--muted)]"
+            title={formatDateTime(c.at, language, tz)}
+          >
+            {formatAgo(c.at, language)}
+          </span>
+        </div>
+        {/* Two columns once wide, on every row so a summary never reflows
+            when its row is selected: the call on the left, the selected
+            call's facts on the right. Narrow, the facts drop under it. */}
+        <div className="mt-1.5 grid gap-x-8 gap-y-3 @2xl/calls:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <div className="min-w-0 max-w-[65ch]">
             {showSummary && (
               <p
-                className={`mt-1.5 whitespace-pre-wrap break-words leading-6 text-[var(--foreground)] ${
+                className={`whitespace-pre-wrap break-words leading-6 text-[var(--foreground)] ${
                   selected ? "" : "line-clamp-1"
                 }`}
               >
@@ -2920,12 +2947,12 @@ function CallRow({
               </div>
             )}
           </div>
+          {selected && (
+            <div className="min-w-0">
+              <CallFacts c={c} withStamp />
+            </div>
+          )}
         </div>
-        {selected && (
-          <div className="min-w-0">
-            <CallFacts c={c} withStamp />
-          </div>
-        )}
       </div>
     </div>
   );
