@@ -24,7 +24,7 @@ import {
 import {
   CallTranscript,
   CallVerdictMark,
-  CollectedChips,
+  CollectedLine,
   humanizeCallEnd,
 } from "./CallDetail";
 import { buttonClass } from "./Control";
@@ -2638,8 +2638,12 @@ function CallRow({
   return (
     <div
       data-call-id={c.id}
-      className={`scroll-mt-2 px-1 py-3.5 text-sm ${
-        ruled ? "border-t border-[color-mix(in_srgb,var(--border)_50%,transparent)]" : ""
+      // A clear rule and 16px either side: at half --border and 14px the rows
+      // ran together (Serdar, 2026-11-01). The rule is mixed from the ink, not
+      // --border, which nearly vanishes on the beige paper and in dark is the
+      // card colour. The hover wash marks the row under the pointer.
+      className={`-mx-2 scroll-mt-2 px-3 py-4 text-sm transition-colors hover:bg-[color-mix(in_srgb,var(--foreground)_3%,transparent)] ${
+        ruled ? "border-t border-[color-mix(in_srgb,var(--foreground)_13%,transparent)]" : ""
       }`}
     >
       <div className="flex items-baseline gap-3">
@@ -2677,7 +2681,7 @@ function CallRow({
           ))}
         </ul>
       )}
-      {hasCollected && <CollectedChips values={c.collected!} className="mt-2.5" />}
+      {hasCollected && <CollectedLine values={c.collected!} className="mt-1.5" />}
       {noteAbove && (
         <div ref={noteRef} className="mt-3">
           {review}

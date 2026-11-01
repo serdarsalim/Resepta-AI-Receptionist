@@ -541,12 +541,11 @@ export function CollectedList({
   );
 }
 
-// The timeline row's version (2026-11-01): one round chip per answer, the
-// label muted and the answer at full strength, wrapping as a row of tags
-// rather than a two-column list, so eight answers cost two lines, not eight.
-// The chip is the raised chat surface (--chat-field), so its muted label
-// sits on white in light, never grey on grey.
-export function CollectedChips({
+// The timeline row's version (2026-11-01): the answers as one line of text
+// under the summary, "Gender Hanım · Room type Triple", the label muted and
+// the answer at full strength, wrapping where it must. Not chips: a pill
+// read as a tag or a button, not as something the caller said (Serdar).
+export function CollectedLine({
   values,
   className = "",
 }: {
@@ -560,17 +559,15 @@ export function CollectedChips({
     .filter(([, text]) => text !== "");
   if (rows.length === 0) return null;
   return (
-    <ul className={`flex flex-wrap gap-1.5 ${className}`}>
-      {rows.map(([key, text]) => (
-        <li
-          key={key}
-          className="min-w-0 max-w-full break-words rounded-full bg-[var(--chat-field)] px-2.5 py-0.5 text-xs leading-5 shadow-[var(--bubble-shadow)]"
-        >
+    <p className={`break-words text-xs leading-5 ${className}`}>
+      {rows.map(([key, text], i) => (
+        <span key={key}>
+          {i > 0 && <span className="text-[var(--muted)]"> · </span>}
           <span className="text-[var(--muted)]">{humanizeKey(key)}</span>{" "}
           <span className="text-[var(--foreground)]">{text}</span>
-        </li>
+        </span>
       ))}
-    </ul>
+    </p>
   );
 }
 
