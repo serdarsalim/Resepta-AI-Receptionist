@@ -109,7 +109,12 @@ export default function RootLayout({
         suppressHydrationWarning
         className={`${appSans.variable} ${nunito.variable} ${chatSans.variable} h-full`}
       >
-        <body className="min-h-full antialiased">
+        {/* No `antialiased` (Serdar, 2026-11-01). On macOS it switches text to
+            grayscale smoothing, which draws every glyph thinner and lighter:
+            the sidebar read washed out beside Nudge's with the same face,
+            classes and colours. Nudge never set it; the platform default is
+            the darker, heavier rendering he wants. */}
+        <body className="min-h-full">
           {/* Correct .dark class before hydration — no theme flash. */}
           <script dangerouslySetInnerHTML={{ __html: NO_FOUC_SCRIPT }} />
           <ConvexClientProvider>
