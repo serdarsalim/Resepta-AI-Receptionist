@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { useToast } from "@/lib/ToastProvider";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
 
 // A team's record of one call: what they make of it, in their own words, and
@@ -82,6 +83,7 @@ export function ReviewNotes({
   hideTitle?: boolean;
 }) {
   const { t } = useLanguage();
+  const toast = useToast();
   const sectionRef = useRef<HTMLElement>(null);
   const [text, setText] = useState(note);
   const [saved, setSaved] = useState(note);
@@ -125,6 +127,9 @@ export function ReviewNotes({
       await onSave(patch);
       if (patch.note !== undefined) setSaved(patch.note);
       setState("saved");
+      // On the call row (no title), Saved is a toast that goes, not a word
+      // that stays beside the verdicts (Serdar, 2026-11-01, in Nudge).
+      if (hideTitle) toast(t("common.saved"));
     } catch {
       // Said, in red, until the next try. A note still differs from what was
       // saved, so leaving the field again tries again.
@@ -169,7 +174,7 @@ export function ReviewNotes({
   const status =
     state === "saving" ? (
       <span className="shrink-0 animate-pulse text-xs text-[var(--muted)]">{t("common.saving")}</span>
-    ) : state === "saved" ? (
+    ) : state === "saved" && !hideTitle ? (
       <span className="shrink-0 text-xs text-emerald-600 dark:text-emerald-400">
         {t("common.saved")}
       </span>
@@ -226,7 +231,11 @@ export function ReviewNotes({
           onBlur={() => {
             if (text !== saved) void persist({ note: text });
           }}
-          className="block w-full rounded-none border-0 bg-transparent p-0 text-xs leading-5 text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none"
+          // On the call row the words start where the verdict words do (the
+          // chip's 8px padding and its 1px border), not at the chips' edge.
+          className={`block w-full rounded-none border-0 bg-transparent p-0 text-xs leading-5 text-[var(--foreground)] placeholder:text-[var(--muted)] focus:outline-none ${
+            hideTitle ? "pl-[9px]" : ""
+          }`}
         />
       )}
     </section>

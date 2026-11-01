@@ -1,7 +1,7 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Picker, { Theme, EmojiStyle, type EmojiClickData } from "emoji-picker-react";
 import { api } from "../../convex/_generated/api";
@@ -2540,17 +2540,30 @@ function CallCards({
   // to (a column fixed at the top of the list did not).
   const [selectedId, setSelectedId] = useState<string | null>(focusId ?? null);
   // Selecting another call closes the open one, and a call closing ABOVE the
-  // one clicked would pull it up from under the pointer. So the closed row
-  // keeps its height until the pointer leaves the list, the way a browser's
-  // tabs hold their width while you close them one after another (Serdar,
-  // 2026-11-01: the row did not open where it was clicked).
+  // one clicked would pull it up from under the pointer. So the pane scrolls
+  // by exactly what the clicked row moved: it stays where it was clicked and
+  // the closed row leaves no gap (Serdar, 2026-11-01, in Nudge: a held height
+  // left a hole until the pointer left the list). At the very top of the pane
+  // there is nothing to scroll back into, and the row moves.
   const listRef = useRef<HTMLDivElement>(null);
-  const [held, setHeld] = useState<{ id: string; height: number } | null>(null);
+  const anchor = useRef<{ id: string; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const was = anchor.current;
+    anchor.current = null;
+    if (!was) return;
+    const row = listRef.current?.querySelector<HTMLElement>(`[data-call-id="${was.id}"]`);
+    if (!row) return;
+    const moved = row.getBoundingClientRect().top - was.top;
+    if (Math.abs(moved) < 1) return;
+    let scroller = row.parentElement;
+    while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) {
+      scroller = scroller.parentElement;
+    }
+    scroller?.scrollBy({ top: moved });
+  }, [selectedId]);
   const select = (id: string) => {
-    const open = listRef.current?.querySelector<HTMLElement>(
-      `[data-call-id="${selectedId ?? items[0]?.id}"]`,
-    );
-    setHeld(open && open.dataset.callId !== id ? { id: open.dataset.callId!, height: open.offsetHeight } : null);
+    const row = listRef.current?.querySelector<HTMLElement>(`[data-call-id="${id}"]`);
+    anchor.current = row ? { id, top: row.getBoundingClientRect().top } : null;
     setSelectedId(id);
   };
   if (items.length === 0) return null;
@@ -2558,7 +2571,7 @@ function CallCards({
   // No day chips here since 2026-11-01: each row says how long ago (formatAgo)
   // and the selected row its date and time, so the list is one run of rows.
   return (
-    <div ref={listRef} className="@container/calls" onMouseLeave={() => setHeld(null)}>
+    <div ref={listRef} className="@container/calls">
       {items.map((c, idx) => (
         <CallRow
           key={c.id}
@@ -2567,7 +2580,6 @@ function CallCards({
           ruled={idx > 0}
           selected={c.id === selected.id}
           onSelect={() => select(c.id)}
-          holdHeight={held?.id === c.id ? held.height : undefined}
           startOpen={initialFocus === c.id}
         />
       ))}
@@ -2605,7 +2617,10 @@ function CallFacts({ c, withStamp = false }: { c: CallCardItem; withStamp?: bool
     : wordSaysEnding
       ? null
       : humanizeCallEnd(c.disconnectionReason, t);
-  const answers = collectedEntries(c.collected, t);
+  // A call that never reached a person collected nothing: whatever the agent
+  // filled in for it is noise, so it shows only its date and outcome (Serdar,
+  // 2026-11-01, in Nudge).
+  const answers = missed ? [] : collectedEntries(c.collected, t);
   const provenance = [
     c.placedBy ? t("calls.placedBy", { name: c.placedBy }) : null,
     c.bulkRun ? t("calls.bulkRun", { name: c.bulkRun }) : null,
@@ -2665,7 +2680,6 @@ function CallRow({
   ruled,
   selected,
   onSelect,
-  holdHeight,
   startOpen,
 }: {
   c: CallCardItem;
@@ -2674,9 +2688,6 @@ function CallRow({
   ruled: boolean;
   selected: boolean;
   onSelect: () => void;
-  // The height this row had while it was open, kept until the pointer leaves
-  // the list (CallCards).
-  holdHeight?: number;
   startOpen: boolean;
 }) {
   const { t, language } = useLanguage();
@@ -2739,17 +2750,26 @@ function CallRow({
   // The actions at the meta line's size and weight, so the summary stays the
   // loudest thing on the row (Serdar, 2026-11-01). Written out rather than a
   // Control variant, since stacking text-xs on one is a bet on Tailwind's
-  // order. An open section's button takes the ink tier up and keeps the
-  // wash, so its label never has to change to say "open".
+  // order. An open section's button takes the ink tier up and an ink wash a
+  // step past hover, mixed from the foreground so it shows on the selected
+  // row's grey, where --control-hover vanished (Serdar, 2026-11-01, in
+  // Nudge), so its label never has to change to say "open".
   const action = (open: boolean) =>
-    `inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs outline-none transition-colors hover:bg-[var(--control-hover)] hover:text-[var(--foreground)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40 ${
-      open ? "bg-[var(--control-hover)] text-[var(--foreground)]" : "text-[var(--muted)]"
+    `inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs outline-none transition-colors hover:text-[var(--foreground)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40 ${
+      open
+        ? "bg-[color-mix(in_srgb,var(--foreground)_10%,transparent)] text-[var(--foreground)]"
+        : "text-[var(--muted)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)]"
     }`;
+  // A call that never reached a person has nothing said to read or review,
+  // so it offers only its recording, when there is one (Serdar, 2026-11-01,
+  // in Nudge).
+  const showTranscript = !!c.transcript && !missed;
+  const showReview = !missed;
+  const hasActions = !!c.recordingUrl || showTranscript || showReview;
 
   return (
     <div
       data-call-id={c.id}
-      style={holdHeight !== undefined ? { minHeight: holdHeight } : undefined}
       // A clear rule between rows, mixed from the ink, not --border, which
       // nearly vanishes on the beige paper and in dark is the card colour.
       // The selected row is the lit row's rounded neutral fill, as in the
@@ -2758,7 +2778,7 @@ function CallRow({
     >
       <div
         onClick={selected ? undefined : onSelect}
-        className={`my-1 rounded-lg px-3 py-3 text-sm transition-colors ${
+        className={`my-1 rounded-lg px-5 py-3 text-sm transition-colors ${
           selected
             ? "bg-[var(--row-active-bg)]"
             : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--foreground)_3%,transparent)]"
@@ -2834,7 +2854,7 @@ function CallRow({
           <div className="min-w-0 max-w-[65ch]">
             {showSummary && (
               <p
-                className={`whitespace-pre-wrap break-words leading-6 text-[var(--foreground)] ${
+                className={`whitespace-pre-wrap break-words text-xs leading-5 text-[var(--foreground)] ${
                   selected ? "" : "line-clamp-1"
                 }`}
               >
@@ -2842,7 +2862,7 @@ function CallRow({
               </p>
             )}
             {selected && setOff.length > 0 && (
-              <ul className="mt-1.5 space-y-0.5 text-xs leading-5 text-[var(--foreground)]">
+              <ul className={`space-y-0.5 text-xs leading-5 text-[var(--foreground)] ${showSummary ? "mt-2" : ""}`}>
                 {setOff.map((fact) => (
                   <li key={fact}>{fact}</li>
                 ))}
@@ -2850,81 +2870,87 @@ function CallRow({
             )}
             {/* The actions sit on every row, so a call plays without being
                 selected first (Serdar, 2026-11-01); a press selects it too. */}
-            <div className="-ml-2 mt-2 flex items-center gap-0.5">
-              {c.recordingUrl && (
-                <button
-                  type="button"
-                  aria-expanded={playerOpen}
-                  onClick={() => setPlayerOpen((open) => !open)}
-                  className={action(playerOpen)}
-                >
-                  <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden>
-                    <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" />
-                  </svg>
-                  {t("calls.play")}
-                  {/* The length rides Play (Serdar, 2026-11-01), not a facts row. */}
-                  {c.durationSec ? (
-                    <span className="tabular-nums text-[var(--muted)]">{formatDuration(c.durationSec)}</span>
-                  ) : null}
-                </button>
-              )}
-              {c.transcript && (
-                <button
-                  type="button"
-                  aria-expanded={transcriptOpen}
-                  onClick={() => setTranscriptOpen((open) => !open)}
-                  className={action(transcriptOpen)}
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="12"
-                    height="12"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                  </svg>
-                  {t("calls.transcript")}
-                </button>
-              )}
-              <button
-                type="button"
-                aria-expanded={reviewOpened}
-                onClick={() => {
-                  if (reviewOpened) return setReviewOpened(false);
-                  setReviewOpened(true);
-                  setNoteSignal((n) => n + 1);
-                }}
-                className={action(reviewOpened)}
+            {hasActions && (
+              <div
+                className={`-ml-2 flex items-center gap-0.5 ${showSummary || (selected && setOff.length > 0) ? "mt-4" : ""}`}
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  width="12"
-                  height="12"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
-                >
-                  <rect x="8" y="2" width="8" height="4" rx="1" />
-                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-                  <path d="m9 14 2 2 4-4" />
-                </svg>
-                {t("review.title")}
-                {c.verdict ? (
-                  <VerdictMark verdict={c.verdict} />
-                ) : hasNote ? (
-                  <span aria-hidden className="size-1.5 rounded-full bg-[var(--muted-strong)]" />
-                ) : null}
-              </button>
-            </div>
-            {reviewOpened && <div className="mt-2">{review}</div>}
+                {c.recordingUrl && (
+                  <button
+                    type="button"
+                    aria-expanded={playerOpen}
+                    onClick={() => setPlayerOpen((open) => !open)}
+                    className={action(playerOpen)}
+                  >
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden>
+                      <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" />
+                    </svg>
+                    {t("calls.play")}
+                    {/* The length rides Play (Serdar, 2026-11-01), not a facts row. */}
+                    {c.durationSec ? (
+                      <span className="tabular-nums text-[var(--muted)]">{formatDuration(c.durationSec)}</span>
+                    ) : null}
+                  </button>
+                )}
+                {showTranscript && (
+                  <button
+                    type="button"
+                    aria-expanded={transcriptOpen}
+                    onClick={() => setTranscriptOpen((open) => !open)}
+                    className={action(transcriptOpen)}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="12"
+                      height="12"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                    >
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                    {t("calls.transcript")}
+                  </button>
+                )}
+                {showReview && (
+                  <button
+                    type="button"
+                    aria-expanded={reviewOpened}
+                    onClick={() => {
+                      if (reviewOpened) return setReviewOpened(false);
+                      setReviewOpened(true);
+                      setNoteSignal((n) => n + 1);
+                    }}
+                    className={action(reviewOpened)}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="12"
+                      height="12"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                    >
+                      <rect x="8" y="2" width="8" height="4" rx="1" />
+                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                      <path d="m9 14 2 2 4-4" />
+                    </svg>
+                    {t("review.title")}
+                    {c.verdict ? (
+                      <VerdictMark verdict={c.verdict} />
+                    ) : hasNote ? (
+                      <span aria-hidden className="size-1.5 rounded-full bg-[var(--muted-strong)]" />
+                    ) : null}
+                  </button>
+                )}
+              </div>
+            )}
+            {showReview && reviewOpened && <div className="mt-2">{review}</div>}
             {/* Ours rather than the browser's player: it knows the length before a
                 byte is fetched (CallRecording). Mounted by the press, so it plays. */}
             {playerOpen && c.recordingUrl && (
@@ -2937,7 +2963,7 @@ function CallRow({
             )}
             {/* The transcript straight on the paper, the bubbles' own surfaces
                 doing the work, as the WhatsApp thread beside it does. */}
-            {transcriptOpen && c.transcript && (
+            {transcriptOpen && showTranscript && c.transcript && (
               <div className="mt-3">
                 <CallTranscript flow transcript={c.transcript} contactName={contactName} />
               </div>
