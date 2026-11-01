@@ -18,34 +18,21 @@ import { useHeaderSearch } from "@/lib/HeaderSearch";
 import { ColumnPicker, HeaderFilter, MenuItem, Th } from "./DataTable";
 import { PhoneInput } from "./PhoneField";
 import { Sheet } from "./Sheet";
-import { FieldsCard } from "./BusinessView";
 import { BulkComposer, BulkRunsCard, type BulkChannel } from "./BulkActions";
 import { HoverTip } from "./HoverTip";
 import { customerName, hasCustomerName } from "@/lib/customerName";
 
-// The list, and the definition of what the list HOLDS. Contact fields moved
-// here from the voice agent's strip on 2026-08-25 (Serdar: the app is for
-// people who are not technically versatile, and nobody looks under Voice to
-// find out what they record about a customer).
+// The list and what was done to it. Contact fields lived on this strip from
+// 2026-08-25 (moved off the voice agent's strip so an owner could find them)
+// until 2026-11-01, when Serdar moved them to Business: defining what the
+// business records about a customer is setup, done once, and setup lives with
+// the other settings rather than beside the daily list.
 //
-// The argument that kept them on that strip is in VoiceView's header and it
-// half made this case itself: a field's sibling is the customer record, not
-// the price list. What it weighed against that was the cohesion of the voice
-// tab — the agent, its calls, and the vocabulary it works in — and cohesion
-// for the person building the agent lost to findability for the person who
-// owns the salon. The Locked / Can edit column stays, because the agent IS a
-// consumer of these fields; it is one column now instead of the landlord.
-//
-// NOT the foot of the Columns picker, where it also briefly lived. Fields are
-// those columns, so the rule about rare actions fit the letter and missed the
-// point: this is a setup surface, and a setup surface inside a dropdown is not
-// findable by the person who needs it most.
-//
-// Bulk joins List and Fields rather than earning a sidebar door of its own
+// Bulk sits beside List rather than earning a sidebar door of its own
 // (Serdar, 2026-08-29). It acts on the selection made in the list one tab
 // over, and a history of what that selection did is not a destination anybody
 // navigates to cold.
-type CustomersSection = "list" | "fields" | "bulk";
+type CustomersSection = "list" | "bulk";
 
 type Customer = FunctionReturnType<typeof api.customers.listPage>["page"][number];
 type ContactField = Doc<"contactFields">;
@@ -220,12 +207,7 @@ export function CustomersView({
   // A follow-up's recipients (P13b): the people a past run's detail showed,
   // composed to instead of the list's selection, which stays as it was.
   const [followUp, setFollowUp] = useState<Doc<"customers">[] | null>(null);
-  // Read here rather than taken as a prop, the same way VoiceView does it:
-  // FieldsCard needs it, this is the only other caller, and threading a
-  // permission down through AppShell for one card puts the answer somewhere
-  // that does not own the question. Staff see the fields read-only.
   const me = useQuery(api.orgs.current, {});
-  const isOwner = me ? me.me.role !== "staff" : false;
 
   // Opening the record IS reading it, so the dot goes out on the way in — the
   // same stamp the inbox writes when somebody dismisses a row by hand, because
@@ -898,7 +880,6 @@ export function CustomersView({
         {(
           [
             { id: "list" as const, label: t("customers.tabList") },
-            { id: "fields" as const, label: t("fields.title") },
             { id: "bulk" as const, label: t("bulk.title") },
           ] as { id: CustomersSection; label: string }[]
         ).map((entry) => (
@@ -919,7 +900,6 @@ export function CustomersView({
       </div>
 
       {section === "list" && list}
-      {section === "fields" && <FieldsCard isOwner={isOwner} />}
       {section === "bulk" && (
         <BulkRunsCard
           onOpenContact={onOpenContact}

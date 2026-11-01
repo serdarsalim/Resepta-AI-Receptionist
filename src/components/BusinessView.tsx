@@ -66,18 +66,22 @@ import { embedSnippet } from "@/lib/embed";
 // read it. Your other businesses lives under Team, the same people seen from
 // the other businesses they could work in.
 //
-// Services and contact fields have their own homes (Knowledge, and Customers'
-// Contact fields tab): a price list is a body of content you maintain, not a
-// setting, and the voice agent and booking page both read it at call time.
-// Their cards still live in this file and are exported.
-type BusinessSection = "general" | "hours" | "team";
+// Contact fields joined as a fourth tab on 2026-11-01 (Serdar: they made no
+// sense under Customers). What the business records about a customer is
+// setup, done once, so it sits with the other settings, not beside the list.
+//
+// Services have their own home (Knowledge): a price list is a body of content
+// you maintain, not a setting, and the voice agent and booking page both read
+// it at call time. Its card still lives in this file and is exported.
+type BusinessSection = "general" | "hours" | "team" | "fields";
 
-const SECTIONS: BusinessSection[] = ["general", "hours", "team"];
+const SECTIONS: BusinessSection[] = ["general", "hours", "team", "fields"];
 
 const SECTION_LABEL: Record<BusinessSection, TranslationKey> = {
   general: "settings.general",
   hours: "settings.hours",
   team: "staff.title",
+  fields: "fields.title",
 };
 
 // The open tab lives in the URL as ?section=, so a refresh comes back to it and
@@ -118,15 +122,17 @@ const SEARCH_INDEX: { card: BusinessCard; key: TranslationKey }[] = [
   { card: "team", key: "staff.title" },
   { card: "team", key: "roster.bookable" },
   { card: "businesses", key: "share.title" },
+  { card: "fields", key: "fields.title" },
 ];
 
-type BusinessCard = "general" | "hours" | "team" | "businesses";
+type BusinessCard = "general" | "hours" | "team" | "businesses" | "fields";
 
 const CARD_SECTION: Record<BusinessCard, BusinessSection> = {
   general: "general",
   hours: "hours",
   team: "team",
   businesses: "team",
+  fields: "fields",
 };
 
 
@@ -314,6 +320,7 @@ export function BusinessView() {
           <OtherBusinessesCard isOwner={isOwner} ref={businessesRef} />
         </div>
       )}
+      {section === "fields" && <FieldsCard isOwner={isOwner} />}
     </div>
   );
 }
@@ -2028,7 +2035,7 @@ export function FieldsCard({ isOwner }: { isOwner: boolean }) {
     // the heading deletes the (i), and this (i) is the only place the product
     // explains what a contact field IS. That sentence is worth more to a salon
     // owner than the repetition costs. Moved from the Voice agent's strip to
-    // the Customers strip on 2026-08-25; see CustomersView's header for why.
+    // the Customers strip on 2026-08-25, and to Business on 2026-11-01.
     //
     // The title and Add field sit ABOVE the card (ListHead), and adding opens
     // a sheet (2026-10-21). The form used to unfold at the foot of the table,

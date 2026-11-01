@@ -85,7 +85,7 @@ const CATEGORIES: Category[] = [
         title: "Choose the customer details Resepta keeps",
         summary: "Add fields such as preferences, notes, or identifiers and decide how they can be filled.",
         steps: [
-          "Open Voice agent from the sidebar and choose Contact fields.",
+          "Open Business from the sidebar and choose Contact fields.",
           "Create a field with a name, type, and choices where needed.",
           "Choose whether staff, the voice agent, or both may fill it.",
           "Use the Customers table Columns menu to show the fields that matter for day-to-day work.",
