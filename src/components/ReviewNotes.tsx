@@ -43,50 +43,6 @@ export function VerdictMark({ verdict }: { verdict: Verdict }) {
   );
 }
 
-// The verdict on its own, always on screen (Serdar, 2026-11-01: a pair that
-// showed only while the note was open read as if it had vanished). The call
-// row puts it in its facts column as Review, under the agent's Result: the
-// review chips, words on a hover wash, the picked one in its tone. Clicking the
-// picked one clears it. Saved on the click, put back if the save fails.
-export function VerdictPicker({
-  verdict,
-  onSave,
-}: {
-  verdict: Verdict | null;
-  onSave: (verdict: Verdict | null) => Promise<unknown>;
-}) {
-  const { t } = useLanguage();
-  const [chosen, setChosen] = useState<Verdict | null>(verdict);
-  useEffect(() => setChosen(verdict), [verdict]);
-  return (
-    <div className="flex items-center gap-0.5" role="group" aria-label={t("review.verdict")}>
-      {(["pass", "miss"] as const).map((v) => {
-        const on = chosen === v;
-        return (
-          <button
-            key={v}
-            type="button"
-            aria-pressed={on}
-            onClick={() => {
-              const before = chosen;
-              const next = on ? null : v;
-              setChosen(next);
-              void onSave(next).catch(() => setChosen(before));
-            }}
-            className={`${VERDICT_CHIP} cursor-pointer outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40 ${
-              on
-                ? VERDICT_TONE[v]
-                : "text-[var(--muted-strong)] hover:bg-[var(--control-hover)] hover:text-[var(--foreground)]"
-            }`}
-          >
-            {v === "pass" ? t("review.pass") : t("review.miss")}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 export function ReviewNotes({
   note,
   verdict,
@@ -96,7 +52,6 @@ export function ReviewNotes({
   signatureTitle,
   className = "",
   verdictOnFocus = false,
-  hideVerdict = false,
 }: {
   note: string;
   verdict: Verdict | null;
@@ -115,9 +70,6 @@ export function ReviewNotes({
   // verdict; a note with neither picked is a plain comment, which is the
   // third answer without a third button.
   verdictOnFocus?: boolean;
-  // The verdict is drawn elsewhere (the call row's VerdictPicker); the box
-  // holds the note alone.
-  hideVerdict?: boolean;
 }) {
   const { t } = useLanguage();
   const sectionRef = useRef<HTMLElement>(null);
@@ -165,7 +117,7 @@ export function ReviewNotes({
   };
 
   const shownVerdicts = (["pass", "miss"] as const).filter(
-    (v) => !hideVerdict && (!verdictOnFocus || editing || chosen === v),
+    (v) => !verdictOnFocus || editing || chosen === v,
   );
   const verdictButtons = shownVerdicts.length > 0 && (
     <div className="flex items-center gap-1" role="group" aria-label={t("review.verdict")}>

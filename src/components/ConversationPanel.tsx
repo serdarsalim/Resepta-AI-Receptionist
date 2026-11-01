@@ -31,7 +31,7 @@ import {
 } from "./CallDetail";
 import { buttonClass } from "./Control";
 import { CallRecording } from "./CallRecording";
-import { ReviewNotes, VerdictMark, VerdictPicker, type Verdict } from "./ReviewNotes";
+import { ReviewNotes, VerdictMark, type Verdict } from "./ReviewNotes";
 import { callOutcome } from "../../convex/lib/callOutcome";
 import { Avatar } from "./Avatar";
 import { MessageMedia } from "./MessageMedia";
@@ -2575,9 +2575,7 @@ function CallRow({
   // this mount, so its first save does not move it above the row.
   const [noteOpenedHere, setNoteOpenedHere] = useState(false);
   const noteRef = useRef<HTMLDivElement>(null);
-  // The note alone decides whether the box shows; the verdict has its own
-  // always-visible picker on the actions row.
-  const hasReview = !!c.note?.trim();
+  const hasReview = !!c.note?.trim() || !!c.verdict;
   const noteAbove = hasReview && !noteOpenedHere;
   useEffect(() => {
     if (noteOpenedHere) noteRef.current?.querySelector("textarea")?.focus();
@@ -2630,18 +2628,6 @@ function CallRow({
       : verdict?.tone === "bad"
         ? "text-red-600/85 dark:text-red-400/90"
         : "text-[var(--foreground)]";
-  const hasResult = !!verdict && !missed;
-  const reviewRow = (
-    <>
-      <dt className="self-center text-[var(--muted-strong)]">{t("review.rowLabel")}</dt>
-      <dd className="min-w-0">
-        <VerdictPicker
-          verdict={c.verdict ?? null}
-          onSave={(verdict) => setReview({ callId: c.id as Id<"calls">, verdict })}
-        />
-      </dd>
-    </>
-  );
   const facts: Array<[string, string, string?]> = [
     ...(verdict && !missed
       ? [[t("calls.result"), verdict.label, resultTone] as [string, string, string]]
@@ -2663,7 +2649,6 @@ function CallRow({
       note={c.note ?? ""}
       verdict={c.verdict ?? null}
       verdictOnFocus
-      hideVerdict
       signature={signature}
       signatureTitle={c.noteAt !== undefined ? formatDateTime(c.noteAt, language, tz) : undefined}
       onSave={(patch) => setReview({ callId: c.id as Id<"calls">, ...patch })}
@@ -2772,33 +2757,32 @@ function CallRow({
           </div>
           <div className="min-w-0 @2xl:pt-0.5">
             {/* One grid for the call's facts and its answers, so every
-                value starts at one edge; a hairline before the answers. */}
-            <dl className="grid grid-cols-[minmax(0,max-content)_1fr] gap-x-3 gap-y-1 text-xs">
-              {!hasResult && reviewRow}
-              {facts.map(([label, value, tone], i) => (
-                <Fragment key={`f-${label}`}>
-                  <dt className="text-[var(--muted-strong)]">{label}</dt>
-                  <dd className={`min-w-0 break-words ${tone ?? "text-[var(--foreground)]"}`}>
-                    {value}
-                  </dd>
-                  {/* The team's verdict straight under the agent's
-                      (Serdar, 2026-11-01), always on screen. */}
-                  {i === 0 && hasResult && reviewRow}
-                </Fragment>
-              ))}
-              {hasCollected && (
-                <div
-                  aria-hidden
-                  className="col-span-2 my-1 border-t border-[color-mix(in_srgb,var(--border)_50%,transparent)]"
-                />
-              )}
-              {answers.map(([label, value]) => (
-                <div key={`a-${label}`} className="contents">
-                  <dt className="text-[var(--muted-strong)]">{label}</dt>
-                  <dd className="min-w-0 break-words text-[var(--foreground)]">{value}</dd>
-                </div>
-              ))}
-            </dl>
+                value starts at one edge; a hairline between the two groups
+                only when both are there. */}
+            {(facts.length > 0 || hasCollected) && (
+              <dl className="grid grid-cols-[minmax(0,max-content)_1fr] gap-x-3 gap-y-1 text-xs">
+                {facts.map(([label, value, tone]) => (
+                  <div key={`f-${label}`} className="contents">
+                    <dt className="text-[var(--muted-strong)]">{label}</dt>
+                    <dd className={`min-w-0 break-words ${tone ?? "text-[var(--foreground)]"}`}>
+                      {value}
+                    </dd>
+                  </div>
+                ))}
+                {facts.length > 0 && hasCollected && (
+                  <div
+                    aria-hidden
+                    className="col-span-2 my-1 border-t border-[color-mix(in_srgb,var(--border)_50%,transparent)]"
+                  />
+                )}
+                {answers.map(([label, value]) => (
+                  <div key={`a-${label}`} className="contents">
+                    <dt className="text-[var(--muted-strong)]">{label}</dt>
+                    <dd className="min-w-0 break-words text-[var(--foreground)]">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
             {provenance.length > 0 && (
               <p className={`text-xs text-[var(--muted)] ${facts.length > 0 || hasCollected ? "mt-2" : ""}`}>
                 {provenance.join(" · ")}
