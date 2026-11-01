@@ -77,8 +77,8 @@ const LINE_OUTCOME_KEYS: Record<CallOutcome, TranslationKey> = {
 };
 
 // The call's status pill. Two questions, Nudge's split between them: the
-// WORD says what happened on the line (Completed, No answer, Voicemail…)
-// when the caller passes the disconnect code or the length, and the COLOUR
+// WORD says what happened on the line (No answer, Voicemail…) when the call
+// never reached anyone, and the verdict when it did, and the COLOUR
 // says whether the agent got what it called for. Retell reports that as
 // `call_successful`, stored as the strings "true" and "false". Green when it
 // did, amber when it didn't or the call never reached a person; amber rather
@@ -99,9 +99,14 @@ export function CallOutcomePill({
   const successful = outcome === "true" ? true : outcome === "false" ? false : null;
   const written = outcome && successful === null ? outcome : null;
   const line = written ? undefined : callOutcome(disconnectionReason, durationSec);
+  // A call that ran says its verdict, not "Completed": that it was picked up
+  // is the least interesting fact about it. The line's word stays for a call
+  // that never reached anyone (No answer, Voicemail…), and for one still
+  // waiting on its verdict.
+  const verdictWord = line === "answered" && successful !== null;
   const label =
     written ??
-    (line
+    (line && !verdictWord
       ? t(LINE_OUTCOME_KEYS[line])
       : successful === true
         ? t("calls.successful")
@@ -120,7 +125,7 @@ export function CallOutcomePill({
       // When the word is the line's, the agent's own verdict is the colour;
       // the hover says it in words.
       title={
-        line && successful !== null
+        line && !verdictWord && successful !== null
           ? t(successful ? "calls.successful" : "calls.unsuccessful")
           : undefined
       }
