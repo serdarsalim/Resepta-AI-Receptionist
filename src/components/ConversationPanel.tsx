@@ -102,7 +102,11 @@ function usePaneTimezone(): string | undefined {
 }
 
 function formatDuration(seconds: number): string {
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+  const s = Math.round(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = String(s % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
 }
 
 // Delivery state is a storage word ("failed"), not a UI word. Same for the
@@ -2618,12 +2622,11 @@ function CallRow({
   const ended = wordSaysEnding ? null : humanizeCallEnd(c.disconnectionReason, t);
   // The verdict word leads a missed row's top line (CallVerdictMark).
   const verdict = callVerdict(c.outcome, c.disconnectionReason, c.durationSec, t);
-  // How the call ended leads the column, then its length. No Result line:
+  // How the call ended leads the column; its length rides Play. No Result line:
   // the agent's own success verdict was confusing and often wrong (Serdar,
   // 2026-11-01).
   const facts: Array<[string, string, string?]> = [
     ...(ended ? [[t("calls.callOutcome"), ended] as [string, string]] : []),
-    ...(c.durationSec ? [[t("calls.length"), formatDuration(c.durationSec)] as [string, string]] : []),
   ];
   const provenance = [
     c.placedBy ? t("calls.placedBy", { name: c.placedBy }) : null,
@@ -2796,6 +2799,10 @@ function CallRow({
               <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z" />
             </svg>
             {t("calls.play")}
+            {/* The length rides Play (Serdar, 2026-11-01), not a facts row. */}
+            {c.durationSec ? (
+              <span className="tabular-nums text-[var(--muted)]">{formatDuration(c.durationSec)}</span>
+            ) : null}
           </button>
         )}
         {c.transcript && (
