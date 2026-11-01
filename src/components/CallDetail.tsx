@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useLanguage } from "@/lib/LanguageProvider";
+import { HoverTip } from "./HoverTip";
 import type { TranslationKey } from "@/lib/i18n";
 import { callOutcome, type CallOutcome } from "../../convex/lib/callOutcome";
 
@@ -175,15 +176,37 @@ export function CallVerdictMark({
   outcome,
   disconnectionReason,
   durationSec,
+  dotOnly = false,
 }: {
   outcome: string | null | undefined;
   disconnectionReason?: string | null;
   durationSec?: number | null;
+  // The call row (2026-11-01): a call that ran shows only its dot, the word
+  // living in the facts column as Result; the hover names it. A call that
+  // never reached anyone keeps its word, which is the whole row then.
+  dotOnly?: boolean;
 }) {
   const { t } = useLanguage();
   const verdict = callVerdict(outcome, disconnectionReason, durationSec, t);
   if (!verdict) return null;
   const { label, tone, missed } = verdict;
+  if (dotOnly && !missed) {
+    return (
+      <HoverTip text={label} className="inline-flex shrink-0 self-center">
+        <span
+          role="img"
+          aria-label={label}
+          className={`h-2 w-2 rounded-full ${
+            tone === "good"
+              ? "bg-emerald-500/80"
+              : tone === "bad"
+                ? "bg-red-400/80"
+                : "bg-[var(--muted)]"
+          }`}
+        />
+      </HoverTip>
+    );
+  }
   return (
     <span
       // The word wears the meta line's own style and the dot alone carries

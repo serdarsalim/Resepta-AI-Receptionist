@@ -3129,6 +3129,7 @@ const dictionary = {
   "calls.when": { tr: "Zaman", en: "When", de: "Zeit" },
   "calls.duration": { tr: "Süre", en: "Duration", de: "Dauer" },
   // The call row's facts column (2026-11-01).
+  "calls.result": { tr: "Sonuç", en: "Result", de: "Ergebnis" },
   "calls.length": { tr: "Süre", en: "Length", de: "Dauer" },
   "calls.ended": { tr: "Bitiş", en: "Ended", de: "Beendet" },
   "calls.outcome": { tr: "Sonuç", en: "Outcome", de: "Ergebnis" },

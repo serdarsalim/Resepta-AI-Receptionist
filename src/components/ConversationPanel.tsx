@@ -2614,7 +2614,11 @@ function CallRow({
   // length (a zero length shows nothing) and how it ended, then who or what
   // placed the call, which says itself in a sentence.
   const ended = wordSaysEnding ? null : humanizeCallEnd(c.disconnectionReason, t);
+  // Result leads the column (Serdar, 2026-11-01): the verdict means
+  // something read beside what the call was, not as the row's first word.
+  const verdict = callVerdict(c.outcome, c.disconnectionReason, c.durationSec, t);
   const facts: Array<[string, string]> = [
+    ...(verdict && !missed ? [[t("calls.result"), verdict.label] as [string, string]] : []),
     ...(c.durationSec ? [[t("calls.length"), formatDuration(c.durationSec)] as [string, string]] : []),
     ...(ended ? [[t("calls.ended"), ended] as [string, string]] : []),
   ];
@@ -2668,6 +2672,7 @@ function CallRow({
             outcome={c.outcome}
             disconnectionReason={c.disconnectionReason}
             durationSec={c.durationSec}
+            dotOnly
           />
           <span
             className="min-w-0 truncate text-xs text-[var(--muted)]"
@@ -2680,7 +2685,7 @@ function CallRow({
               .join(" · ")}
           >
             {/* The verdict's separator, so the line reads as one. */}
-            {callVerdict(c.outcome, c.disconnectionReason, c.durationSec, t) && "\u00a0·\u00a0"}
+            {verdict && (missed ? "\u00a0·\u00a0" : "\u00a0\u00a0")}
             {from}
             {/* Drawn, not typed: a typed arrow arrives at whatever weight
                 the font's own glyph has. */}
