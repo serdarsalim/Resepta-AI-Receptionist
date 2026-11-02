@@ -945,8 +945,10 @@ export function ConversationPanel({
         // column's wider inset (Nudge 18dfc375 made the same move).
         // On the card's fill, so the row reads as the pane's header and
         // everything under it, the action row included, sits on the tab's
-        // paper (Nudge's: the fill change draws the edge, no rule).
-        <div className="flex h-11 shrink-0 items-center gap-2 bg-[var(--card)] px-3">
+        // paper (Nudge's: the fill change draws the edge, no rule), with
+        // WhatsApp Web's soft drop under it (2026-11-02); z-10 keeps the
+        // shadow above the scrolling feed.
+        <div className="relative z-10 flex h-11 shrink-0 items-center gap-2 bg-[var(--card)] px-3 shadow-[0_1px_3px_rgba(11,20,26,0.08)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.4)]">
           {header}
           {tabAction && !actionsBelow && <div className="ml-auto flex shrink-0">{tabAction}</div>}
         </div>
