@@ -666,16 +666,18 @@ colour utility on a variant.
 
 ## The shell is one frame; the cards are the paper (2026-10-13, joined 2026-10-21)
 
-- No shell padding, gap or rounded sheet: the rail and the `h-12` top bar
+- No shell padding, gap or rounded sheet: the rail and the `h-11` (44px) top bar
   are ONE flat frame (`.app-pane`); `main` wears `--content-bg` (`bg-fixed`;
-  the calendar uses plain `--pane`), `md:rounded-tl-xl` and `.workspace-boundary`. No inset sheet unless the
+  the calendar uses plain `--pane`), `md:rounded-tl-lg` (a card's 8px) and `.workspace-boundary`. No inset sheet unless the
   cards go first. `data-app-shell` hands back the scrollbar track.
 - **Sidebar glyphs are 16px at stroke 2** (`makeIcon`), 18px in the tab bar;
   normalise borrowed glyphs at the call site. **Row weight never changes
   between states** (font-medium; wash, tier and glyph say selected). Each tab
-  keeps its hue.
+  keeps its hue; the active row is a 12% tint of it, hover `#f3f1ed`
+  (2026-11-02, after Nudge). The frame is `--navigation-bg` `#faf9f7`, always
+  lighter than the `--pane` `#f3f0ed` plane; cards wear a 1px ring.
 - **No product mark inside the app** (Serdar, 2026-10-21). The rail's first
-  row is `h-12`, level with the top bar, holding only the fold toggle; the
+  row is `h-11`, level with the top bar, holding only the fold toggle; the
   business switcher is the row under it. Brand stays on sign-in, onboarding
   and customer pages. Folded, switching business waits for the rail to open.
   Keep the rail's first row and the top bar one height.

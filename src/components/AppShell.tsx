@@ -123,10 +123,9 @@ const MessagesIcon = makeIcon(
   <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />,
 );
 
-// Each tab keeps ONE hue, carried by its symbol. The active row's wash stays
-// neutral — the wash, the label's darker tier and the symbol at full strength
-// are the selected cue, so the sidebar never turns into a stack of coloured
-// blocks. The label's WEIGHT never changes (see SidebarButton).
+// Each tab keeps ONE hue, carried by its symbol. The active row wears a light
+// tint of it (2026-11-02); with the label's darker tier and the symbol at full
+// strength that is the selected cue. The label's WEIGHT never changes (see SidebarButton).
 const RevenueIcon = makeIcon(
   <>
     <path d="M12 2v20" />
@@ -586,14 +585,14 @@ function ShellHeader({
   }, [placeholder]);
 
   return (
-    // A fixed 48px band, the sidebar brand row's height, on the frame's own
+    // A fixed 44px band, the sidebar brand row's height, on the frame's own
     // fill (the wrapper's .app-pane), so the bar and the rail read as one
     // frame (Nudge 5668cdfd). Fixed rather than a floor: a tab with a search
     // box and one without must put their first row in the same place, or
     // switching from Customers to Automations jumps the card up the screen.
     // ONE inset on every tab, so the title never moves as you switch (P25,
     // Nudge ca95e0f8).
-    <header className="gutter-align flex h-12 shrink-0 items-center justify-between gap-3 px-4">
+    <header className="gutter-align flex h-11 shrink-0 items-center justify-between gap-3 px-4">
       <div
         className={`group/title flex min-w-0 items-center gap-1.5 ${
           expanded ? "hidden sm:flex" : "flex"
@@ -1393,16 +1392,16 @@ function SidebarButton({
           : "w-full gap-2.5 px-3"
       } ${
         active
-          ? // Expanded keeps the neutral wash — hue lives on the symbol and the
-            // label's darker tier finishes the job. Collapsed has no label, so
-            // the pill earns a tint of the tab's own hue as the stronger
-            // selected cue.
-            `bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] text-[var(--foreground)] ${
+          ? // A ~12% tint of the tab's own hue (2026-11-02, Serdar in Nudge):
+            // not a white pill, and not the grey of a selected list row.
+            // Collapsed goes to 14% as the stronger cue. Dark keeps the
+            // neutral wash.
+            `bg-[color-mix(in_srgb,var(--tab-hue)_12%,transparent)] text-[var(--foreground)] dark:bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] ${
               collapsed
                 ? "bg-[color-mix(in_srgb,var(--tab-hue)_14%,transparent)]"
                 : ""
             }`
-          : "text-[var(--muted-strong)] hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
+          : "text-[var(--muted-strong)] hover:bg-[#f3f1ed] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05]"
       }`}
     >
       {/* Symbol carries the hue. Muted when idle so it accents rather than
@@ -1677,7 +1676,7 @@ export function AppShell({
             pages customers see. Folded, the arrow is all there is, and
             switching business waits for the rail to open. */}
           <div
-            className={`flex h-12 shrink-0 items-center ${
+            className={`flex h-11 shrink-0 items-center ${
               showCollapsed ? "justify-center px-1" : "justify-end pl-2 pr-4"
             }`}
           >
@@ -1764,7 +1763,7 @@ export function AppShell({
                   target="_blank"
                   rel="noopener"
                   aria-label={showCollapsed ? "Admin" : undefined}
-                  className={`group relative flex h-9 items-center rounded-lg text-sm font-medium text-[var(--muted-strong)] transition-colors hover:bg-black/[0.045] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05] ${
+                  className={`group relative flex h-9 items-center rounded-lg text-sm font-medium text-[var(--muted-strong)] transition-colors hover:bg-[#f3f1ed] hover:text-[var(--foreground)] dark:hover:bg-white/[0.05] ${
                     showCollapsed
                       ? "mx-auto h-9 w-9 justify-center px-0"
                       : "w-full gap-2.5 px-3"
@@ -1884,7 +1883,7 @@ export function AppShell({
             md where the rail sits beside it, and .workspace-boundary's quiet
             edge along the top and the left. The calendar ground drops the
             wash for plain --pane. */}
-        <main className="thin-scroll page-scroll stable-gutter workspace-boundary relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[image:var(--content-bg)] bg-fixed p-4 md:rounded-tl-xl max-sm:px-2 max-sm:has-[[data-fills-pane]]:pb-0 has-[[data-calendar-ground]]:bg-none has-[[data-calendar-ground]]:bg-[var(--pane)] sm:has-[[data-calendar-ground]]:px-3 sm:has-[[data-calendar-ground]]:pt-3 sm:has-[[data-fills-pane]]:has-[[data-calendar-ground]]:pb-2">
+        <main className="thin-scroll page-scroll stable-gutter workspace-boundary relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[image:var(--content-bg)] bg-fixed p-4 md:rounded-tl-lg max-sm:px-2 max-sm:has-[[data-fills-pane]]:pb-0 has-[[data-calendar-ground]]:bg-none has-[[data-calendar-ground]]:bg-[var(--pane)] sm:has-[[data-calendar-ground]]:px-3 sm:has-[[data-calendar-ground]]:pt-3 sm:has-[[data-fills-pane]]:has-[[data-calendar-ground]]:pb-2">
             {/* Above the content rather than in a corner: someone clicking
               through a demo should never be a minute into it before working
               out that the salon isn't real. Inside the scrolling pane so it
