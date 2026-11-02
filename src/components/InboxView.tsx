@@ -638,7 +638,7 @@ export function InboxView({
                         // Each class string stands whole in quotes: Tailwind
                         // does not read a candidate glued to `${` (Nudge
                         // d4365e9a, where the hover never existed).
-                        className={`group relative isolate flex min-h-[3.5rem] w-full cursor-pointer items-start gap-2 px-3 py-2 text-left outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent)] before:absolute before:inset-x-1 before:inset-y-[3px] before:-z-10 before:rounded-xl before:transition-colors before:content-[''] after:absolute after:bottom-0 after:left-[2.125rem] after:right-3 after:h-px after:bg-black/[0.06] after:content-[''] dark:after:bg-white/[0.07] ${
+                        className={`group relative isolate flex min-h-[4rem] w-full cursor-pointer items-start gap-2 px-3 py-2 text-left outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent)] before:absolute before:inset-x-1 before:inset-y-[3px] before:-z-10 before:rounded-xl before:transition-colors before:content-[''] after:absolute after:bottom-0 after:left-[2.125rem] after:right-3 after:h-px after:bg-black/[0.06] after:content-[''] dark:after:bg-white/[0.07] ${
                           isActive
                             ? "before:bg-[var(--row-active-bg)] after:hidden"
                             : beforeActive
