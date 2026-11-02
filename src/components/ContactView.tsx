@@ -361,11 +361,16 @@ export function ContactRecord({
   customerId,
   onDeleted,
   onLeaving,
+  roomy = false,
 }: {
   customerId: Id<"customers">;
   // Where to go once this customer has been deleted from the ⋯ menu.
   onDeleted?: () => void;
   onLeaving?: (leaving: boolean) => void;
+  // The Inbox's Details tab: a whole pane rather than the contact page's
+  // narrow column, so the rows get room and the comms tabs' paper
+  // (`[data-record-roomy]` in globals.css; Nudge f8471f47).
+  roomy?: boolean;
 }) {
   const { t, language } = useLanguage();
   const customer = useQuery(api.customers.get, { customerId });
@@ -436,8 +441,8 @@ export function ContactRecord({
 
   return (
     <>
-      <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="thin-scroll stable-gutter min-h-0 flex-1 space-y-1.5 overflow-y-auto p-4">
+      <section data-record-roomy={roomy || undefined} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div data-contact-properties className="thin-scroll stable-gutter min-h-0 flex-1 space-y-1.5 overflow-y-auto p-4">
           {/* What they bought leads the card; who they are follows. See the
               component. Booking from the record, with this customer already
               decided: the calendar was the only way in, which meant the one

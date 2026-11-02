@@ -41,7 +41,7 @@ export function FieldRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-[minmax(6rem,9rem)_minmax(0,1fr)] items-start gap-x-3">
+    <div data-contact-property className="grid grid-cols-[minmax(6rem,9rem)_minmax(0,1fr)] items-start gap-x-3">
       <div className="flex items-center gap-1.5 pt-1 text-[11px] leading-snug text-[var(--muted-strong)]">
         <span className="min-w-0 break-words">{label}</span>
         {hint && <InfoTip text={hint} />}

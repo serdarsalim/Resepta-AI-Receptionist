@@ -1147,3 +1147,29 @@ thead {
     animation: none;
   }
 }
+
+/* The Inbox's Details tab (ContactRecord `roomy`, 2026-11-02, after Nudge
+   f8471f47): the contact page's narrow-column rows given the pane's room —
+   a wider label column, 13px labels, 14px values, a readable max width — on
+   the comms tabs' paper. */
+[data-record-roomy] {
+  background: var(--conversation-paper);
+}
+[data-record-roomy] [data-contact-properties] {
+  padding: 1rem 3rem 2rem;
+}
+[data-record-roomy] [data-contact-properties] > * {
+  max-width: 44rem;
+}
+[data-record-roomy] [data-contact-property] {
+  grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr);
+  column-gap: 1.5rem;
+}
+[data-record-roomy] [data-contact-property] > div:first-child {
+  font-size: 13px;
+  padding-top: 4px;
+}
+[data-record-roomy] [data-contact-property] .text-xs {
+  font-size: 14px;
+  line-height: 20px;
+}

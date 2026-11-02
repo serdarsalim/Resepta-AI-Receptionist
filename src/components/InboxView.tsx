@@ -908,6 +908,7 @@ export function InboxView({
                   <ContactRecord
                     customerId={active.customerId}
                     onDeleted={() => setSelected(null)}
+                    roomy
                   />
                 ) : undefined
               }
