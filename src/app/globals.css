@@ -89,8 +89,10 @@
      sits between the card and that fill; the shared --row-hover-bg is one
      step off a dark card and read as no hover at all there. Tables keep the
      quieter shared one. */
-  --row-active-bg: #e6e8eb;
-  --inbox-row-hover: #f0f1f3;
+  /* One warm step for both since 2026-11-02 (Serdar, in Nudge): WhatsApp
+     Web's own selected row, on a 12px-radius inset fill. */
+  --row-active-bg: #f6f5f4;
+  --inbox-row-hover: #f6f5f4;
   /* A card is neither lifted nor outlined. It is white paper on a tinted
      plane, and the fill difference is the whole edge (2026-08-25, Serdar:
      "maybe it's better when they're flat").
@@ -106,7 +108,10 @@
      One line here is how the decision stays reversible and how the two themes
      stay in step. The shell's content pane read it too until it went flush
      (2026-10-13) and stopped being a card at all. */
-  --card-shadow: none;
+  /* Since 2026-11-02 (Serdar, in Nudge): a 1px outline ring. Flat white
+     on the warmer #f3f0ed plane lost its edge; a soft drop was tried and
+     rejected. */
+  --card-shadow: 0 0 0 1px rgb(0 0 0 / 0.07);
   /* A control sitting ON the sidebar pane: the workspace switcher at the top
      of the rail and, since 2026-10-13, the account row at its foot. Nudge
      gave its account row a 4% ink tint for the same job; this is Resepta's
@@ -140,7 +145,11 @@
      from it, and the frame around it (.app-pane: the sidebar rail and the
      top bar) sits one step lighter. LinkedIn's own warm grey (2026-11-01,
      Serdar): the cool #f1f1f3 blended into the white cards. */
-  --pane: #f4f2ee;
+  /* Convex's exact background since 2026-11-02 (Serdar, in Nudge). The
+     chrome (--navigation-bg) must stay lighter than it, never level. */
+  --pane: #f3f0ed;
+  /* The sidebar and top bar: near-white warm, Convex's sidebar tone. */
+  --navigation-bg: #faf9f7;
   /* Primary action accent — soft blue, white text in both modes */
   --accent: #3b82f6;
   --accent-fg: #ffffff;
@@ -411,13 +420,14 @@ thead {
 }
 
 /* The joined navigation frame (Nudge 5668cdfd, 2026-10-16; here
-   2026-10-21): the sidebar rail AND the 48px top bar wear this one flat
-   fill, and the workspace (`main`) meets it with a 12px upper-left curve and
+   2026-10-21): the sidebar rail AND the 44px top bar wear this one flat
+   fill, and the workspace (`main`) meets it with an 8px upper-left curve
+   (a card's radius, 2026-11-02) and
    a quiet edge (.workspace-boundary). Dark is a lighter charcoal than the
    near-black workspace (--pane) and the cards, so the frame reads as its
    own plane; the old #141414 sat three units from the cards. */
 .app-pane {
-  background: #f8f8f9;
+  background: var(--navigation-bg);
 }
 .dark .app-pane {
   background: #25272b;
@@ -754,8 +764,8 @@ thead {
      component because these panels manage their own scrolling and never take
      Card's padding.
 
-     The NAME is now a small lie, and deliberately kept: --card-shadow resolves
-     to none since cards went flat, so nothing here is raised. Renaming it
+     The NAME is a small lie, and deliberately kept: --card-shadow is a 1px
+     outline ring (2026-11-02), so nothing here is raised. Renaming it
      touches every call site for no behaviour, and the class still means what
      it meant, which is "a card that is not Card". */
   .card-raised {
@@ -868,7 +878,8 @@ thead {
      card's white as it was, the chat read as a hole through the card. Not
      lighter: a near-white paper washed out the white email cards (tried and
      reverted in Nudge). Dark moves it onto the chat's near-black (below). */
-  --conversation-paper: #eeebe5;
+  /* #f5f1eb since 2026-11-02 (Serdar, in Nudge). */
+  --conversation-paper: #f5f1eb;
   /* The composer's field, which has to sit ON the paper and read as a field in
      both themes. It cannot be --card (that IS the dark paper) and it cannot be
      --muted-bg (identical to --card in dark). */
